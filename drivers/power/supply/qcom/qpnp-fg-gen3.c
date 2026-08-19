@@ -5902,3 +5902,13 @@ module_exit(fg_gen3_exit);
 MODULE_DESCRIPTION("QPNP Fuel gauge GEN3 driver");
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:" FG_GEN3_DEV_NAME);
+
+case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+    pr_err("FG_DEBUG: nom_cap_uah=%d cl.nom_cap_uah=%d EINVAL_check=%d\n",
+           fg->bp.nom_cap_uah, chip->cl.nom_cap_uah,
+           (fg->bp.nom_cap_uah == -EINVAL));
+    if (fg->bp.nom_cap_uah != -EINVAL)
+        pval->intval = fg->bp.nom_cap_uah * 1000;
+    else
+        pval->intval = chip->cl.nom_cap_uah;
+    break;
