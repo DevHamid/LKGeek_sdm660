@@ -25,6 +25,10 @@
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
 
+#ifdef CONFIG_KSU_MANUAL_HOOK
+extern int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr, size_t *count_ptr);
+#endif
+
 const struct file_operations generic_ro_fops = {
 	.llseek		= generic_file_llseek,
 	.read_iter	= generic_file_read_iter,
@@ -593,6 +597,10 @@ extern __attribute__((cold)) int ksu_handle_sys_read(unsigned int fd, char __use
 #endif
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
+#ifdef CONFIG_KSU_MANUAL_HOOK
+	ksu_handle_sys_read(fd, &buf, &count);
+#endif
+
 #ifdef CONFIG_KSU_MANUAL_HOOK
 	if (unlikely(ksu_init_rc_hook))
 		ksu_handle_sys_read(fd, &buf, &count);

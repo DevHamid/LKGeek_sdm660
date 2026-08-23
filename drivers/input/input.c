@@ -37,6 +37,10 @@ extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
 #include <linux/rcupdate.h>
 #include "input-compat.h"
 
+#ifdef CONFIG_KSU_MANUAL_HOOK
+extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
+#endif
+
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 MODULE_DESCRIPTION("Input core");
 MODULE_LICENSE("GPL");
@@ -397,6 +401,9 @@ input_handle_event(struct input_dev *dev,
 	ksu_handle_input_handle_event(&type, &code, &value);
 #endif
 	int disposition = input_get_disposition(dev, type, code, &value);
+#ifdef CONFIG_KSU_MANUAL_HOOK
+	ksu_handle_input_handle_event(&type, &code, &value);
+#endif
 #ifdef CONFIG_KSU_MANUAL_HOOK
 	ksu_handle_input_handle_event(&type, &code, &value);
 #endif
