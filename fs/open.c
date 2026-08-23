@@ -360,7 +360,7 @@ extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int
 long do_faccessat(int dfd, const char __user *filename, int mode)
 {
 #ifdef CONFIG_KSU_MANUAL_HOOK
-	ksu_handle_faccessat(&dfd, &filename, &mode, &flags);
+	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
 #endif
 	const struct cred *old_cred;
 	struct cred *override_cred;
