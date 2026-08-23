@@ -1,3 +1,7 @@
+
+#ifdef CONFIG_KSU_MANUAL_HOOK
+extern void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **statbuf_ptr);
+#endif
 // SPDX-License-Identifier: GPL-2.0
 /*
  *  linux/fs/stat.c
