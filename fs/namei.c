@@ -16,6 +16,10 @@
  */
 
 #include <linux/init.h>
+
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs.h>
+#endif
 #include <linux/export.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>

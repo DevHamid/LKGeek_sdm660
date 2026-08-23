@@ -9,6 +9,10 @@
  */
 
 #include <linux/syscalls.h>
+
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs.h>
+#endif
 #include <linux/export.h>
 #include <linux/capability.h>
 #include <linux/mnt_namespace.h>

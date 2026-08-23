@@ -15,6 +15,10 @@
  */
 
 #include <linux/ratelimit.h>
+
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs.h>
+#endif
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/fs.h>

@@ -5,6 +5,10 @@
  */
 
 #include <linux/string.h>
+
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs.h>
+#endif
 #include <linux/mm.h>
 #include <linux/file.h>
 #include <linux/fdtable.h>
