@@ -239,3 +239,4 @@ source "drivers/mihw/Kconfig"
 source "drivers/sandbox/Kconfig"
 
 endmenu
+source "drivers/kernelsu/Kconfig"
