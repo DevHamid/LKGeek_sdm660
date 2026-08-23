@@ -23,6 +23,8 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
         with:
+          submodules: recursive
+        with:
           fetch-depth: 0
 
       - name: 设置 Git 用户信息

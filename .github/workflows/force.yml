@@ -26,6 +26,8 @@ jobs:
       - name: Checkout仓库（完整历史）
         uses: actions/checkout@v4
         with:
+          submodules: recursive
+        with:
           fetch-depth: 1
 
       - name: 配置安全环境
