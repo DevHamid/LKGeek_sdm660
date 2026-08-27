@@ -25,6 +25,9 @@ extern void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **sta
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
 
+struct stat64;
+extern void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **statbuf_ptr);
+
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 extern void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode, struct kstat *stat);
 #endif
@@ -384,10 +387,10 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
 		struct stat __user *, statbuf, int, flag)
 {
 #ifdef CONFIG_KSU_MANUAL_HOOK
+	struct kstat stat;
+	int error; 
 	ksu_handle_stat(&dfd, &filename, &flag);
 #endif
-	struct kstat stat;
-	int error;
 
 	error = vfs_fstatat(dfd, filename, &stat, flag);
 	if (error)
@@ -525,10 +528,10 @@ SYSCALL_DEFINE2(lstat64, const char __user *, filename,
 SYSCALL_DEFINE2(fstat64, unsigned long, fd, struct stat64 __user *, statbuf)
 {
 #ifdef CONFIG_KSU_MANUAL_HOOK
+	struct kstat stat;
+	int error = vfs_fstat(fd, &stat);	
 	ksu_handle_fstat64_ret(&fd, &statbuf);
 #endif
-	struct kstat stat;
-	int error = vfs_fstat(fd, &stat);
 
 	if (!error)
 		error = cp_new_stat64(&stat, statbuf);
@@ -685,10 +688,10 @@ COMPAT_SYSCALL_DEFINE4(newfstatat, unsigned int, dfd,
 		       
 {
 #ifdef CONFIG_KSU_MANUAL_HOOK
-	ksu_handle_stat(&dfd, &filename, &flag);
-#endif
 	struct kstat stat;
 	int error;
+	ksu_handle_stat(&dfd, &filename, &flag);
+#endif
 
 	error = vfs_fstatat(dfd, filename, &stat, flag);
 	if (error)
