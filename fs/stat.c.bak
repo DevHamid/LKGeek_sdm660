@@ -528,9 +528,9 @@ SYSCALL_DEFINE2(lstat64, const char __user *, filename,
 
 SYSCALL_DEFINE2(fstat64, unsigned long, fd, struct stat64 __user *, statbuf)
 {
-	struct kstat stat;
-	int error = vfs_fstat(fd, &stat);
 #ifdef CONFIG_KSU_MANUAL_HOOK
+	struct kstat stat;
+	int error = vfs_fstat(fd, &stat);	
 	ksu_handle_fstat64_ret(&fd, &statbuf);
 #endif
 
@@ -684,12 +684,13 @@ __attribute__((hot)) extern int ksu_handle_stat(int *dfd, const char __user **fi
 extern void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr);
 #endif
 COMPAT_SYSCALL_DEFINE4(newfstatat, unsigned int, dfd,
-			const char __user *, filename,
-			struct compat_stat __user *, statbuf, int, flag)
+		       const char __user *, filename,
+		       struct compat_stat __user *, statbuf, int, flag)
+		       
 {
+#ifdef CONFIG_KSU_MANUAL_HOOK
 	struct kstat stat;
 	int error;
-#ifdef CONFIG_KSU_MANUAL_HOOK
 	ksu_handle_stat(&dfd, &filename, &flag);
 #endif
 
@@ -698,6 +699,7 @@ COMPAT_SYSCALL_DEFINE4(newfstatat, unsigned int, dfd,
 		return error;
 	return cp_compat_stat(&stat, statbuf);
 }
+#endif
 
 COMPAT_SYSCALL_DEFINE2(newfstat, unsigned int, fd,
 		       struct compat_stat __user *, statbuf)
