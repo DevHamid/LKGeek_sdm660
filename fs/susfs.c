@@ -695,9 +695,6 @@ out_copy_to_user:
 }
 #endif // #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
 
---- a/fs/susfs.c
-+++ b/fs/susfs.c
-@@
  /* enable_log */
  #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
  void susfs_enable_log(void __user **user_info) {
