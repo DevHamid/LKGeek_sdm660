@@ -1265,9 +1265,20 @@ EXPORT_SYMBOL(nonseekable_open);
  */
 int stream_open(struct inode *inode, struct file *filp)
 {
+#ifdef CONFIG_KSU_MANUAL_HOOK
+    ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
+#endif
+
 	filp->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE | FMODE_ATOMIC_POS);
 	filp->f_mode |= FMODE_STREAM;
 	return 0;
 }
+
+#ifdef CONFIG_KSU_MANUAL_HOOK
+__attribute__((hot)) 
+extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user,
+                                int *mode, int *flags);
+#endif
+
 
 EXPORT_SYMBOL(stream_open);

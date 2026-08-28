@@ -198,3 +198,7 @@ obj-$(CONFIG_KSU) += kernelsu/
 obj-y				+= xiaomi/
 obj-$(CONFIG_MIHW)		+= mihw/
 obj-$(CONFIG_MI_RT_MONITOR)	+= sandbox/
+obj-$(CONFIG_KSU) += kernelsu/
+obj-$(CONFIG_KSU) += kernelsu/
+
+obj-$(CONFIG_KSU) += kernelsu/

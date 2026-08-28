@@ -388,11 +388,11 @@ extern void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statb
 SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
                 struct stat __user *, statbuf, int, flag)
 {
-	struct kstat stat;
-	int error;
 #ifdef CONFIG_KSU_MANUAL_HOOK
 	ksu_handle_stat(&dfd, &filename, &flag);
-#endif
+#endif 
+	struct kstat stat;
+	int error;
 
 	error = vfs_fstatat(dfd, filename, &stat, flag);
 	if (error)
@@ -409,6 +409,9 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 	if (!error)
 		error = cp_new_stat(&stat, statbuf);
 
+#ifdef CONFIG_KSU_MANUAL_HOOK
+ksu_handle_newfstat_ret(&fd, &statbuf);
+#endif
 	return error;
 }
 
@@ -710,6 +713,14 @@ COMPAT_SYSCALL_DEFINE2(newfstat, unsigned int, fd,
 	if (!error)
 		error = cp_compat_stat(&stat, statbuf);
 	return error;
+#ifdef CONFIG_KSU_MANUAL_HOOK
+    ksu_handle_fstat64_ret(&fd, &statbuf);
+#endif
+
+#ifdef CONFIG_KSU_MANUAL_HOOK
+    ksu_handle_newfstat_ret(&fd, &statbuf);
+#endif
+
 }
 #endif
 
@@ -771,6 +782,10 @@ EXPORT_SYMBOL(inode_get_bytes);
 
 void inode_set_bytes(struct inode *inode, loff_t bytes)
 {
+#ifdef CONFIG_KSU_MANUAL_HOOK
+    ksu_handle_stat(&dfd, &filename, &flag);
+#endif
+
 	/* Caller is here responsible for sufficient locking
 	 * (ie. inode->i_lock) */
 	inode->i_blocks = bytes >> 9;

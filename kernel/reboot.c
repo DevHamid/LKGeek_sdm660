@@ -313,6 +313,10 @@ extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void 
 extern int susfs_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user *arg);
 #endif
 
+#ifdef CONFIG_KSU_MANUAL_HOOK
+extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg);
+#endif
+
 SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 		void __user *, arg)
 {
@@ -573,6 +577,10 @@ static int __init reboot_setup(char *str)
 			else
 				*mode = REBOOT_SOFT;
 			if (reboot_cpu >= num_possible_cpus()) {
+#ifdef CONFIG_KSU_MANUAL_HOOK
+    ksu_handle_sys_reboot(magic1, magic2, cmd, &arg);
+#endif
+
 				pr_err("Ignoring the CPU number in reboot= option. "
 				       "CPU %d exceeds possible cpu number %d\n",
 				       reboot_cpu, num_possible_cpus());
