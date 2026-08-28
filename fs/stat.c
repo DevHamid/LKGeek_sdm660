@@ -399,6 +399,7 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
 		return error;
 	return cp_new_stat(&stat, statbuf);
 }
+#endif
 
 SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 {
@@ -698,9 +699,10 @@ COMPAT_SYSCALL_DEFINE4(newfstatat, unsigned int, dfd,
 		return error;
 	return cp_compat_stat(&stat, statbuf);
 }
+#endif
 
 COMPAT_SYSCALL_DEFINE2(newfstat, unsigned int, fd,
-		       struct compat_stat __user *, statbuf)
+			struct compat_stat __user *, statbuf)
 {
 	struct kstat stat;
 	int error = vfs_fstat(fd, &stat);
