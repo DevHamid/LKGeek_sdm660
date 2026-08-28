@@ -25,8 +25,10 @@ extern void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **sta
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
 
-struct stat64;
-extern void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **statbuf_ptr);
+#ifdef CONFIG_KSU_MANUAL_HOOK
+extern void ksu_handle_fstat64_ret(unsigned int *fd, struct stat64 __user **statbuf_ptr);
+extern int ksu_handle_stat(struct path *path, struct kstat *stat);
+#endif
 
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 extern void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode, struct kstat *stat);
