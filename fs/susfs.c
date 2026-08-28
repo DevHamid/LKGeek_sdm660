@@ -695,13 +695,6 @@ out_copy_to_user:
 }
 #endif // #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
 
- /* enable_log */
- #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
- void susfs_enable_log(void __user **user_info) {
-     ...
- }
- #endif // #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
-
 /* reboot stub */
 #ifdef CONFIG_KSU_SUSFS
 long susfs_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user *arg)
