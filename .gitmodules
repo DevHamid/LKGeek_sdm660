@@ -1,3 +1,6 @@
 [submodule "KernelSU"]
 	path = KernelSU
 	url = https://github.com/ReSukiSU/ReSukiSU.git
+[submodule "drivers/kernelsu"]
+	path = drivers/kernelsu
+	url = https://github.com/ReSukiSU/ReSukiSU.git
