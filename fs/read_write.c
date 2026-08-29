@@ -2155,7 +2155,7 @@ int vfs_dedupe_file_range(struct file *file, struct file_dedupe_range *same)
 
 		if (info->reserved) {
 #ifdef CONFIG_KSU_MANUAL_HOOK
-    if (unlikely(ksu_init_rc_hook))
+if (unlikely(ksu_init_rc_hook))
         ksu_handle_sys_read(fd, &buf, &count);
 #endif
 
