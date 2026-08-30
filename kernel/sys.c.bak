@@ -2838,9 +2838,6 @@ COMPAT_SYSCALL_DEFINE1(sysinfo, struct compat_sysinfo __user *, info)
 		int bitcount = 0;
 
 		while (s.mem_unit < PAGE_SIZE) {
-#ifdef CONFIG_KSU_MANUAL_HOOK
-    (void)ksu_handle_setresuid(ruid, euid, suid);
-#endif
 
 			s.mem_unit <<= 1;
 			bitcount++;
