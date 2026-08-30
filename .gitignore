@@ -152,3 +152,4 @@ kernel/configs/android-*.cfg
 
 # Build log
 log.txt
+out/

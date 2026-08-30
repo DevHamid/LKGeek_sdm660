@@ -28,14 +28,6 @@
 #include <linux/susfs_def.h>
 #endif // #ifdef CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
 
-const unsigned char kallsyms_token_table[] = {
-#include "kallsyms_token_table.inc"
-};
-
-const unsigned short kallsyms_token_index[] = {
-#include "kallsyms_token_index.inc"
-};
-
 /*
  * These will be re-linked against their real values
  * during the second link stage.
