@@ -531,7 +531,7 @@ SYSCALL_DEFINE2(fstat64, unsigned long, fd, struct stat64 __user *, statbuf)
 	struct kstat stat;
 	int error = vfs_fstat(fd, &stat);
 #ifdef CONFIG_KSU_MANUAL_HOOK
-	ksu_handle_fstat64_ret(&fd, &statbuf);
+	ksu_handle_fstat64_ret((unsigned int *)&fd, &statbuf);
 #endif
 
 	if (!error)
@@ -709,14 +709,6 @@ COMPAT_SYSCALL_DEFINE2(newfstat, unsigned int, fd,
 	if (!error)
 		error = cp_compat_stat(&stat, statbuf);
 	return error;
-#ifdef CONFIG_KSU_MANUAL_HOOK
-    ksu_handle_fstat64_ret(&fd, &statbuf);
-#endif
-
-#ifdef CONFIG_KSU_MANUAL_HOOK
-    ksu_handle_newfstat_ret(&fd, &statbuf);
-#endif
-
 }
 #endif
 
