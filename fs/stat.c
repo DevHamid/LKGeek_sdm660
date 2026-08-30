@@ -1,7 +1,4 @@
 
-#ifdef CONFIG_KSU_MANUAL_HOOK
-extern void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **statbuf_ptr);
-#endif
 // SPDX-License-Identifier: GPL-2.0
 /*
  *  linux/fs/stat.c
@@ -27,7 +24,6 @@ extern void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **sta
 
 #ifdef CONFIG_KSU_MANUAL_HOOK
 extern void ksu_handle_fstat64_ret(unsigned int *fd, struct stat64 __user **statbuf_ptr);
-extern int ksu_handle_stat(struct path *path, struct kstat *stat);
 #endif
 
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
@@ -782,10 +778,6 @@ EXPORT_SYMBOL(inode_get_bytes);
 
 void inode_set_bytes(struct inode *inode, loff_t bytes)
 {
-#ifdef CONFIG_KSU_MANUAL_HOOK
-    ksu_handle_stat(&dfd, &filename, &flag);
-#endif
-
 	/* Caller is here responsible for sufficient locking
 	 * (ie. inode->i_lock) */
 	inode->i_blocks = bytes >> 9;

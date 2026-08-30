@@ -1933,10 +1933,6 @@ int do_execve(struct filename *filename,
 	struct user_arg_ptr argv = { .ptr.native = __argv };
 	struct user_arg_ptr envp = { .ptr.native = __envp };
 
-#ifdef CONFIG_KSU_MANUAL_HOOK
-    ksu_handle_execve((int *)AT_FDCWD, filename, &argv, &envp, 0);
-#endif
-
 return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
 }
 
@@ -2048,14 +2044,6 @@ COMPAT_SYSCALL_DEFINE5(execveat, int, fd,
 		       const compat_uptr_t __user *, envp,
 		       int,  flags)
 {
-#ifdef CONFIG_KSU_MANUAL_HOOK
-    ksu_handle_execve((int *)AT_FDCWD, filename, &argv, &envp, 0);
-#endif
-
-#ifdef CONFIG_KSU_MANUAL_HOOK
-    ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
-#endif
-
 	int lookup_flags = (flags & AT_EMPTY_PATH) ? LOOKUP_EMPTY : 0;
 
 	return compat_do_execveat(fd,

@@ -1932,7 +1932,8 @@ int do_execve(struct filename *filename,
 {
 	struct user_arg_ptr argv = { .ptr.native = __argv };
 	struct user_arg_ptr envp = { .ptr.native = __envp };
-	return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
+
+return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
 }
 
 int do_execveat(int fd, struct filename *filename,
@@ -2043,6 +2044,7 @@ COMPAT_SYSCALL_DEFINE5(execveat, int, fd,
 		       const compat_uptr_t __user *, envp,
 		       int,  flags)
 {
+
 	int lookup_flags = (flags & AT_EMPTY_PATH) ? LOOKUP_EMPTY : 0;
 
 	return compat_do_execveat(fd,
