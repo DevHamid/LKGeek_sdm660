@@ -31,7 +31,6 @@
 #include <linux/rcupdate.h>
 #include "input-compat.h"
 
-MODULE_AUTHOR
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 MODULE_DESCRIPTION("Input core");
 MODULE_LICENSE("GPL");
@@ -381,9 +380,14 @@ static int input_get_disposition(struct input_dev *dev,
 	return disposition;
 }
 
-static void 
+#ifdef CONFIG_KSU
+extern struct static_key_true ksu_is_input_hook_enabled;
+extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
+#endif
+
+static void
 input_handle_event(struct input_dev *dev,
-			       unsigned int type, unsigned int code, int value)
+                               unsigned int type, unsigned int code, int value)
 {
 	int disposition = input_get_disposition(dev, type, code, &value);
 #ifdef CONFIG_KSU_SUSFS
