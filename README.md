@@ -65,11 +65,14 @@ We had spent significant effort hand-patching `ksu_handle_*` calls (the Manual H
 
 - [Claude](https://claude.ai) — making this project possible
 - @wbprangga for prompt suggestion
-- @LKDenchin for base kernel
+- [Tashar02](https://github.com/Atom-X-Devs/scarlet_xiaomi_sdm660) for base kernel
+- [Xiaolegun](https://github.com/xiaolegun) for base boot and wayne dev
+- [@LKDenchin](https://github.com/LKDenchin) for base kernel
 - [ReSukiSU](https://github.com/ReSukiSU/ReSukiSU) — driver & manager
 - [JackA1ltman/NonGKI_Kernel_Build_2nd](https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd) — the non-GKI SUSFS backport patch and hook scripts that made this actually work
 - [LKGeek-Team](https://github.com/LKGeek-Team) — base kernel
 - SUSFS project — SuSFS v2.2.0
+- [MI 6X (wayne) INDONESIA 🇮🇩](https://t.me/Mi6XGroup) for everything
 
 ---
 
