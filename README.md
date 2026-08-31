@@ -1,4 +1,4 @@
-# 🔥 LKGeek_sdm660 — ReSukiSU + SUSFS v2.2.0 Integration
+# 🔥 LKGEEK-PERF-REMASTERED — ReSukiSU + SUSFS v2.2.0 Integration
 
 **Device:** Xiaomi Mi 6X (`wayne`, SDM660)
 **Kernel:** `4.19.325-LKGeek-perf-devhamid` (LKGeek-perf fork, non-GKI)
