@@ -63,7 +63,7 @@ We had spent significant effort hand-patching `ksu_handle_*` calls (the Manual H
 
 ## 🙏 Credits
 
-- [Claude](https://claude.ai) — making this project possible
+- [Claude](https://claude.ai/share/e5a91d52-679d-4465-ad8f-2b1e72016f06) — making this project possible
 - @wbprangga for prompt suggestion
 - [Tashar02](https://github.com/Atom-X-Devs/scarlet_xiaomi_sdm660) for base kernel
 - [Xiaolegun](https://github.com/xiaolegun) for base boot and wayne dev
