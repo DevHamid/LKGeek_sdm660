@@ -42,7 +42,7 @@ ifneq ($(shell grep -q "disk_get_part" $(srctree)/include/linux/genhd.h 2>/dev/n
     $(info -- Baseband-guard/compat: found modern block device api)
 endif
 
-HAS_DEFINE_LSM := $(shell grep -q "\#define DEFINE_LSM(lsm)" $(srctree)/include/linux/lsm_hooks.h && echo true)
+HAS_DEFINE_LSM := false
 
 ifeq ($(CONFIG_BBG),y)
   $(info -- Baseband-guard: CONFIG_BBG enabled, now checking...)
