@@ -7,6 +7,8 @@ ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-
 
 obj-$(CONFIG_BBG) += bbg.o
 
+endif
+
 GIT_BIN := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin git
 
 ifeq ($(findstring $(srctree),$(src)),$(srctree))
