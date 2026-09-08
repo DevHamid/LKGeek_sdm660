@@ -32,4 +32,4 @@ subdir-$(CONFIG_INTEGRITY)		+= integrity
 obj-$(CONFIG_INTEGRITY)			+= integrity/
 
 obj-$(CONFIG_BBG) += baseband-guard/
-$(obj)/baseband-guard/: $(obj)/selinux/
+$(obj)/baseband-guard: $(obj)/selinux
