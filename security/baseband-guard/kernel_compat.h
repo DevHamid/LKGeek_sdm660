@@ -1,3 +1,8 @@
+#include <linux/init.h>
+#ifndef security_initcall
+#define security_initcall(fn) late_initcall(fn)
+#endif
+
 #include <linux/blkdev.h>
 #include <linux/security.h>
 #include <linux/lsm_hooks.h>
