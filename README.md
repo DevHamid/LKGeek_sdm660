@@ -1,50 +1,82 @@
-# 📋 Kernel Changelog — LKGeek_sdm660 (wayne / SDM660)
+# 📋 Kernel Changelog & Documentation — LKGeek_sdm660 (wayne / SDM660)
 
 ## ✅ Current Status
 
 | Component | Version | Status |
 |---|---|---|
-| Kernel | 4.19.325-LKGeek-perf-devhamid | ✅ |
-| ReSukiSU | v4.2.0-rc1 (35061/2) | ✅ Root working (native su) |
-| SuSFS | v2.3.0 | ✅ Working |
+| Kernel | 4.19.325-LKGeek-perf-devhamid | ✅ Built & Booting |
+| ReSukiSU | v4.2.0-rc1 (35061/2) | ✅ Root working (native `su`) |
+| SuSFS | v2.3.0 | ✅ Active |
 | NoMount | v2.0.0 (Built-in) | ✅ Active |
+| Baseband-guard | v1.0.0 (Legacy LSM) | ✅ Active (Partitions Protected) |
+| Re-Kernel | Sakion-Team (Binder Hooked) | ✅ Active (Freezer Engine) |
 
-**Branch:** `build-susfs-nomount`
+**Active Line:** `build-all-rekernel`
+
+---
+
+## 🗂️ Branch & Tag Registry
+
+### Tags (Checkpoints — always build or branch from these):
+
+| Tag | State / Components Included |
+|---|---|
+| `working-manual-hook-root` | Manual Hook baseline, root working, NO SuSFS |
+| `working-susfs-2.2.0-su-fixed` | Root + SuSFS 2.2.0 + native `su` fix (`CONFIG_KSU_SUSFS_SUS_SU=n`) |
+| `working-susfs-inline-full` | SuSFS 2.2.0 full working (pre-NoMount) |
+| `working-bbg-nomount-susfs` | SuSFS 2.3.0 + NoMount v2.0.0 + Baseband-guard |
+| `working-all-features` | 🌟 **Golden State:** All 5 components fully integrated & hooked |
+
+### Branches:
+
+| Branch | State / Purpose |
+|---|---|
+| `build-susfs-v2` | ❌ Abandoned — old Manual Hook conflict dead-end |
+| `susfs-2.3.0-upgrade` | SuSFS 2.3.0 core upgrade sandbox |
+| `build-susfs-nomount` | SuSFS 2.3.0 + NoMount v2.0.0 + Baseband-guard |
+| `build-all-rekernel` | 🚀 **Current Active Base** — All features integrated (Re-Kernel hooked) |
 
 ---
 
 ## 🔧 Change Log
 
-### SuSFS 2.2.0 → 2.3.0
-- Replaced `fs/susfs.c`, `susfs.h`, `susfs_def.h` with fresh v2.3.0
-- Applied remaining hunks: `patch -p1 -N --fuzz=0 -r rejects.log`
-  (⚠️ `-N` is critical — without it, `patch` will silently **reverse**
-  already-applied 2.x code instead of skipping it. Always dry-run
-  first if unsure.)
-- Removed `susfs_sys_reboot()` call in `kernel/reboot.c` — function
-  dropped upstream in 2.3.0, no replacement exists
+### 1. SuSFS 2.2.0 → 2.3.0 Upgrade
+- Replaced `fs/susfs.c`, `include/linux/susfs.h`, `include/linux/susfs_def.h` with fresh v2.3.0 sources from JackA1ltman's `sample` branch.
+- Applied remaining hunks with `patch -p1 -N --fuzz=0 -r rejects.log` (⚠️ `-N` prevents `patch` from silently reversing already-applied code).
+- Dropped dead `susfs_sys_reboot()` call in `kernel/reboot.c` (upstream dropped reboot-spoofing in 2.3.0).
 
-### 🐛 Root `su` fix (the big one)
-`CONFIG_KSU_SUSFS_SUS_SU` was left enabled (never explicitly set),
-creating a **competing** root-provisioning path that broke `ksud`'s
-normal daemon-based `su` deployment under SUSFS Inline Hook mode.
+### 2. 🐛 Root `su` Native Fix (The Big One)
+`CONFIG_KSU_SUSFS_SUS_SU` was defaulting to enabled, establishing a secondary/competing root interface that prevented `ksud` daemon from deploying standard `su` symlinks under Inline Hook mode.
 
-**Fix:** `# CONFIG_KSU_SUSFS_SUS_SU is not set` in defconfig.
+- **Fix:** Explicitly set `# CONFIG_KSU_SUSFS_SUS_SU is not set` in defconfig.
+- `su` now works completely natively without any userspace wrapper scripts or hacks.
+- ⚠️ **Cleanup:** Any temporary `/system/bin/su` wrapper script calling `ksud debug su` in `anykernel.sh` is completely removed, ensuring clean, non-flaggable native root.
 
-This one line fixed months of "su not detected" issues. If root
-breaks again after any future SUSFS update, **check this setting
-first** before assuming it's a ReSukiSU bug.
+### 3. NoMount v2.0.0 Integration (Built-in)
+- Integrated into kernel tree under `fs/nomount/`.
+- ⚠️ **CI Symlink Gotcha:** Official script clones as an embedded git repository and symlinks `fs/nomount -> ../NoMount/kernel/src`, which breaks on clean CI checkouts. Flattened by placing actual files directly in `fs/nomount/`.
+- Added `CONFIG_NOMOUNT=y` to defconfig.
 
-### NoMount v2.0.0 integration
-- Script: `curl .../nomount/refs/heads/dev/kernel/setup.sh | bash -`
-- ⚠️ **Known gotcha:** the setup script clones NoMount as a nested
-  git repo and symlinks `fs/nomount -> ../NoMount/kernel/src`. This
-  works locally but **breaks on CI** (fresh clone doesn't resolve
-  the symlink/embedded repo correctly → `can't open file
-  "fs/nomount/Kconfig"`).
-  **Fix applied:** stripped the embedded repo, copied real files
-  directly into `fs/nomount/` instead of using the symlink.
-- `CONFIG_NOMOUNT=y` added to defconfig
+### 4. Baseband-guard (BBG) LSM Integration
+- Integrated `vc-teahouse/Baseband-guard` to prevent malicious/accidental raw block writes to bootloader, modem, and EFS partitions.
+- **Non-GKI 4.19 Fixes:**
+  - Bypassed strict `CONFIG_LSM` abort by setting `HAS_DEFINE_LSM := false` in BBG Makefile to force the built-in 4.19 legacy SELinux integration path.
+  - Neutralized BBG's internal `flask.h` generation rule that wrote broken stubs and poisoned SELinux headers.
+  - Enforced Kbuild directory build ordering in `security/Makefile`:
+    ```makefile
+    $(obj)/baseband-guard: $(obj)/selinux
+    ```
+    *(Note: must NOT have trailing slashes, or Kbuild ignores the rule).*
+  - Mapped `security_initcall` to `late_initcall` in `security/baseband-guard/kernel_compat.h`.
+  - Injected `struct bbg_cred_security_struct bbg_cred;` into SELinux's `struct task_security_struct` in `security/selinux/include/objsec.h`.
+
+### 5. Re-Kernel (Sakion-Team Binder Freezer Hooks)
+- Integrated kernel-level process freezer notification engine to eliminate notification delays and audio stutters when using tombstone managers (NoActive, Thanox, Scene).
+- Built-in driver enabled via `CONFIG_REKERNEL=y` in `drivers/net/rekernel/`.
+- **C-Level Binder Hooking:** Bypassed the Java modifier tool in favor of direct C injection in `drivers/android/binder.c`:
+  - `REPLY` hook injected inside `binder_transaction()` in the `if (reply)` branch after `target_proc->tmp_ref++`.
+  - `TRANSACTION` hook injected inside `binder_transaction()` in the `else` branch right before `security_binder_transaction()`.
+- Note: Requires a companion app (NoActive recommended) to send freeze/thaw commands; driver stays idle when no controller is present.
 
 ---
 
@@ -52,53 +84,52 @@ first** before assuming it's a ReSukiSU bug.
 
 ### Updating SuSFS
 1. `git checkout <latest working tag> && git checkout -b update-attempt`
-2. Check JackA1ltman's current branch name (has changed before:
-   `mainline` → `sample`)
-3. `rm fs/susfs.c include/linux/susfs.h include/linux/susfs_def.h`
-4. Fetch new `susfs_patch_to_4.19.patch`
-5. `patch -p1 -N --fuzz=0 -r rejects.log < patch_file`
-6. Only manually fix files in `rejects.log` with genuinely **new**
-   content — ignore "already applied"/skipped ones
-7. Build → fix only real compile/link errors reported
-8. **Test `su` still works** before calling it done (SUS_SU
-   regression risk — see above)
-9. Tag immediately once confirmed
+2. Check JackA1ltman's current branch (switches between `mainline` and `sample`).
+3. Delete pure SuSFS files: `rm -f fs/susfs.c include/linux/susfs.h include/linux/susfs_def.h`.
+4. Fetch new `susfs_patch_to_4.19.patch`.
+5. Apply with strict forward mode: `patch -p1 -N --fuzz=0 -r rejects.log < susfs_patch_to_4.19.patch`.
+6. Verify `# CONFIG_KSU_SUSFS_SUS_SU is not set` is still preserved in defconfig!
 
-### Updating ReSukiSU
-- Driver is fetched fresh via `curl` at CI build time
-  (`drivers/kernelsu/` is never committed to this repo) — updates
-  automatically, nothing to do manually
-- **After any ReSukiSU version bump, re-verify:**
-  - `CONFIG_KSU_MANUAL_HOOK` vs `CONFIG_KSU_SUSFS` are still a
-    Kconfig `choice` (mutually exclusive) — check
-    `drivers/kernelsu/Kconfig` hasn't changed this structure
-  - `CONFIG_KSU_SUSFS_SUS_SU` is still explicitly disabled
-  - `su` still works natively post-flash
+### Updating Baseband-guard
+1. When updating `security/baseband-guard/`:
+   - Keep `HAS_DEFINE_LSM := false` in its Makefile.
+   - Do NOT allow BBG Makefile to generate `flask.h` (let SELinux generate it).
+   - Ensure `$(obj)/baseband-guard: $(obj)/selinux` remains in `security/Makefile` (no trailing slashes).
+   - Ensure `security_initcall` is mapped to `late_initcall` in `kernel_compat.h`.
+   - If resetting git files, remember to restore `bbg_cred` in `security/selinux/include/objsec.h`.
 
 ### Updating NoMount
-1. Re-run the official `setup.sh` fresh
-2. **Immediately check** `fs/nomount` isn't a symlink:
-   `ls -la fs/nomount` — if it shows `->` (symlink), repeat the
-   fix: delete symlink, copy real files from the cloned repo folder
-   directly, delete the cloned repo folder, re-add to git
-3. Confirm `git status` shows individual files, not a `160000`
-   gitlink entry
+1. Never commit `NoMount` as a submodule or symlink.
+2. Copy files directly to `fs/nomount/` as plain tracked files.
+
+### Updating Re-Kernel
+1. If `drivers/android/binder.c` is ever reset, re-inject the two `rekernel_report()` calls inside `binder_transaction()` (both `REPLY` and `TRANSACTION` branches).
+2. Ensure `CONFIG_REKERNEL=y` is set in defconfig.
 
 ---
 
-## 🙏 Credits
+## 📦 Distribution Note
 
-- [Claude](https://claude.ai/share/e5a91d52-679d-4465-ad8f-2b1e72016f06) — making this project possible
-- @wbprangga for prompt suggestion, inspiring to make this project
-- [Tashar02](https://github.com/Atom-X-Devs/scarlet_xiaomi_sdm660) for base kernel
-- [Xiaolegun](https://github.com/xiaolegun) for base boot and wayne dev
-- [@LKDenchin](https://github.com/LKDenchin) for base kernel
-- [ReSukiSU](https://github.com/ReSukiSU/ReSukiSU) — driver & manager
-- [JackA1ltman/NonGKI_Kernel_Build_2nd](https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd) — the non-GKI SUSFS v2.3.0 backport patch and hook scripts that made this actually work
-- [maxsteeel (NoMount)](https://github.com/maxsteeel/nomount)
-- [LKGeek-Team](https://github.com/LKGeek-Team) — base kernel
-- [MI 6X (wayne) INDONESIA 🇮🇩](https://t.me/Mi6XGroup) for everything
+Out of respect to **LKDenchin** and the **LKGeek Team**, who built the original base kernel this project stands on, **no prebuilt binaries are published for this fork.** If you want to use these changes, **fork this repository and build it yourself** using the included GitHub Actions workflow. Please keep all credit intact — do not strip attribution when forking or redistributing source.
 
 ---
 
-*Built with way too much coffee and an unreasonable amount of `git checkout -f`.* ☕
+## 🤖 Professional Handoff Prompt Template
+
+*Use this prompt when handing context off to an AI assistant in future debugging or upgrading sessions to save tokens and prevent context loss:*
+
+```text
+CONTEXT: Xiaomi Wayne (Mi 6X / SDM660), Linux 4.19.325 custom kernel (fork: DevHamid/LKGeek_sdm660).
+ACTIVE INTEGRATIONS & ARCHITECTURE:
+1. ReSukiSU v4.2.0-rc1: Uses "CONFIG_KSU_SUSFS=y" (Inline Hook mode).
+   - CRITICAL: "CONFIG_KSU_SUSFS_SUS_SU" MUST BE DISABLED in defconfig, or native su daemon fails to deploy.
+2. SuSFS v2.3.0: Manually backported via JackA1ltman NonGKI_Kernel_Build_2nd.
+3. NoMount v2.0.0: Built-in under fs/nomount/ (plain tracked files, no symlinks/submodules due to CI clone issues).
+4. Baseband-guard (BBG): Running legacy SELinux integration.
+   - HAS_DEFINE_LSM forced to false in BBG Makefile.
+   - security/Makefile has explicit directory order: `$(obj)/baseband-guard: $(obj)/selinux` (no trailing slashes).
+   - bbg_cred hooked into security/selinux/include/objsec.h.
+   - security_initcall mapped to late_initcall in kernel_compat.h.
+5. Re-Kernel: Driver in drivers/net/rekernel/ (CONFIG_REKERNEL=y) with IPC/Reply hooks injected in drivers/android/binder.c.
+
+CONSTRAINT: Do not alter existing working hook placements without explicit verification against git diff. Be concise and provide copy-paste shell blocks.
