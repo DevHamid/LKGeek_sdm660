@@ -133,3 +133,25 @@ ACTIVE INTEGRATIONS & ARCHITECTURE:
 5. Re-Kernel: Driver in drivers/net/rekernel/ (CONFIG_REKERNEL=y) with IPC/Reply hooks injected in drivers/android/binder.c.
 
 CONSTRAINT: Do not alter existing working hook placements without explicit verification against git diff. Be concise and provide copy-paste shell blocks.
+```
+
+---
+
+## 🙏 Credits
+
+- [Claude](https://claude.ai) & [Gemini](https://gemini.google.com) — architectural diagnosis, preprocessor debugging, and Kbuild ordering
+- @wbprangga — prompt ideas & project inspiration
+- [Tashar02](https://github.com/Atom-X-Devs/scarlet_xiaomi_sdm660) & [LKGeek-Team](https://github.com/LKGeek-Team) — base SDM660 kernel
+- [Xiaolegun](https://github.com/xiaolegun) — Wayne boot & device development
+- [@LKDenchin](https://github.com/LKDenchin) — kernel & CI maintainer
+- [ReSukiSU](https://github.com/ReSukiSU/ReSukiSU) — kernel root engine & manager
+- [JackA1ltman/NonGKI_Kernel_Build_2nd](https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd) — non-GKI SuSFS & Re-Kernel backport patches
+- [maxsteeel (NoMount)](https://github.com/maxsteeel/nomount) — VFS module redirection
+- [vc-teahouse (Baseband-guard)](https://github.com/vc-teahouse/Baseband-guard) — bootloader/modem partition defense
+- [Sakion-Team (Re-Kernel)](https://github.com/Sakion-Team/Re-Kernel) — Binder process freezer
+- [MI 6X (wayne) INDONESIA 🇮🇩](https://t.me/Mi6XGroup) — community testing & support
+
+---
+
+*Built with way too much coffee, zero sleep, and an unreasonable amount of `git checkout -f`.* ☕
+```
