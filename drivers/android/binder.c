@@ -42,6 +42,9 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#ifdef CONFIG_REKERNEL
+#include <net/rekernel.h>
+#endif
 #include <linux/fdtable.h>
 #include <linux/file.h>
 #include <linux/freezer.h>
@@ -3130,6 +3133,14 @@ static void binder_transaction(struct binder_proc *proc,
 		}
 		target_proc = target_thread->proc;
 		target_proc->tmp_ref++;
+#ifdef CONFIG_REKERNEL
+		if ((NULL != target_proc) && (NULL != target_proc->tsk)
+		    && (task_uid(target_proc->tsk).val > MIN_USERAPP_UID || task_uid(target_proc->tsk).val <= MAX_SYSTEM_UID)
+		    && (proc->pid != target_proc->pid)
+		    && frozen_task_group(target_proc->tsk)) {
+			rekernel_report(BINDER, REPLY, proc->pid, proc->tsk, target_proc->pid, target_proc->tsk, 0, NULL, tr->code);
+		}
+#endif
 		binder_inner_proc_unlock(target_thread->proc);
 	} else {
 		if (tr->target.handle) {
@@ -3191,6 +3202,14 @@ static void binder_transaction(struct binder_proc *proc,
 			return_error_line = __LINE__;
 			goto err_invalid_target_handle;
 		}
+		#ifdef CONFIG_REKERNEL
+		if ((NULL != target_proc) && (NULL != target_proc->tsk)
+		    && (task_uid(target_proc->tsk).val > MIN_USERAPP_UID)
+		    && (proc->pid != target_proc->pid)
+		    && frozen_task_group(target_proc->tsk)) {
+			rekernel_report(BINDER, TRANSACTION, proc->pid, proc->tsk, target_proc->pid, target_proc->tsk, tr->flags & TF_ONE_WAY, NULL, tr->code);
+		}
+#endif
 		if (security_binder_transaction(binder_get_cred(proc),
 					binder_get_cred(target_proc)) < 0) {
 			return_error = BR_FAILED_REPLY;
