@@ -390,9 +390,75 @@ unlock:
 	return (rc < 0) ? rc : count;
 }
 
+static ssize_t delay_on_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct qpnp_led_dev *led =
+		container_of(led_cdev, struct qpnp_led_dev, cdev);
+
+	return scnprintf(buf, PAGE_SIZE, "%llu\n", led->led_setting.on_ms);
+}
+
+static ssize_t delay_on_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct qpnp_led_dev *led =
+		container_of(led_cdev, struct qpnp_led_dev, cdev);
+	u64 val;
+	int rc;
+
+	rc = kstrtoull(buf, 10, &val);
+	if (rc < 0)
+		return rc;
+
+	mutex_lock(&led->lock);
+	led->led_setting.on_ms = val;
+	mutex_unlock(&led->lock);
+
+	return count;
+}
+static DEVICE_ATTR_RW(delay_on);
+
+static ssize_t delay_off_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct qpnp_led_dev *led =
+		container_of(led_cdev, struct qpnp_led_dev, cdev);
+
+	return scnprintf(buf, PAGE_SIZE, "%llu\n", led->led_setting.off_ms);
+}
+
+static ssize_t delay_off_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct qpnp_led_dev *led =
+		container_of(led_cdev, struct qpnp_led_dev, cdev);
+	u64 val;
+	int rc;
+
+	rc = kstrtoull(buf, 10, &val);
+	if (rc < 0)
+		return rc;
+
+	mutex_lock(&led->lock);
+	led->led_setting.off_ms = val;
+	mutex_unlock(&led->lock);
+
+	return count;
+}
+static DEVICE_ATTR_RW(delay_off);
+
 static DEVICE_ATTR_RW(breath);
 static const struct attribute *breath_attrs[] = {
 	&dev_attr_breath.attr,
+	&dev_attr_delay_on.attr,
+	&dev_attr_delay_off.attr,
 	NULL
 };
 
