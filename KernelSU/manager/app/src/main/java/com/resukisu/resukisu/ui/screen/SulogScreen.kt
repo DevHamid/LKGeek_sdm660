@@ -6,16 +6,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.captionBar
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -29,9 +22,7 @@ import androidx.compose.material.icons.twotone.FilterList
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuGroup
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -41,6 +32,7 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -83,6 +75,7 @@ import com.resukisu.resukisu.domain.model.SulogFile
 import com.resukisu.resukisu.domain.model.toSulogDisplayName
 import com.resukisu.resukisu.ui.component.SearchAppBar
 import com.resukisu.resukisu.ui.component.WarningCard
+import com.resukisu.resukisu.ui.component.rememberSearchAppBarScrollBehavior
 import com.resukisu.resukisu.ui.component.settings.SettingsBaseWidget
 import com.resukisu.resukisu.ui.component.settings.SettingsChooseWidget
 import com.resukisu.resukisu.ui.component.settings.lazySegmentColumn
@@ -91,6 +84,7 @@ import com.resukisu.resukisu.ui.theme.CardConfig
 import com.resukisu.resukisu.ui.theme.blurSource
 import com.resukisu.resukisu.ui.util.ActivityResumeEffect
 import com.resukisu.resukisu.ui.util.LocalBlurState
+import com.resukisu.resukisu.ui.util.adaptiveScaffoldWindowInsets
 import com.resukisu.resukisu.ui.viewmodel.SulogActions
 import com.resukisu.resukisu.ui.viewmodel.SulogFileSelector
 import com.resukisu.resukisu.ui.viewmodel.SulogScreenState
@@ -148,10 +142,12 @@ private fun SulogScreenContent(
     actions: SulogActions,
 ) {
     val cardConfig: CardConfig = koinInject()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(
-        rememberTopAppBarState(
-            initialHeightOffset = -154f,
-            initialHeightOffsetLimit = -154f // from debugger
+    val scrollBehavior = rememberSearchAppBarScrollBehavior(
+        TopAppBarDefaults.exitUntilCollapsedScrollBehavior(
+            rememberTopAppBarState(
+                initialHeightOffset = -154f,
+                initialHeightOffsetLimit = -154f // from debugger
+            )
         )
     )
     val pullToRefreshState = rememberPullToRefreshState()
@@ -208,23 +204,17 @@ private fun SulogScreenContent(
                                 Spacer(modifier = Modifier.height(2.dp))
 
                                 SulogEventFilter.entries.forEachIndexed { index, filter ->
-                                    DropdownMenuItem(
+                                    SelectableDropdownMenuItem(
                                         selected = filter in state.selectedFilters,
-                                        text = { Text(sulogFilterLabel(filter)) },
-                                        trailingIcon = {
-                                            Checkbox(
-                                                checked = filter in state.selectedFilters,
-                                                onCheckedChange = null,
-                                            )
-                                        },
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
                                             actions.onToggleFilter(filter)
                                         },
+                                        text = { Text(sulogFilterLabel(filter)) },
                                         shapes = MenuDefaults.itemShape(
                                             index = index,
                                             count = SulogEventFilter.entries.size
-                                        )
+                                        ),
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                 }
@@ -236,7 +226,7 @@ private fun SulogScreenContent(
                 searchBarPlaceHolderText = stringResource(R.string.sulog_search_placeholder)
             )
         },
-        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+        contentWindowInsets = adaptiveScaffoldWindowInsets(),
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface
     ) { innerPadding ->
@@ -276,7 +266,7 @@ private fun SulogScreenContent(
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
                 ) {
                     item {
-                        Spacer(modifier = Modifier.height(innerPadding.calculateTopPadding() + 8.dp))
+                        Spacer(modifier = Modifier.height(innerPadding.calculateTopPadding()))
                     }
 
                     item {
@@ -322,13 +312,7 @@ private fun SulogScreenContent(
 
                     item {
                         Spacer(
-                            Modifier.height(
-                                WindowInsets.navigationBars.asPaddingValues()
-                                    .calculateBottomPadding() +
-                                        WindowInsets.captionBar.asPaddingValues()
-                                            .calculateBottomPadding() +
-                                        16.dp
-                            )
+                            Modifier.height(innerPadding.calculateBottomPadding() + 16.dp)
                         )
                     }
                 }
@@ -609,11 +593,6 @@ private fun LazyListScope.sulogEntriesSection(
                 entries,
                 key = { index, entry -> "$index-${entry.key}" }) { index, entry ->
                 SettingsBaseWidget(
-                    modifier = if (index < entries.lastIndex) {
-                        Modifier.padding(bottom = 2.dp)
-                    } else {
-                        Modifier
-                    },
                     onClick = { onEntryClick(entry) },
                     title = sulogEntryTitle(entry),
                     iconPlaceholder = false,

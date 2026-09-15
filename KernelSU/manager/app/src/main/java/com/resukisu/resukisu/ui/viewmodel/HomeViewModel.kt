@@ -2,6 +2,9 @@ package com.resukisu.resukisu.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.resukisu.resukisu.data.module.ModuleRepository
+import com.resukisu.resukisu.data.packageinfo.SuperUserRepository
+import com.resukisu.resukisu.data.shell.KsuCliRepository
 import com.resukisu.resukisu.data.system.HomeStateRepository
 import com.resukisu.resukisu.domain.model.HomeDashboardState
 import com.resukisu.resukisu.domain.model.HomeSystemInfo
@@ -9,8 +12,6 @@ import com.resukisu.resukisu.domain.model.ManagerUpdateChannel
 import com.resukisu.resukisu.domain.usecase.CheckManagerUpdateUseCase
 import com.resukisu.resukisu.domain.usecase.GetBooleanPreferenceUseCase
 import com.resukisu.resukisu.domain.usecase.GetHomeBasicInfoUseCase
-import com.resukisu.resukisu.domain.usecase.GetHomeModuleOverviewUseCase
-import com.resukisu.resukisu.domain.usecase.GetHomeSuperuserCountUseCase
 import com.resukisu.resukisu.domain.usecase.GetKernelStatusUseCase
 import com.resukisu.resukisu.domain.usecase.GetManagerRuntimeInfoUseCase
 import com.resukisu.resukisu.domain.usecase.GetSuSFSStatusUseCase
@@ -22,7 +23,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -33,11 +37,8 @@ sealed interface HomeUiAction {
     data object AwaitInitialData : HomeUiAction
     data class Refresh(val showIndicator: Boolean = true) : HomeUiAction
     data class SetSimpleMode(val enabled: Boolean) : HomeUiAction
-    data class SetHideOtherInfo(val enabled: Boolean) : HomeUiAction
-    data class SetHideSusfsStatus(val enabled: Boolean) : HomeUiAction
-    data class SetHideZygiskImplement(val enabled: Boolean) : HomeUiAction
-    data class SetHideMetaModuleImplement(val enabled: Boolean) : HomeUiAction
-    data class SetHideLinkCard(val enabled: Boolean) : HomeUiAction
+    data class SetNavigationBarBadge(val enabled: Boolean) : HomeUiAction
+    data class SetHomeCardIcons(val enabled: Boolean) : HomeUiAction
     data class Reboot(val reason: String) : HomeUiAction
 }
 
@@ -46,21 +47,39 @@ sealed interface HomeUiEvent {
 }
 
 class HomeViewModel(
-    private val homeStateRepository: HomeStateRepository,
+    val homeStateRepository: HomeStateRepository,
+    superUserRepository: SuperUserRepository,
+    moduleRepository: ModuleRepository,
+    private val ksuCliRepository: KsuCliRepository,
     private val checkManagerUpdate: CheckManagerUpdateUseCase,
     private val getKernelStatus: GetKernelStatusUseCase,
     private val getManagerRuntimeInfo: GetManagerRuntimeInfoUseCase,
     private val getSuSFSStatus: GetSuSFSStatusUseCase,
     private val getBasicInfo: GetHomeBasicInfoUseCase,
-    private val getModuleOverview: GetHomeModuleOverviewUseCase,
-    private val getSuperuserCount: GetHomeSuperuserCountUseCase,
     private val isNetworkAvailable: IsNetworkAvailableUseCase,
     private val getBooleanPreference: GetBooleanPreferenceUseCase,
     private val setBooleanPreference: SetBooleanPreferenceUseCase,
     private val reboot: RebootUseCase,
 ) : ViewModel() {
-    val state = homeStateRepository.state
-    val uiState = state
+    val uiState = combine(
+        homeStateRepository.state,
+        superUserRepository.state,
+        moduleRepository.installedModules,
+    ) { homeState, superUserState, moduleState ->
+        homeState.copy(
+            systemInfo = homeState.systemInfo.copy(
+                moduleCount = moduleState.modules.size,
+                superuserCount = superUserState.groups.filter { it.allowSu }.size,
+                zygiskImplement = ksuCliRepository.getZygiskImplement(),
+                metaModuleImplement = ksuCliRepository.getMetaModuleImplement(),
+            )
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = HomeUiState()
+    )
+
     private val mutableEvents = MutableSharedFlow<HomeUiEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<HomeUiEvent> = mutableEvents.asSharedFlow()
 
@@ -80,7 +99,7 @@ class HomeViewModel(
     fun refreshData(refreshUI: Boolean = false): Job {
         if (!refreshUI) {
             refreshJob?.takeIf(Job::isActive)?.let { return it }
-            if (state.value.isInitialDataLoaded) return completedJob()
+            if (uiState.value.isInitialDataLoaded) return completedJob()
         }
         refreshManagerUpdates(force = refreshUI)
         return viewModelScope.launch {
@@ -89,25 +108,23 @@ class HomeViewModel(
                 try {
                     applyUserSettings()
                     val kernelStatus = runCatching { getKernelStatus() }
-                        .getOrElse { state.value.systemStatus }
+                        .getOrElse { uiState.value.systemStatus }
                     homeStateRepository.update {
                         it.copy(systemStatus = kernelStatus, isCoreDataLoaded = true)
                     }
 
-                    val basic = async { getBasicInfo(kernelStatus.managerUAPIVersion) }
-                    val module = async { getModuleOverview() }
-                    val superusers = async { getSuperuserCount() }
-                    val managers = async { getManagerRuntimeInfo() }
-                    val susfs = if (!state.value.isHideSusfsStatus) {
-                        async { getSuSFSStatus() }
-                    } else {
-                        null
+                    val includeSelinuxStatus = !uiState.value.isInitialDataLoaded
+                    val basic = async {
+                        getBasicInfo(
+                            managerUapiVersion = kernelStatus.managerUAPIVersion,
+                            includeSelinuxStatus = includeSelinuxStatus,
+                        )
                     }
+                    val managers = async { getManagerRuntimeInfo() }
+                    val susfs = async { getSuSFSStatus() }
                     val basicInfo = basic.await()
-                    val moduleInfo = module.await()
-                    val superuserCount = superusers.await()
                     val managerInfo = managers.await()
-                    val susfsInfo = susfs?.await()
+                    val susfsInfo = susfs.await()
                     homeStateRepository.update { current ->
                         current.copy(
                             systemInfo = HomeSystemInfo(
@@ -115,17 +132,15 @@ class HomeViewModel(
                                 androidVersion = basicInfo.androidVersion,
                                 deviceModel = basicInfo.deviceModel,
                                 managerVersion = basicInfo.managerVersion,
-                                selinuxStatus = basicInfo.selinuxStatus,
-                                susfsEnabled = susfsInfo?.enabled ?: false,
-                                susfsVersionSupported = susfsInfo?.enabled ?: false,
-                                susfsVersion = susfsInfo?.version.orEmpty(),
-                                susfsFeatures = susfsInfo?.enabledFeatures.orEmpty(),
-                                superuserCount = superuserCount,
-                                moduleCount = moduleInfo.count,
+                                selinuxStatus = current.systemInfo.selinuxStatus.ifEmpty {
+                                    basicInfo.selinuxStatus
+                                },
+                                susfsEnabled = susfsInfo.enabled,
+                                susfsVersionSupported = susfsInfo.enabled,
+                                susfsVersion = susfsInfo.version,
+                                susfsFeatures = susfsInfo.enabledFeatures,
                                 managersList = managerInfo,
                                 isDynamicSignEnabled = managerInfo.dynamicSignatureEnabled,
-                                zygiskImplement = moduleInfo.zygiskImplementation,
-                                metaModuleImplement = moduleInfo.metaModuleImplementation,
                                 seccompStatus = basicInfo.seccompStatus,
                             ),
                             isInitialDataLoaded = true,
@@ -147,31 +162,23 @@ class HomeViewModel(
     fun handleSimpleModeChange(enabled: Boolean) =
         updatePreference(PREF_SIMPLE_MODE, enabled) { it.copy(isSimpleMode = enabled) }
 
-    fun handleHideOtherInfoChange(enabled: Boolean) =
-        updatePreference(PREF_HIDE_OTHER_INFO, enabled) { it.copy(isHideOtherInfo = enabled) }
+    fun handleNavigationBarBadgeChange(enabled: Boolean) =
+        updatePreference(PREF_SHOW_NAVIGATION_BAR_BADGE, enabled) {
+            it.copy(showNavigationBarBadge = enabled)
+        }
 
-    fun handleHideSusfsStatusChange(enabled: Boolean) =
-        updatePreference(PREF_HIDE_SUSFS, enabled) { it.copy(isHideSusfsStatus = enabled) }
-
-    fun handleHideZygiskImplementChange(enabled: Boolean) =
-        updatePreference(PREF_HIDE_ZYGISK, enabled) { it.copy(isHideZygiskImplement = enabled) }
-
-    fun handleHideMetaModuleImplementChange(enabled: Boolean) =
-        updatePreference(PREF_HIDE_META, enabled) { it.copy(isHideMetaModuleImplement = enabled) }
-
-    fun handleHideLinkCardChange(enabled: Boolean) =
-        updatePreference(PREF_HIDE_LINK, enabled) { it.copy(isHideLinkCard = enabled) }
+    fun handleHomeCardIconsChange(enabled: Boolean) =
+        updatePreference(PREF_SHOW_HOME_CARD_ICONS, enabled) {
+            it.copy(showHomeCardIcons = enabled)
+        }
 
     fun dispatch(action: HomeUiAction) {
         when (action) {
             HomeUiAction.AwaitInitialData -> viewModelScope.launch { awaitInitialData() }
             is HomeUiAction.Refresh -> refreshData(action.showIndicator)
             is HomeUiAction.SetSimpleMode -> handleSimpleModeChange(action.enabled)
-            is HomeUiAction.SetHideOtherInfo -> handleHideOtherInfoChange(action.enabled)
-            is HomeUiAction.SetHideSusfsStatus -> handleHideSusfsStatusChange(action.enabled)
-            is HomeUiAction.SetHideZygiskImplement -> handleHideZygiskImplementChange(action.enabled)
-            is HomeUiAction.SetHideMetaModuleImplement -> handleHideMetaModuleImplementChange(action.enabled)
-            is HomeUiAction.SetHideLinkCard -> handleHideLinkCardChange(action.enabled)
+            is HomeUiAction.SetNavigationBarBadge -> handleNavigationBarBadgeChange(action.enabled)
+            is HomeUiAction.SetHomeCardIcons -> handleHomeCardIconsChange(action.enabled)
             is HomeUiAction.Reboot -> viewModelScope.launch {
                 reboot(action.reason).onFailure {
                     mutableEvents.tryEmit(HomeUiEvent.Error(it.message.orEmpty()))
@@ -218,11 +225,11 @@ class HomeViewModel(
         homeStateRepository.update {
             it.copy(
                 isSimpleMode = getBooleanPreference(PREF_SIMPLE_MODE),
-                isHideOtherInfo = getBooleanPreference(PREF_HIDE_OTHER_INFO),
-                isHideSusfsStatus = getBooleanPreference(PREF_HIDE_SUSFS),
-                isHideLinkCard = getBooleanPreference(PREF_HIDE_LINK),
-                isHideZygiskImplement = getBooleanPreference(PREF_HIDE_ZYGISK),
-                isHideMetaModuleImplement = getBooleanPreference(PREF_HIDE_META),
+                showNavigationBarBadge = getBooleanPreference(
+                    PREF_SHOW_NAVIGATION_BAR_BADGE,
+                    true,
+                ),
+                showHomeCardIcons = getBooleanPreference(PREF_SHOW_HOME_CARD_ICONS),
             )
         }
     }
@@ -242,10 +249,7 @@ class HomeViewModel(
         const val PREF_CHECK_UPDATE = "check_update"
         const val PREF_CHECK_BETA_UPDATE = "check_beta_update"
         const val PREF_SIMPLE_MODE = "is_simple_mode"
-        const val PREF_HIDE_OTHER_INFO = "is_hide_other_info"
-        const val PREF_HIDE_SUSFS = "is_hide_susfs_status"
-        const val PREF_HIDE_LINK = "is_hide_link_card"
-        const val PREF_HIDE_ZYGISK = "is_hide_zygisk_Implement"
-        const val PREF_HIDE_META = "is_hide_meta_module_Implement"
+        const val PREF_SHOW_NAVIGATION_BAR_BADGE = "show_navigation_bar_badge"
+        const val PREF_SHOW_HOME_CARD_ICONS = "show_home_card_icons"
     }
 }

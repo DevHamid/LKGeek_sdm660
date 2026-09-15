@@ -39,15 +39,28 @@ try:
         last_commit = commits[-1]
 
     elif 'head_commit' in GITHUB_EVENT:
-        msg = GITHUB_EVENT["head_commit"]["msg"]
+        msg = GITHUB_EVENT["head_commit"]["message"]
         if len(msg) > 3192:
             msg = msg[:3189] + '...'
         commit_message = f'{msg.strip()}'
     else:
         commit_message = f'(no commit message)'
+except IndexError:
+    print("[!] IndexError Found! try another way to get commit...")
+    try:
+        if 'head_commit' in GITHUB_EVENT:
+            msg = GITHUB_EVENT["head_commit"]["message"]
+            if len(msg) > 3192:
+                msg = msg[:3189] + '...'
+            commit_message = f'{msg.strip()}'
+    except:
+        from traceback import print_exc
+        print_exc()
+        commit_message = f'(no commit message)'
 except:
     from traceback import print_exc
     print_exc()
+    commit_message = f'(Unexpected Error! So no commit message)'
 
 if 'compare' in GITHUB_EVENT:
     commit_url = GITHUB_EVENT['compare']
@@ -69,7 +82,6 @@ Branch: {branch}
 <a href="{run_url}">Workflow run</a>
 <a href="https://nightly.link/ReSukiSU/ReSukiSU/workflows/build-manager/main/Manager-debug.zip">Get latest main Debug build</a>
 """.strip()
-
 MAIN_UPDATED_MSG ="""
 main branch updated, manager in there may outdated 
 main 分支已更新，此 topic 的管理器可能已过时
@@ -87,6 +99,9 @@ def get_caption():
         commit_line=commit_line,
         run_url=RUN_URL,
     )
+    if BRANCH != "main" and GITHUB_REF_TYPE != "tag":
+        msg += "\n⚠️⚠️<b>DEV VERSION, PLEASE BACKUP BEFORE INSTALLATION</b>⚠️⚠️"
+        msg += "\n⚠️⚠️<b>测试版，安装前请备份</b>⚠️⚠️"
     return msg
 
 def get_caption_for_debug():
@@ -98,6 +113,9 @@ def get_caption_for_debug():
         commit_line=commit_line,
         run_url=RUN_URL,
     )
+    if BRANCH != "main" and GITHUB_REF_TYPE != "tag":
+        msg += "\n⚠️⚠️<b>DEV VERSION, PLEASE BACKUP BEFORE INSTALLATION</b>⚠️⚠️"
+        msg += "\n⚠️⚠️<b>测试版，安装前请备份</b>⚠️⚠️"
     return msg
 
 def check_environ():

@@ -54,6 +54,7 @@ import com.resukisu.resukisu.ui.component.SearchAppBar
 import com.resukisu.resukisu.ui.component.SwipeableSnackbarHost
 import com.resukisu.resukisu.ui.component.rememberConfirmDialog
 import com.resukisu.resukisu.ui.component.rememberCustomDialog
+import com.resukisu.resukisu.ui.component.rememberSearchAppBarScrollBehavior
 import com.resukisu.resukisu.ui.component.settings.SegmentedColumn
 import com.resukisu.resukisu.ui.component.settings.SettingsBaseWidget
 import com.resukisu.resukisu.ui.component.settings.SettingsTextFieldWidget
@@ -62,6 +63,7 @@ import com.resukisu.resukisu.ui.navigation.LocalNavigator
 import com.resukisu.resukisu.ui.theme.blurSource
 import com.resukisu.resukisu.ui.util.ActivityResumeEffect
 import com.resukisu.resukisu.ui.util.LocalSnackbarHost
+import com.resukisu.resukisu.ui.util.adaptiveScaffoldWindowInsets
 import com.resukisu.resukisu.ui.util.showReplacingSnackbar
 import com.resukisu.resukisu.ui.viewmodel.DynamicManagerAppItem
 import com.resukisu.resukisu.ui.viewmodel.DynamicManagerOperation
@@ -78,8 +80,9 @@ fun DynamicManagerScreen() {
     val navigator = LocalNavigator.current
     val viewModel = koinViewModel<DynamicManagerViewModel>()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val scrollBehavior =
+    val scrollBehavior = rememberSearchAppBarScrollBehavior(
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    )
     val pullToRefreshState = rememberPullToRefreshState()
     val snackbarHost = LocalSnackbarHost.current
     val scope = rememberCoroutineScope()
@@ -149,6 +152,7 @@ fun DynamicManagerScreen() {
     }
 
     Scaffold(
+        contentWindowInsets = adaptiveScaffoldWindowInsets(),
         topBar = {
             SearchAppBar(
                 title = stringResource(R.string.dynamic_manager_title),

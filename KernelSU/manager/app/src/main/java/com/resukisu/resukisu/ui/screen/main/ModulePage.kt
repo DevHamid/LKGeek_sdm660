@@ -27,15 +27,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -62,8 +58,8 @@ import androidx.compose.material.icons.twotone.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CheckableDropdownMenuItem
 import androidx.compose.material3.DropdownMenuGroup
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -145,6 +141,7 @@ import com.resukisu.resukisu.ui.component.ZipFileInfo
 import com.resukisu.resukisu.ui.component.ZipType
 import com.resukisu.resukisu.ui.component.rememberConfirmDialog
 import com.resukisu.resukisu.ui.component.rememberLoadingDialog
+import com.resukisu.resukisu.ui.component.rememberSearchAppBarScrollBehavior
 import com.resukisu.resukisu.ui.component.settings.SegmentedColumn
 import com.resukisu.resukisu.ui.component.settings.SettingsBaseWidget
 import com.resukisu.resukisu.ui.component.settings.SettingsJumpPageWidget
@@ -158,6 +155,7 @@ import com.resukisu.resukisu.ui.theme.blurSource
 import com.resukisu.resukisu.ui.theme.renderBackgroundBlur
 import com.resukisu.resukisu.ui.util.LocalPermissionRequestInterface
 import com.resukisu.resukisu.ui.util.LocalSnackbarHost
+import com.resukisu.resukisu.ui.util.adaptiveScaffoldWindowInsets
 import com.resukisu.resukisu.ui.util.downloader.download
 import com.resukisu.resukisu.ui.util.module.Shortcut
 import com.resukisu.resukisu.ui.util.showReplacingSnackbar
@@ -196,7 +194,7 @@ fun ModulePage(bottomPadding: Dp) {
     val context = LocalContext.current
     val viewModel = koinViewModel<ModuleViewModel>()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val homeState by koinViewModel<HomeViewModel>().state.collectAsStateWithLifecycle()
+    val homeState by koinViewModel<HomeViewModel>().uiState.collectAsStateWithLifecycle()
     val snackBarHost = LocalSnackbarHost.current
     val scope = rememberCoroutineScope()
     var lastClickTime by remember { mutableStateOf(0L) }
@@ -303,7 +301,9 @@ fun ModulePage(bottomPadding: Dp) {
     val hideInstallButton = isSafeMode || uiState.hasMagisk
 
     val topAppBarState = rememberTopAppBarState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(topAppBarState)
+    val scrollBehavior = rememberSearchAppBarScrollBehavior(
+        TopAppBarDefaults.exitUntilCollapsedScrollBehavior(topAppBarState)
+    )
 
     Scaffold(
         topBar = {
@@ -371,9 +371,7 @@ fun ModulePage(bottomPadding: Dp) {
         },
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        contentWindowInsets = WindowInsets.safeDrawing.only(
-            WindowInsetsSides.Top + WindowInsetsSides.Horizontal
-        ),
+        contentWindowInsets = adaptiveScaffoldWindowInsets(includeBottom = false),
         snackbarHost = {
             SwipeableSnackbarHost(
                 hostState = snackBarHost
@@ -496,11 +494,11 @@ private fun ModuleDropdown(
         DropdownMenuGroup(
             shapes = MenuDefaults.groupShapes(),
         ) {
-            DropdownMenuItem(
+            CheckableDropdownMenuItem(
                 checked = uiState.sortActionFirst,
-                onCheckedChange = { checked ->
+                onCheckedChange = {
                     viewModel.dispatch(
-                        ModuleUiAction.Sort(uiState.sortEnabledFirst, checked)
+                        ModuleUiAction.Sort(uiState.sortEnabledFirst, it)
                     )
                 },
                 text = { Text(stringResource(R.string.module_sort_action_first)) },
@@ -509,11 +507,11 @@ private fun ModuleDropdown(
                     count = 2,
                 ),
             )
-            DropdownMenuItem(
+            CheckableDropdownMenuItem(
                 checked = uiState.sortEnabledFirst,
-                onCheckedChange = { checked ->
+                onCheckedChange = {
                     viewModel.dispatch(
-                        ModuleUiAction.Sort(checked, uiState.sortActionFirst)
+                        ModuleUiAction.Sort(it, uiState.sortActionFirst)
                     )
                 },
                 text = { Text(stringResource(R.string.module_sort_enabled_first)) },
@@ -580,7 +578,7 @@ private fun ModuleList(
     bottomPadding : Dp,
     topPadding : Dp,
 ) {
-    val Shortcut = koinInject<Shortcut>()
+    val shortcut = koinInject<Shortcut>()
     var showMetaModuleWarning by rememberSaveable { mutableStateOf(true) }
     val fetchRemoteText = koinInject<FetchRemoteTextUseCase>()
     val enqueueDownload = koinInject<EnqueueDownloadUseCase>()
@@ -683,15 +681,15 @@ private fun ModuleList(
 
     fun hasModuleShortcut(context: Context, moduleId: String, type: ShortcutType): Boolean {
         return when (type) {
-            ShortcutType.Action -> Shortcut.hasModuleActionShortcut(context, moduleId)
-            ShortcutType.WebUI -> Shortcut.hasModuleWebUiShortcut(context, moduleId)
+            ShortcutType.Action -> shortcut.hasModuleActionShortcut(context, moduleId)
+            ShortcutType.WebUI -> shortcut.hasModuleWebUiShortcut(context, moduleId)
         }
     }
 
     fun deleteModuleShortcut(context: Context, moduleId: String, type: ShortcutType) {
         when (type) {
-            ShortcutType.Action -> Shortcut.deleteModuleActionShortcut(context, moduleId)
-            ShortcutType.WebUI -> Shortcut.deleteModuleWebUiShortcut(context, moduleId)
+            ShortcutType.Action -> shortcut.deleteModuleActionShortcut(context, moduleId)
+            ShortcutType.WebUI -> shortcut.deleteModuleWebUiShortcut(context, moduleId)
         }
     }
 
@@ -704,7 +702,7 @@ private fun ModuleList(
     ) {
         when (type) {
             ShortcutType.Action -> {
-                Shortcut.createModuleActionShortcut(
+                shortcut.createModuleActionShortcut(
                     context = context,
                     moduleId = moduleId,
                     name = name,
@@ -713,7 +711,7 @@ private fun ModuleList(
             }
 
             ShortcutType.WebUI -> {
-                Shortcut.createModuleWebUiShortcut(
+                shortcut.createModuleWebUiShortcut(
                     context = context,
                     moduleId = moduleId,
                     name = name,
@@ -737,7 +735,7 @@ private fun ModuleList(
             return@LaunchedEffect
         }
         val bitmap = withContext(Dispatchers.IO) {
-            Shortcut.loadShortcutBitmap(context, uriStr)
+            shortcut.loadShortcutBitmap(context, uriStr)
         }
         shortcutPreviewIcon.value = bitmap?.asImageBitmap()
     }
@@ -832,8 +830,8 @@ private fun ModuleList(
 
         if (isUninstall) {
             withContext(Dispatchers.IO) {
-                Shortcut.deleteModuleActionShortcut(context, module.id)
-                Shortcut.deleteModuleWebUiShortcut(context, module.id)
+                shortcut.deleteModuleActionShortcut(context, module.id)
+                shortcut.deleteModuleWebUiShortcut(context, module.id)
             }
         }
         viewModel.dispatch(ModuleUiAction.SetRemoved(module.dirId, isUninstall))
@@ -965,7 +963,6 @@ private fun ModuleList(
                     onModuleAddShortcut = {
                         onModuleAddShortcut(it)
                     },
-                    isHideTagRow = uiState.isHideTagRow,
                     showMoreModuleInfo = uiState.showMoreModuleInfo,
                 )
 
@@ -1192,16 +1189,12 @@ fun ModuleItem(
     onUpdate: (InstalledModule) -> Unit,
     onClick: (InstalledModule) -> Unit,
     onModuleAddShortcut: (InstalledModule) -> Unit,
-    isHideTagRow: Boolean,
     showMoreModuleInfo: Boolean,
 ) {
     val themeConfig: ThemeConfig = koinInject()
     val cardConfig: CardConfig = koinInject()
     val navigator = LocalNavigator.current
     val context = LocalContext.current
-    // 获取显示更多模块信息的设置
-
-    // 剪贴板管理器和触觉反馈
     val clipboardManager = context.getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
     val hapticFeedback = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
@@ -1250,7 +1243,8 @@ fun ModuleItem(
                         this
                     }
                 }
-                .padding(22.dp, 18.dp, 22.dp, 12.dp)
+                .padding(horizontal = 16.dp)
+                .padding(top = 12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1386,36 +1380,31 @@ fun ModuleItem(
                 textDecoration = textDecoration,
             )
 
-            if (!isHideTagRow) {
-                Spacer(modifier = Modifier.height(12.dp))
-                // 文件夹名称和大小标签
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                LabelText(
+                    label = module.dirId,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                )
+                if (module.metamodule) {
                     LabelText(
-                        label = module.dirId,
-                        containerColor = MaterialTheme.colorScheme.primary,
-                    )
-                    if (module.metamodule) {
-                        LabelText(
-                            label = "META",
-                            containerColor = MaterialTheme.colorScheme.tertiary,
-                        )
-                    }
-                    LabelText(
-                        label = sizeStr ?: "0 KB",
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        label = "META",
+                        containerColor = MaterialTheme.colorScheme.tertiary,
                     )
                 }
+                LabelText(
+                    label = sizeStr ?: "0 KB",
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             HorizontalDivider(thickness = Dp.Hairline)
-
-            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1429,7 +1418,12 @@ fun ModuleItem(
                             navigator.push(Route.ExecuteModuleAction(module.dirId))
                             viewModel.dispatch(ModuleUiAction.MarkNeedRefresh)
                         },
-                        contentPadding = ButtonDefaults.TextButtonContentPadding,
+                        contentPadding = PaddingValues(
+                            start = 12.dp,
+                            top = 7.dp,
+                            end = 12.dp,
+                            bottom = 7.dp,
+                        ),
                     ) {
                         Icon(
                             modifier = Modifier.size(20.dp),
@@ -1445,7 +1439,12 @@ fun ModuleItem(
                         enabled = !module.remove && isEnabled,
                         onClick = { onClick(module) },
                         interactionSource = interactionSource,
-                        contentPadding = ButtonDefaults.TextButtonContentPadding,
+                        contentPadding = PaddingValues(
+                            start = 12.dp,
+                            top = 7.dp,
+                            end = 12.dp,
+                            bottom = 7.dp,
+                        ),
                     ) {
                         Icon(
                             modifier = Modifier.size(20.dp),
@@ -1463,7 +1462,12 @@ fun ModuleItem(
                         enabled = !module.remove,
                         onClick = { onUpdate(module) },
                         shape = ButtonDefaults.textShape,
-                        contentPadding = ButtonDefaults.TextButtonContentPadding,
+                        contentPadding = PaddingValues(
+                            start = 12.dp,
+                            top = 7.dp,
+                            end = 12.dp,
+                            bottom = 7.dp,
+                        ),
                     ) {
                         Icon(
                             modifier = Modifier.size(20.dp),
@@ -1476,7 +1480,12 @@ fun ModuleItem(
                 FilledTonalButton(
                     modifier = Modifier.defaultMinSize(minWidth = 52.dp, minHeight = 32.dp),
                     onClick = { onUninstallClicked(module) },
-                    contentPadding = ButtonDefaults.TextButtonContentPadding,
+                    contentPadding = PaddingValues(
+                        start = 12.dp,
+                        top = 9.dp,
+                        end = 12.dp,
+                        bottom = 7.dp,
+                    ),
                 ) {
                     if (!module.remove) {
                         Icon(
@@ -1532,6 +1541,5 @@ fun ModuleItemPreview() {
         {},
         {},
         false,
-        false
     )
 }

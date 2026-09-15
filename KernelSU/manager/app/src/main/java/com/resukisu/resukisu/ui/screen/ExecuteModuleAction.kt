@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -38,7 +37,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.resukisu.resukisu.R
@@ -47,10 +45,12 @@ import com.resukisu.resukisu.ui.component.SwipeableSnackbarHost
 import com.resukisu.resukisu.ui.component.settings.AppBackButton
 import com.resukisu.resukisu.ui.navigation.LocalNavigator
 import com.resukisu.resukisu.ui.theme.CardConfig
+import com.resukisu.resukisu.ui.theme.MonospaceFontFamily
 import com.resukisu.resukisu.ui.theme.ThemeConfig
 import com.resukisu.resukisu.ui.theme.blurEffect
 import com.resukisu.resukisu.ui.theme.blurSource
 import com.resukisu.resukisu.ui.util.LocalSnackbarHost
+import com.resukisu.resukisu.ui.util.adaptiveScaffoldWindowInsets
 import com.resukisu.resukisu.ui.util.showReplacingSnackbar
 import com.resukisu.resukisu.ui.viewmodel.ExecuteModuleActionUiAction
 import com.resukisu.resukisu.ui.viewmodel.ExecuteModuleActionUiEvent
@@ -141,7 +141,7 @@ fun ExecuteModuleActionScreen(moduleId: String) {
         },
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        contentWindowInsets = WindowInsets.safeDrawing,
+        contentWindowInsets = adaptiveScaffoldWindowInsets(),
         snackbarHost = { SwipeableSnackbarHost(hostState = snackBarHost) }
     ) { innerPadding ->
         KeyEventBlocker {
@@ -164,7 +164,7 @@ fun ExecuteModuleActionScreen(moduleId: String) {
                     modifier = Modifier.padding(8.dp),
                     text = moduleActionState.output,
                     fontSize = MaterialTheme.typography.bodySmall.fontSize,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = MonospaceFontFamily(),
                     lineHeight = MaterialTheme.typography.bodySmall.lineHeight,
                 )
             }

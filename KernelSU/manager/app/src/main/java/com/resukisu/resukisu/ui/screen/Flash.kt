@@ -69,7 +69,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -91,11 +90,13 @@ import com.resukisu.resukisu.ui.component.settings.AppBackButton
 import com.resukisu.resukisu.ui.navigation.LocalNavigator
 import com.resukisu.resukisu.ui.navigation.Route
 import com.resukisu.resukisu.ui.theme.CardConfig
+import com.resukisu.resukisu.ui.theme.MonospaceFontFamily
 import com.resukisu.resukisu.ui.theme.ThemeConfig
 import com.resukisu.resukisu.ui.theme.blurEffect
 import com.resukisu.resukisu.ui.theme.blurSource
 import com.resukisu.resukisu.ui.theme.renderBackgroundBlur
 import com.resukisu.resukisu.ui.util.LocalSnackbarHost
+import com.resukisu.resukisu.ui.util.adaptiveScaffoldWindowInsets
 import com.resukisu.resukisu.ui.util.showReplacingSnackbar
 import com.resukisu.resukisu.ui.viewmodel.FlashUiAction
 import com.resukisu.resukisu.ui.viewmodel.FlashViewModel
@@ -440,6 +441,7 @@ fun FlashScreen(flashIt: FlashIt) {
     }
 
     Scaffold(
+        contentWindowInsets = adaptiveScaffoldWindowInsets(),
         topBar = {
             TopBar(
                 flashUiState.flashingStatus,
@@ -522,7 +524,7 @@ fun FlashScreen(flashIt: FlashIt) {
                     modifier = Modifier.padding(16.dp),
                     text = text,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = MonospaceFontFamily(),
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }

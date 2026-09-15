@@ -10,14 +10,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -53,7 +49,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,7 +58,9 @@ import com.resukisu.resukisu.ui.component.KeyEventBlocker
 import com.resukisu.resukisu.ui.component.SwipeableSnackbarHost
 import com.resukisu.resukisu.ui.navigation.LocalNavigator
 import com.resukisu.resukisu.ui.theme.CardConfig
+import com.resukisu.resukisu.ui.theme.MonospaceFontFamily
 import com.resukisu.resukisu.ui.util.LocalSnackbarHost
+import com.resukisu.resukisu.ui.util.adaptiveScaffoldWindowInsets
 import com.resukisu.resukisu.ui.util.showReplacingSnackbar
 import com.resukisu.resukisu.ui.viewmodel.KernelFlashUiAction
 import com.resukisu.resukisu.ui.viewmodel.KernelFlashUiEvent
@@ -189,7 +186,7 @@ fun KernelFlashScreen(
             }
         },
         snackbarHost = { SwipeableSnackbarHost(hostState = snackBarHost) },
-        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+        contentWindowInsets = adaptiveScaffoldWindowInsets(),
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         KeyEventBlocker {
@@ -216,7 +213,7 @@ fun KernelFlashScreen(
                     modifier = Modifier.padding(16.dp),
                     text = logText,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = MonospaceFontFamily(),
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
@@ -400,7 +397,7 @@ private fun TopBar(
                 )
             }
         },
-        windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+        windowInsets = adaptiveScaffoldWindowInsets(includeBottom = false),
         scrollBehavior = scrollBehavior
     )
 }
