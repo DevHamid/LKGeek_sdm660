@@ -197,7 +197,7 @@ EXPORT_SYMBOL(vfs_statx_fd);
 #ifdef CONFIG_KSU_SUSFS
 extern struct static_key_true ksu_su_compat_enabled;
 extern bool __ksu_is_allow_uid_for_current(uid_t uid);
-extern int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);
+extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
 extern int filename_lookup(int dfd, struct filename *name, unsigned flags,
 				struct path *path, struct path *root);
 #endif
@@ -233,7 +233,7 @@ retry:
 
 	if (static_branch_likely(&ksu_su_compat_enabled)) {
 		if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val)))
-			ksu_handle_stat(&dfd, &fname, &flags);
+			ksu_handle_stat(&dfd, &filename, &flags);
 	}
 
 orig_flow:
