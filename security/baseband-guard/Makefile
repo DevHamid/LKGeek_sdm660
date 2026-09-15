@@ -67,3 +67,5 @@ $(info -- BBG version: $(COMMIT_SHA))
 $(info -- BBG repo: $(REPO_LINK))
 ccflags-y += -DBBG_VERSION=\"$(COMMIT_SHA)\"
 ccflags-y += -DBBG_REPO=\"$(REPO_LINK)\"
+$(obj)/baseband_guard.o: $(objtree)/security/selinux/flask.h
+$(obj)/tracing/tracing.o: $(objtree)/security/selinux/flask.h
