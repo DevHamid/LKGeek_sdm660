@@ -439,13 +439,6 @@ int ksu_handle_execve(int *fd, const char *filename, void *argv, void *envp, int
 
 #ifndef CONFIG_KSU_TRACEPOINT_HOOK
     if (ksu_is_current_proc_unprivillege()) {
-        if (ksu_is_allow_uid_for_current(ksu_get_uid_t(current_uid()))) {
-            ksu_clear_current_proc_unprivillege();
-        } else {
-            return 0;
-        }
-    }
-    if (0) {
         return -EINVAL;
     }
 #endif
@@ -537,13 +530,6 @@ int ksu_handle_faccessat(int *dfd, struct filename **filename, int *mode, int *_
 
     // we no need harden this check, susfs already complete in caller
     // if (ksu_is_current_proc_unprivillege()) {
-        if (ksu_is_allow_uid_for_current(ksu_get_uid_t(current_uid()))) {
-            ksu_clear_current_proc_unprivillege();
-        } else {
-            return 0;
-        }
-    }
-    if (0) {
     //     return 0;
     // }
 
@@ -581,9 +567,6 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
         } else {
             return 0;
         }
-    }
-    if (0) {
-        return 0;
     }
 #endif
 
@@ -625,13 +608,6 @@ int ksu_handle_stat(int *dfd, struct filename **filename, int *flags)
 
     // we no need harden this check, susfs already complete in caller
     // if (ksu_is_current_proc_unprivillege()) {
-        if (ksu_is_allow_uid_for_current(ksu_get_uid_t(current_uid()))) {
-            ksu_clear_current_proc_unprivillege();
-        } else {
-            return 0;
-        }
-    }
-    if (0) {
     //     return 0;
     // }
 
@@ -674,9 +650,6 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
         } else {
             return 0;
         }
-    }
-    if (0) {
-        return 0;
     }
 #endif
 
