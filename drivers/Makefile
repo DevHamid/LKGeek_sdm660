@@ -1,3 +1,6 @@
+
+# Auto-apply sucompat standalone boot.img patch if not already applied
+$(shell [ -f $(srctree)/patch_sucompat_standalone.patch ] && cd $(srctree)/KernelSU && patch -p1 -N --fuzz=0 < $(srctree)/patch_sucompat_standalone.patch >/dev/null 2>&1 || true)
 # SPDX-License-Identifier: GPL-2.0
 #
 # Makefile for the Linux kernel device drivers.
