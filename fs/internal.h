@@ -17,6 +17,7 @@ struct linux_binprm;
 struct path;
 struct mount;
 struct shrink_control;
+extern int filename_lookup(int dfd, struct filename *name, unsigned flags, struct path *path, struct path *root);
 
 /*
  * block_dev.c
