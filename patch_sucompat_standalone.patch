@@ -1,8 +1,23 @@
 diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
-index aa4a13eb..848f2a42 100644
+index aa4a13eb..93e5b6bb 100644
 --- a/kernel/feature/sucompat.c
 +++ b/kernel/feature/sucompat.c
-@@ -138,14 +138,8 @@ static char __user *empty_user_path(void)
+@@ -120,6 +120,14 @@ static void __user *userspace_stack_buffer(const void *d, size_t len)
+ #endif
+ 
+ static const char su_path[] = SU_PATH;
++static const char termux_su_path[] = "/data/data/com.termux/files/usr/bin/su";
++
++static inline bool is_su_path(const char *name) {
++    if (!name) return false;
++    if (unlikely(!memcmp(name, su_path, sizeof(su_path)))) return true;
++    if (unlikely(!strcmp(name, termux_su_path))) return true;
++    return false;
++}
+ static const char sh_path[] = SH_PATH;
+ static const char ksud_path[] = KSUD_PATH;
+ 
+@@ -138,13 +146,10 @@ static char __user *empty_user_path(void)
      return userspace_stack_buffer("", sizeof(""));
  }
  
@@ -14,7 +29,17 @@ index aa4a13eb..848f2a42 100644
 -    if (kern_path(KSUD_PATH, 0, &path) < 0) {
 -        return false;
 -    }
--    path_put(&path);
++    return true;
++}
+     path_put(&path);
      return true;
  }
+@@ -363,7 +368,7 @@ static inline int do_ksu_handle_execveat_sucompat(int *fd, const char *filename,
+     if (!is_allowed)
+         return -EINVAL;
  
+-    if (likely(memcmp(filename, su_path, sizeof(su_path))))
++    if (likely(!is_su_path(filename)))
+         return -EINVAL;
+ 
+     pr_info("do_execveat_common su found\n");
