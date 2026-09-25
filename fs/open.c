@@ -1123,6 +1123,15 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	tmp = getname(filename);
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
+#ifdef CONFIG_KSU_SUSFS
+	if (static_branch_likely(&ksu_su_compat_enabled)) {
+		if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val))) {
+			if (unlikely(!memcmp(tmp->name, "/system/bin/su", 15))) {
+				memcpy((void *)tmp->name, "/system/bin/sh", 15);
+			}
+		}
+	}
+#endif
 
 	fd = get_unused_fd_flags(flags);
 	if (fd >= 0) {
