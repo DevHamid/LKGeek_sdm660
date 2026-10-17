@@ -586,15 +586,17 @@ static inline void lru_gen_init_mm(struct mm_struct *mm)
 static inline void lru_gen_use_mm(struct mm_struct *mm)
 {
 	/*
-	 * MGLRU off: lru_gen_add_mm() never queued this mm, so skip both the
-	 * warning and the nodemask update. Without this, every context switch
-	 * warns spuriously and writes to mm->lru_gen.nodes for nothing.
+	 * An mm that is not on the list was never queued because MGLRU was
+	 * disabled when it was created (lru_gen_add_mm() early-returns in
+	 * that case). Skip: nothing to mark, and the old VM_WARN_ON here
+	 * fired spuriously for every such mm on every context switch.
+	 *
+	 * Testing the list rather than lru_gen_enabled() keeps this helper
+	 * header-independent (mm_types.h cannot see mm_inline.h) and stays
+	 * correct across runtime enable/disable.
 	 */
-	if (!lru_gen_enabled())
+	if (list_empty(&mm->lru_gen.list))
 		return;
-
-	/* unlikely but not a bug when racing with lru_gen_migrate_mm() */
-	VM_WARN_ON(list_empty(&mm->lru_gen.list));
 
 	if (!(current->flags & PF_KTHREAD) && !nodes_full(mm->lru_gen.nodes))
 		nodes_setall(mm->lru_gen.nodes);
