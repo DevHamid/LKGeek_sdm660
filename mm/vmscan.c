@@ -1182,7 +1182,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			goto keep_locked;
 
 		/* page_update_gen() tried to promote this page? */
-		if (lru_gen_enabled() && !force_reclaim &&
+		if (lru_gen_enabled() && !skip_reference_check &&
 		    page_mapped(page) && PageReferenced(page))
 			goto keep_locked;
 
@@ -2796,10 +2796,7 @@ static struct lruvec *get_lruvec(struct mem_cgroup *memcg, int nid)
 
 static int get_swappiness(struct lruvec *lruvec, struct scan_control *sc)
 {
-	if (IS_ENABLED(CONFIG_COMPACTION) && sc->order &&
-			(sc->order > PAGE_ALLOC_COSTLY_ORDER ||
-			 sc->priority < DEF_PRIORITY - 2))
-		return true;
+	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 
 	if (mem_cgroup_get_nr_swap_pages(memcg) < MIN_LRU_BATCH)
 		return 0;
@@ -3939,7 +3936,7 @@ static bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long max_seq,
 	 * handful of PTEs. Spreading the work out over a period of time usually
 	 * is less efficient, but it avoids bursty page faults.
 	 */
-	if (!full_scan && (!arch_has_hw_pte_young() || !get_cap(LRU_GEN_MM_WALK))) {
+	if (!full_scan && (!arch_has_hw_pte_young(false) || !get_cap(LRU_GEN_MM_WALK))) {
 		success = iterate_mm_list_nowalk(lruvec, max_seq);
 		goto done;
 	}
@@ -4872,7 +4869,7 @@ static ssize_t show_enable(struct kobject *kobj, struct kobj_attribute *attr, ch
 	if (get_cap(LRU_GEN_CORE))
 		caps |= BIT(LRU_GEN_CORE);
 
-	if (arch_has_hw_pte_young() && get_cap(LRU_GEN_MM_WALK))
+	if (arch_has_hw_pte_young(false) && get_cap(LRU_GEN_MM_WALK))
 		caps |= BIT(LRU_GEN_MM_WALK);
 
 	if (IS_ENABLED(CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG) && get_cap(LRU_GEN_NONLEAF_YOUNG))

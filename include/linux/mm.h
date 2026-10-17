@@ -1482,6 +1482,18 @@ struct mm_walk {
 	void *private;
 };
 
+#ifndef arch_has_hw_pte_young
+/*
+ * Return whether the accessed bit is supported by the local CPU or all CPUs.
+ * 4.19 arm64 has no ARM64_HW_AF capability, so MGLRU always takes the
+ * conservative lru_gen_look_around() path (same as the 4.9 port).
+ */
+static inline bool arch_has_hw_pte_young(bool local)
+{
+	return false;
+}
+#endif
+
 int walk_page_range(unsigned long addr, unsigned long end,
 		struct mm_walk *walk);
 int walk_page_vma(struct vm_area_struct *vma, struct mm_walk *walk);
