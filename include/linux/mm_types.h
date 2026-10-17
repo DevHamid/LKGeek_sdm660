@@ -585,6 +585,14 @@ static inline void lru_gen_init_mm(struct mm_struct *mm)
 
 static inline void lru_gen_use_mm(struct mm_struct *mm)
 {
+	/*
+	 * MGLRU off: lru_gen_add_mm() never queued this mm, so skip both the
+	 * warning and the nodemask update. Without this, every context switch
+	 * warns spuriously and writes to mm->lru_gen.nodes for nothing.
+	 */
+	if (!lru_gen_enabled())
+		return;
+
 	/* unlikely but not a bug when racing with lru_gen_migrate_mm() */
 	VM_WARN_ON(list_empty(&mm->lru_gen.list));
 

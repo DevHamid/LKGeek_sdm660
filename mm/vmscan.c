@@ -2840,8 +2840,20 @@ static struct lru_gen_mm_list *get_mm_list(struct mem_cgroup *memcg)
 void lru_gen_add_mm(struct mm_struct *mm)
 {
 	int nid;
-	struct mem_cgroup *memcg = get_mem_cgroup_from_mm(mm);
-	struct lru_gen_mm_list *mm_list = get_mm_list(memcg);
+	struct mem_cgroup *memcg;
+	struct lru_gen_mm_list *mm_list;
+
+	/*
+	 * MGLRU off: do not touch the mm list at all. Otherwise every fork()
+	 * takes the global mm_list spinlock and the mm stays queued for a
+	 * walker that will never run - pure overhead on every process
+	 * creation, which shows up as UI lag / slow app launches.
+	 */
+	if (!lru_gen_enabled())
+		return;
+
+	memcg = get_mem_cgroup_from_mm(mm);
+	mm_list = get_mm_list(memcg);
 
 	VM_BUG_ON_MM(!list_empty(&mm->lru_gen.list), mm);
 #ifdef CONFIG_MEMCG
