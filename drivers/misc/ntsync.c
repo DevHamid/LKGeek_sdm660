@@ -57,18 +57,10 @@ static inline bool ntsync_atomic_try_cmpxchg(atomic_t *v, int *old, int new)
 }
 #define atomic_try_cmpxchg ntsync_atomic_try_cmpxchg
 #endif
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 5, 0)
-#ifdef CONFIG_COMPAT
-static long compat_ptr_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-	if (!file->f_op->unlocked_ioctl)
-		return -ENOIOCTLCMD;
-	return file->f_op->unlocked_ioctl(file, cmd, (unsigned long)compat_ptr(arg));
-}
-#else
-#define compat_ptr_ioctl NULL
-#endif
-#endif
+/* 4.19 backport tree already ships compat_ptr_ioctl() in fs/ioctl.c with a
+ * declaration in <linux/fs.h> (extern under CONFIG_COMPAT, #define NULL
+ * otherwise). Defining a static one here collides with that non-static
+ * declaration, so just use the in-tree symbol. */
 
 #define NTSYNC_NAME	"ntsync"
 
