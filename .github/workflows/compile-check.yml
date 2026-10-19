@@ -1,0 +1,82 @@
+name: Compile Check (fast)
+
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'make targets (space separated)'
+        required: false
+        default: 'vdso_prepare kernel/time/posix-timers.o kernel/cpu.o kernel/sched/fair.o'
+      defconfig:
+        description: 'defconfig path'
+        required: false
+        default: 'vendor/wayne-oss-perf_defconfig'
+  push:
+    branches: [devhamid-remastered]
+    paths-ignore:
+      - '.github/**'
+
+concurrency:
+  group: compile-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: compile-check
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Cache clang-aosp
+        id: clangcache
+        uses: actions/cache@v4
+        with:
+          path: /opt/clang-aosp
+          key: clang-aosp-r547379-v1
+
+      - name: Fetch clang-aosp
+        if: steps.clangcache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p /opt/clang-aosp
+          curl -sSL -o /tmp/clang.tar.gz \
+            https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master/clang-r547379.tar.gz
+          tar -C /opt/clang-aosp -zxf /tmp/clang.tar.gz
+          /opt/clang-aosp/bin/clang --version | head -1
+
+      - name: Fetch binutils (aarch64)
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            bc bison flex libssl-dev libelf-dev make
+          ld.lld --version | head -1 || true
+
+      - name: kconfig
+        run: |
+          set -euo pipefail
+          export PATH=/opt/clang-aosp/bin:$PATH
+          make ARCH=arm64 O=out \
+            CC=clang LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- \
+            "${{ inputs.defconfig }}"
+          grep -E '^CONFIG_(HAVE_GENERIC_VDSO|GENERIC_GETTIMEOFDAY)=' out/.config || {
+            echo "::error::vdso Kconfig selects missing from resolved .config"; exit 1; }
+
+      - name: Compile targets
+        run: |
+          set -euo pipefail
+          export PATH=/opt/clang-aosp/bin:$PATH
+          make -j"$(nproc)" ARCH=arm64 O=out \
+            CC=clang LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- \
+            ${{ inputs.targets }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "targets: ${{ inputs.targets }}"
+          echo "defconfig: ${{ inputs.defconfig }}"
