@@ -903,6 +903,8 @@ int elevator_init_mq(struct request_queue *q)
 		e = elevator_get(q, "bfq", false);
 #elif defined(CONFIG_MQ_KYBER_DEFAULT)
 		e = elevator_get(q, "kyber", false);
+#elif defined(CONFIG_MQ_IOSCHED_DEFAULT_ADIOS)
+		e = elevator_get(q, "adios", false);
 #else
 		e = elevator_get(q, "mq-deadline", false);
 #endif
