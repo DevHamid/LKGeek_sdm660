@@ -874,11 +874,13 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.matches = is_kryo_midr,
 	},
 #endif
-#ifdef CONFIG_QCOM_FALKOR_ERRATUM_1009
+#ifdef CONFIG_ARM64_WORKAROUND_REPEAT_TLBI
 	{
-		.desc = "Qualcomm Technologies Falkor erratum 1009",
+		.desc = "Broken broadcast TLBI completion",
 		.capability = ARM64_WORKAROUND_REPEAT_TLBI,
-		ERRATA_MIDR_REV(MIDR_QCOM_FALKOR_V1, 0, 0),
+		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
+		.matches = multi_entry_cap_matches,
+		.match_list = arm64_repeat_tlbi_list,
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_858921

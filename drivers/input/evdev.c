@@ -24,9 +24,17 @@
 #include <linux/init.h>
 #include <linux/input/mt.h>
 #include <linux/major.h>
+#include <linux/nospec.h>
 #include <linux/device.h>
 #include <linux/cdev.h>
 #include "input-compat.h"
+
+enum evdev_clock_type {
+	EV_CLK_REAL = 0,
+	EV_CLK_MONO,
+	EV_CLK_BOOT,
+	EV_CLK_MAX
+};
 
 struct evdev {
 	int open;
@@ -49,7 +57,7 @@ struct evdev_client {
 	struct fasync_struct *fasync;
 	struct evdev *evdev;
 	struct list_head node;
-	enum input_clock_type clk_type;
+	unsigned int clk_type;
 	bool revoked;
 	unsigned long *evmasks[EV_CNT];
 	unsigned int bufsize;
@@ -70,8 +78,10 @@ static size_t evdev_get_mask_cnt(unsigned int type)
 		[EV_SND]	= SND_CNT,
 		[EV_FF]		= FF_CNT,
 	};
+	unsigned long mask = array_index_mask_nospec(type, EV_CNT);
 
-	return (type < EV_CNT) ? counts[type] : 0;
+	/* Returns 0 for out-of-bounds types, including speculatively */
+	return counts[type & mask] & mask;
 }
 
 /* requires the buffer lock to be held */
@@ -145,15 +155,22 @@ static void __evdev_flush_queue(struct evdev_client *client, unsigned int type)
 
 static void __evdev_queue_syn_dropped(struct evdev_client *client)
 {
-	ktime_t *ev_time = input_get_timestamp(client->evdev->handle.dev);
-	struct timespec64 ts = ktime_to_timespec64(ev_time[client->clk_type]);
 	struct input_event ev;
+	ktime_t time;
+	struct timespec64 ts;
 
+	time = client->clk_type == EV_CLK_REAL ?
+			ktime_get_real() :
+			client->clk_type == EV_CLK_MONO ?
+				ktime_get() :
+				ktime_get_boottime();
+
+	ts = ktime_to_timespec64(time);
+	memset(&ev, 0, sizeof(ev));
 	ev.input_event_sec = ts.tv_sec;
 	ev.input_event_usec = ts.tv_nsec / NSEC_PER_USEC;
 	ev.type = EV_SYN;
 	ev.code = SYN_DROPPED;
-	ev.value = 0;
 
 	client->buffer[client->head++] = ev;
 	client->head &= client->bufsize - 1;
@@ -177,18 +194,18 @@ static void evdev_queue_syn_dropped(struct evdev_client *client)
 static int evdev_set_clk_type(struct evdev_client *client, unsigned int clkid)
 {
 	unsigned long flags;
-	enum input_clock_type clk_type;
+	unsigned int clk_type;
 
 	switch (clkid) {
 
 	case CLOCK_REALTIME:
-		clk_type = INPUT_CLK_REAL;
+		clk_type = EV_CLK_REAL;
 		break;
 	case CLOCK_MONOTONIC:
-		clk_type = INPUT_CLK_MONO;
+		clk_type = EV_CLK_MONO;
 		break;
 	case CLOCK_BOOTTIME:
-		clk_type = INPUT_CLK_BOOT;
+		clk_type = EV_CLK_BOOT;
 		break;
 	default:
 		return -EINVAL;
@@ -221,20 +238,20 @@ static void __pass_event(struct evdev_client *client,
 	client->head &= client->bufsize - 1;
 
 	if (unlikely(client->head == client->tail)) {
+		struct input_event ev;
+
+		memset(&ev, 0, sizeof(ev));
+		ev.input_event_sec = event->input_event_sec;
+		ev.input_event_usec = event->input_event_usec;
+		ev.type = EV_SYN;
+		ev.code = SYN_DROPPED;
+
 		/*
 		 * This effectively "drops" all unconsumed events, leaving
 		 * EV_SYN/SYN_DROPPED plus the newest event in the queue.
 		 */
 		client->tail = (client->head - 2) & (client->bufsize - 1);
-
-		client->buffer[client->tail] = (struct input_event) {
-			.input_event_sec = event->input_event_sec,
-			.input_event_usec = event->input_event_usec,
-			.type = EV_SYN,
-			.code = SYN_DROPPED,
-			.value = 0,
-		};
-
+		client->buffer[client->tail] = ev;
 		client->packet_head = client->tail;
 	}
 
@@ -256,6 +273,8 @@ static void evdev_pass_values(struct evdev_client *client,
 
 	if (client->revoked)
 		return;
+
+	memset(&event, 0, sizeof(event));
 
 	ts = ktime_to_timespec64(ev_time[client->clk_type]);
 	event.input_event_sec = ts.tv_sec;
@@ -296,7 +315,12 @@ static void evdev_events(struct input_handle *handle,
 {
 	struct evdev *evdev = handle->private;
 	struct evdev_client *client;
-	ktime_t *ev_time = input_get_timestamp(handle->dev);
+	ktime_t ev_time[EV_CLK_MAX];
+
+	ev_time[EV_CLK_MONO] = ktime_get();
+	ev_time[EV_CLK_REAL] = ktime_mono_to_real(ev_time[EV_CLK_MONO]);
+	ev_time[EV_CLK_BOOT] = ktime_mono_to_any(ev_time[EV_CLK_MONO],
+						 TK_OFFS_BOOT);
 
 	rcu_read_lock();
 
@@ -1038,7 +1062,7 @@ static long evdev_do_ioctl(struct file *file, unsigned int cmd,
 	struct evdev_client *client = file->private_data;
 	struct evdev *evdev = client->evdev;
 	struct input_dev *dev = evdev->handle.dev;
-	struct input_absinfo abs = { 0 };
+	struct input_absinfo abs;
 	struct input_mask mask;
 	struct ff_effect effect;
 	int __user *ip = (int __user *)p;

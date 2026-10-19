@@ -472,7 +472,7 @@ static bool convert_bpf_ld_abs(struct sock_filter *fp, struct bpf_insn **insnp)
 	    ((unaligned_ok && offset >= 0) ||
 	     (!unaligned_ok && offset >= 0 &&
 	      offset + ip_align >= 0 &&
-	      offset + ip_align % size == 0))) {
+	      (offset + ip_align) % size == 0))) {
 		bool ldx_off_ok = offset <= S16_MAX;
 
 		*insn++ = BPF_MOV64_REG(BPF_REG_TMP, BPF_REG_H);
@@ -1621,15 +1621,24 @@ err_prog_put:
 	return err;
 }
 
+static void sk_reuseport_prog_free_rcu(struct rcu_head *rcu)
+{
+	struct bpf_prog_aux *aux = container_of(rcu, struct bpf_prog_aux, rcu);
+	struct bpf_prog *prog = aux->prog;
+
+	bpf_release_orig_filter(prog);
+	bpf_prog_free(prog);
+}
+
 void sk_reuseport_prog_free(struct bpf_prog *prog)
 {
 	if (!prog)
 		return;
 
-	if (prog->type == BPF_PROG_TYPE_SK_REUSEPORT)
-		bpf_prog_put(prog);
+	if (bpf_prog_was_classic(prog))
+		call_rcu(&prog->aux->rcu, sk_reuseport_prog_free_rcu);
 	else
-		bpf_prog_destroy(prog);
+		bpf_prog_put(prog);
 }
 
 struct bpf_scratchpad {
@@ -2807,13 +2816,22 @@ static const struct bpf_func_proto bpf_skb_adjust_room_proto = {
 
 static u32 __bpf_skb_min_len(const struct sk_buff *skb)
 {
-	u32 min_len = skb_network_offset(skb);
+	int offset = skb_network_offset(skb);
+	u32 min_len = 0;
 
-	if (skb_transport_header_was_set(skb))
-		min_len = skb_transport_offset(skb);
-	if (skb->ip_summed == CHECKSUM_PARTIAL)
-		min_len = skb_checksum_start_offset(skb) +
-			  skb->csum_offset + sizeof(__sum16);
+	if (offset > 0)
+		min_len = offset;
+	if (skb_transport_header_was_set(skb)) {
+		offset = skb_transport_offset(skb);
+		if (offset > 0)
+			min_len = offset;
+	}
+	if (skb->ip_summed == CHECKSUM_PARTIAL) {
+		offset = skb_checksum_start_offset(skb) +
+			 skb->csum_offset + sizeof(__sum16);
+		if (offset > 0)
+			min_len = offset;
+	}
 	return min_len;
 }
 

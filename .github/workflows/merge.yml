@@ -1,0 +1,51 @@
+name: 合并commit
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_commit:
+        description: '起始 Commit Hash（包含）'
+        required: true
+      end_commit:
+        description: '最终 Commit Hash（包含）'
+        required: true
+      squash_commit_title:
+        description: '合并后的 Commit 标题'
+        required: true
+      target_branch:
+        description: '目标分支（将被覆盖）'
+        required: true
+
+jobs:
+  squash:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+        with:
+          fetch-depth: 0
+
+      - name: 设置 Git 用户信息
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: 执行软重置（兼容初始提交）
+        run: |
+          if git rev-parse "${{ inputs.start_commit }}^" >/dev/null 2>&1; then
+            echo "软重置到起始 commit 的父节点"
+            git reset --soft ${{ inputs.start_commit }}^
+          else
+            echo "起始 commit 是初始提交，直接软重置到该提交"
+            git reset --soft ${{ inputs.start_commit }}
+          fi
+
+      - name: 创建 squash 提交
+        run: |
+          git commit -m "${{ inputs.squash_commit_title }}"
+
+      - name: 强制推送覆盖目标分支（使用 PAT）
+        run: |
+          git push https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }} HEAD:${{ inputs.target_branch }} --force
