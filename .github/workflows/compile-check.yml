@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       targets:
-        description: 'make targets (space separated)'
+        description: 'make targets (space-separated). Empty = full kernel build.'
         required: false
-        default: 'vdso_prepare kernel/time/posix-timers.o kernel/cpu.o kernel/sched/fair.o'
+        default: ''
       defconfig:
         description: 'defconfig path'
         required: false
@@ -22,9 +22,9 @@ jobs:
   check:
     name: compile-check
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 120
     env:
-      TARGETS: ${{ inputs.targets || 'vdso_prepare kernel/time/posix-timers.o kernel/cpu.o kernel/sched/fair.o' }}
+      TARGETS: ${{ inputs.targets }}
       DEFCONFIG: ${{ inputs.defconfig || 'vendor/wayne-oss-perf_defconfig' }}
     steps:
       - uses: actions/checkout@v4
@@ -74,6 +74,23 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="$RUNNER_TEMP/clang-aosp/bin:$PATH"
-          make -j"$(nproc)" ARCH=arm64 O=out \
-            CC=clang LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- \
-            $TARGETS
+          MAKE_ARGS=(ARCH=arm64 O=out CC=clang LD=ld.lld
+                     CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu-)
+          if [ -z "${TARGETS// /}" ]; then
+            echo "::notice::full build (make all): vmlinux + Image + dtbs"
+            make -j"$(nproc)" "${MAKE_ARGS[@]}"
+          else
+            echo "::notice::partial build: $TARGETS"
+            # shellcheck disable=SC2086
+            make -j"$(nproc)" "${MAKE_ARGS[@]}" $TARGETS
+          fi
+
+      - name: Report image
+        run: |
+          set -euo pipefail
+          for f in out/arch/arm64/boot/Image out/arch/arm64/boot/Image.gz out/vmlinux \
+                   out/arch/arm64/boot/dts/qcom/*.dtb; do
+            [ -e "$f" ] && ls -lh "$f" || true
+          done
+          test -s out/arch/arm64/boot/Image \
+            || { echo "::error::out/arch/arm64/boot/Image missing"; exit 1; }
