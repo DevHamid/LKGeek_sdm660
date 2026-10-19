@@ -38,6 +38,7 @@
 #include <linux/errseq.h>
 #include <linux/ioprio.h>
 #include <linux/android_kabi.h>
+#include <linux/fs_types.h>
 
 #include <asm/byteorder.h>
 #include <uapi/linux/fs.h>
