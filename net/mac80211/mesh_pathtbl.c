@@ -736,13 +736,14 @@ void mesh_path_discard_frame(struct ieee80211_sub_if_data *sdata,
  */
 void mesh_path_flush_pending(struct mesh_path *mpath)
 {
-	struct ieee80211_sub_if_data *sdata = mpath->sdata;
+    struct ieee80211_sub_if_data *sdata = mpath->sdata;
 	struct ieee80211_if_mesh *ifmsh = &sdata->u.mesh;
 	struct mesh_preq_queue *preq, *tmp;
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(&mpath->frame_queue)) != NULL)
 		mesh_path_discard_frame(mpath->sdata, skb);
+}
 
 	spin_lock_bh(&ifmsh->mesh_preq_queue_lock);
 	list_for_each_entry_safe(preq, tmp, &ifmsh->preq_queue.list, list) {
@@ -753,7 +754,6 @@ void mesh_path_flush_pending(struct mesh_path *mpath)
 		}
 	}
 	spin_unlock_bh(&ifmsh->mesh_preq_queue_lock);
-}
 
 /**
  * mesh_path_fix_nexthop - force a specific next hop for a mesh path

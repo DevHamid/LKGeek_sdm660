@@ -45,7 +45,7 @@
 #define VMWARE_PORT_CMD_VCPU_RESERVED	31
 
 #define VMWARE_PORT(cmd, eax, ebx, ecx, edx)				\
-	__asm__("inl (%%dx)" :						\
+	__asm__("inl (%%dx), %%eax" :					\
 			"=a"(eax), "=c"(ecx), "=d"(edx), "=b"(ebx) :	\
 			"0"(VMWARE_HYPERVISOR_MAGIC),			\
 			"1"(VMWARE_PORT_CMD_##cmd),			\
@@ -110,7 +110,7 @@ static void __init vmware_paravirt_ops_setup(void)
 		vmware_sched_clock_setup();
 }
 #else
-#define vmware_paravirt_ops_setup() do {} while (0)
+#define vmware_paravirt_ops_setup() ((void)0)
 #endif
 
 /*

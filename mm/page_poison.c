@@ -8,7 +8,8 @@
 #include <linux/ratelimit.h>
 #include <linux/kasan.h>
 
-static bool want_page_poisoning __read_mostly;
+static bool want_page_poisoning __read_mostly
+		= IS_ENABLED(CONFIG_PAGE_POISONING_ENABLE_DEFAULT);
 
 static int __init early_page_poison_param(char *buf)
 {
@@ -18,6 +19,11 @@ static int __init early_page_poison_param(char *buf)
 }
 early_param("page_poison", early_page_poison_param);
 
+/**
+ * page_poisoning_enabled - check if page poisoning is enabled
+ *
+ * Return true if page poisoning is enabled, or false if not.
+ */
 bool page_poisoning_enabled(void)
 {
 	/*
@@ -30,6 +36,7 @@ bool page_poisoning_enabled(void)
 		(!IS_ENABLED(CONFIG_ARCH_SUPPORTS_DEBUG_PAGEALLOC) &&
 		debug_pagealloc_enabled()));
 }
+EXPORT_SYMBOL_GPL(page_poisoning_enabled);
 
 static void poison_page(struct page *page)
 {
@@ -84,6 +91,7 @@ static void check_poison_mem(unsigned char *mem, size_t bytes)
 
 	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_ADDRESS, 16, 1, start,
 			end - start + 1, 1);
+	BUG_ON(PANIC_CORRUPTION);
 	dump_stack();
 }
 

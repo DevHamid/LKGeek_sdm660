@@ -746,6 +746,7 @@ int wiphy_register(struct wiphy *wiphy)
 	/* sanity check supported bands/channels */
 	for (band = 0; band < NUM_NL80211_BANDS; band++) {
 		u16 types = 0;
+		bool have_he = false;
 
 		sband = wiphy->bands[band];
 		if (!sband)
@@ -760,6 +761,11 @@ int wiphy_register(struct wiphy *wiphy)
 		 */
 		if (WARN_ON(band != NL80211_BAND_60GHZ &&
 			    !sband->n_bitrates))
+			return -EINVAL;
+
+		if (WARN_ON(band == NL80211_BAND_6GHZ &&
+			    (sband->ht_cap.ht_supported ||
+			     sband->vht_cap.vht_supported)))
 			return -EINVAL;
 
 		/*
@@ -806,7 +812,16 @@ int wiphy_register(struct wiphy *wiphy)
 				return -EINVAL;
 
 			types |= iftd->types_mask;
+
+			if (i == 0)
+				have_he = iftd->he_cap.has_he;
+			else
+				have_he = have_he &&
+					  iftd->he_cap.has_he;
 		}
+
+		if (WARN_ON(!have_he && band == NL80211_BAND_6GHZ))
+			return -EINVAL;
 
 		have_band = true;
 	}
@@ -823,6 +838,12 @@ int wiphy_register(struct wiphy *wiphy)
 				rdev->wiphy.wowlan->pattern_max_len)))
 		return -EINVAL;
 #endif
+
+	if (!wiphy->max_num_akm_suites)
+		wiphy->max_num_akm_suites = NL80211_MAX_NR_AKM_SUITES;
+	else if (wiphy->max_num_akm_suites < NL80211_MAX_NR_AKM_SUITES ||
+		 wiphy->max_num_akm_suites > CFG80211_MAX_NUM_AKM_SUITES)
+		return -EINVAL;
 
 	/* check and set up bitrates */
 	ieee80211_set_bitrate_flags(wiphy);

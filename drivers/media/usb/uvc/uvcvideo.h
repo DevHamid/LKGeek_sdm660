@@ -345,11 +345,6 @@ struct uvc_entity {
 	u8 bNrInPins;
 	u8 *baSourceID;
 
-	int (*get_info)(struct uvc_device *dev, struct uvc_entity *entity,
-			u8 cs, u8 *caps);
-	int (*get_cur)(struct uvc_device *dev, struct uvc_entity *entity,
-		       u8 cs, void *data, u16 size);
-
 	unsigned int ncontrols;
 	struct uvc_control *controls;
 };
@@ -540,9 +535,9 @@ struct uvc_streaming {
 		u32 max_payload_size;
 	} bulk;
 
-	struct urb *urb[UVC_URBS];
-	char *urb_buffer[UVC_URBS];
-	dma_addr_t urb_dma[UVC_URBS];
+	struct urb **urb;
+	char **urb_buffer;
+	dma_addr_t *urb_dma;
 	unsigned int urb_size;
 
 	u32 sequence;
@@ -575,6 +570,15 @@ struct uvc_streaming {
 
 		spinlock_t lock;
 	} clock;
+
+	/* Maximum number of URBs that can be submitted */
+	u32 max_urb;
+
+	/* Maximum number of packets per URB */
+	u32 max_urb_packets;
+
+	/*set if stream in progress */
+	u8 refcnt;
 };
 
 struct uvc_device {

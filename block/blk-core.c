@@ -35,6 +35,8 @@
 #include <linux/blk-cgroup.h>
 #include <linux/debugfs.h>
 #include <linux/bpf.h>
+#include <linux/psi.h>
+#include <linux/blk-crypto.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/block.h>
@@ -42,6 +44,7 @@
 #include "blk.h"
 #include "blk-mq.h"
 #include "blk-mq-sched.h"
+#include "blk-pm.h"
 #include "blk-rq-qos.h"
 
 #ifdef CONFIG_DEBUG_FS
@@ -468,7 +471,9 @@ inline void __blk_run_queue_uncond(struct request_queue *q)
 	 * can wait until all these request_fn calls have finished.
 	 */
 	q->request_fn_active++;
+	preempt_disable();
 	q->request_fn(q);
+	preempt_enable();
 	q->request_fn_active--;
 }
 EXPORT_SYMBOL_GPL(__blk_run_queue_uncond);
@@ -1059,7 +1064,6 @@ struct request_queue *blk_alloc_queue_node(gfp_t gfp_mask, int node_id,
 	mutex_init(&q->blk_trace_mutex);
 #endif
 	mutex_init(&q->sysfs_lock);
-	mutex_init(&q->sysfs_dir_lock);
 	spin_lock_init(&q->__queue_lock);
 
 	if (!q->mq_ops)
@@ -1570,7 +1574,11 @@ retry:
 	trace_block_sleeprq(q, bio, op);
 
 	spin_unlock_irq(q->queue_lock);
-	io_schedule();
+	/*
+	 * FIXME: this should be io_schedule().  The timeout is there as a
+	 * workaround for some io timeout problems.
+	 */
+	io_schedule_timeout(5*HZ);
 
 	/*
 	 * After sleeping, we become a "batching" process and will be able
@@ -1736,16 +1744,6 @@ void part_round_stats(struct request_queue *q, int cpu, struct hd_struct *part)
 		part_round_stats_single(q, cpu, part, now, inflight[0]);
 }
 EXPORT_SYMBOL_GPL(part_round_stats);
-
-#ifdef CONFIG_PM
-static void blk_pm_put_request(struct request *rq)
-{
-	if (rq->q->dev && !(rq->rq_flags & RQF_PM) && !--rq->q->nr_pending)
-		pm_runtime_mark_last_busy(rq->q->dev);
-}
-#else
-static inline void blk_pm_put_request(struct request *rq) {}
-#endif
 
 void __blk_put_request(struct request_queue *q, struct request *req)
 {
@@ -1993,6 +1991,10 @@ void blk_init_request_from_bio(struct request *req, struct bio *bio)
 	else
 		req->ioprio = IOPRIO_PRIO_VALUE(IOPRIO_CLASS_NONE, 0);
 	req->write_hint = bio->bi_write_hint;
+#ifdef CONFIG_PERF_HUMANTASK
+	if (bio->human_task)
+		req->ioprio = 0;
+#endif
 	blk_rq_bio_prep(req->q, req, bio);
 }
 EXPORT_SYMBOL_GPL(blk_init_request_from_bio);
@@ -2088,6 +2090,11 @@ get_rq:
 	 * often, and the elevators are able to handle it.
 	 */
 	blk_init_request_from_bio(req, bio);
+
+#ifdef CONFIG_PERF_HUMANTASK
+	if (bio->human_task)
+		where = ELEVATOR_INSERT_FRONT;
+#endif
 
 	if (test_bit(QUEUE_FLAG_SAME_COMP, &q->queue_flags))
 		req->cpu = raw_smp_processor_id();
@@ -2461,7 +2468,9 @@ blk_qc_t generic_make_request(struct bio *bio)
 			/* Create a fresh bio_list for all subordinate requests */
 			bio_list_on_stack[1] = bio_list_on_stack[0];
 			bio_list_init(&bio_list_on_stack[0]);
-			ret = q->make_request_fn(q, bio);
+
+			if (!blk_crypto_submit_bio(&bio))
+				ret = q->make_request_fn(q, bio);
 
 			/* sort new bios into those for a lower level
 			 * and those for the same level
@@ -2510,7 +2519,7 @@ blk_qc_t direct_make_request(struct bio *bio)
 {
 	struct request_queue *q = bio->bi_disk->queue;
 	bool nowait = bio->bi_opf & REQ_NOWAIT;
-	blk_qc_t ret;
+	blk_qc_t ret = BLK_QC_T_NONE;
 
 	if (!generic_make_request_checks(bio))
 		return BLK_QC_T_NONE;
@@ -2524,7 +2533,8 @@ blk_qc_t direct_make_request(struct bio *bio)
 		return BLK_QC_T_NONE;
 	}
 
-	ret = q->make_request_fn(q, bio);
+	if (!blk_crypto_submit_bio(&bio))
+		ret = q->make_request_fn(q, bio);
 	blk_queue_exit(q);
 	return ret;
 }
@@ -2541,6 +2551,10 @@ EXPORT_SYMBOL_GPL(direct_make_request);
  */
 blk_qc_t submit_bio(struct bio *bio)
 {
+	bool workingset_read = false;
+	unsigned long pflags;
+	blk_qc_t ret;
+
 	/*
 	 * If it's a regular read/write or a barrier with data attached,
 	 * go through the normal accounting stuff before submission.
@@ -2556,6 +2570,8 @@ blk_qc_t submit_bio(struct bio *bio)
 		if (op_is_write(bio_op(bio))) {
 			count_vm_events(PGPGOUT, count);
 		} else {
+			if (bio_flagged(bio, BIO_WORKINGSET))
+				workingset_read = true;
 			task_io_account_read(bio->bi_iter.bi_size);
 			count_vm_events(PGPGIN, count);
 		}
@@ -2570,7 +2586,21 @@ blk_qc_t submit_bio(struct bio *bio)
 		}
 	}
 
-	return generic_make_request(bio);
+	/*
+	 * If we're reading data that is part of the userspace
+	 * workingset, count submission time as memory stall. When the
+	 * device is congested, or the submitting cgroup IO-throttled,
+	 * submission can be a significant part of overall IO time.
+	 */
+	if (workingset_read)
+		psi_memstall_enter(&pflags);
+
+	ret = generic_make_request(bio);
+
+	if (workingset_read)
+		psi_memstall_leave(&pflags);
+
+	return ret;
 }
 EXPORT_SYMBOL(submit_bio);
 
@@ -3762,191 +3792,6 @@ void blk_finish_plug(struct blk_plug *plug)
 }
 EXPORT_SYMBOL(blk_finish_plug);
 
-#ifdef CONFIG_PM
-/**
- * blk_pm_runtime_init - Block layer runtime PM initialization routine
- * @q: the queue of the device
- * @dev: the device the queue belongs to
- *
- * Description:
- *    Initialize runtime-PM-related fields for @q and start auto suspend for
- *    @dev. Drivers that want to take advantage of request-based runtime PM
- *    should call this function after @dev has been initialized, and its
- *    request queue @q has been allocated, and runtime PM for it can not happen
- *    yet(either due to disabled/forbidden or its usage_count > 0). In most
- *    cases, driver should call this function before any I/O has taken place.
- *
- *    This function takes care of setting up using auto suspend for the device,
- *    the autosuspend delay is set to -1 to make runtime suspend impossible
- *    until an updated value is either set by user or by driver. Drivers do
- *    not need to touch other autosuspend settings.
- *
- *    The block layer runtime PM is request based, so only works for drivers
- *    that use request as their IO unit instead of those directly use bio's.
- */
-void blk_pm_runtime_init(struct request_queue *q, struct device *dev)
-{
-	/* Don't enable runtime PM for blk-mq until it is ready */
-	if (q->mq_ops) {
-		pm_runtime_disable(dev);
-		return;
-	}
-
-	q->dev = dev;
-	q->rpm_status = RPM_ACTIVE;
-	pm_runtime_set_autosuspend_delay(q->dev, -1);
-	pm_runtime_use_autosuspend(q->dev);
-}
-EXPORT_SYMBOL(blk_pm_runtime_init);
-
-/**
- * blk_pre_runtime_suspend - Pre runtime suspend check
- * @q: the queue of the device
- *
- * Description:
- *    This function will check if runtime suspend is allowed for the device
- *    by examining if there are any requests pending in the queue. If there
- *    are requests pending, the device can not be runtime suspended; otherwise,
- *    the queue's status will be updated to SUSPENDING and the driver can
- *    proceed to suspend the device.
- *
- *    For the not allowed case, we mark last busy for the device so that
- *    runtime PM core will try to autosuspend it some time later.
- *
- *    This function should be called near the start of the device's
- *    runtime_suspend callback.
- *
- * Return:
- *    0		- OK to runtime suspend the device
- *    -EBUSY	- Device should not be runtime suspended
- */
-int blk_pre_runtime_suspend(struct request_queue *q)
-{
-	int ret = 0;
-
-	if (!q->dev)
-		return ret;
-
-	spin_lock_irq(q->queue_lock);
-	if (q->nr_pending) {
-		ret = -EBUSY;
-		pm_runtime_mark_last_busy(q->dev);
-	} else {
-		q->rpm_status = RPM_SUSPENDING;
-	}
-	spin_unlock_irq(q->queue_lock);
-	return ret;
-}
-EXPORT_SYMBOL(blk_pre_runtime_suspend);
-
-/**
- * blk_post_runtime_suspend - Post runtime suspend processing
- * @q: the queue of the device
- * @err: return value of the device's runtime_suspend function
- *
- * Description:
- *    Update the queue's runtime status according to the return value of the
- *    device's runtime suspend function and mark last busy for the device so
- *    that PM core will try to auto suspend the device at a later time.
- *
- *    This function should be called near the end of the device's
- *    runtime_suspend callback.
- */
-void blk_post_runtime_suspend(struct request_queue *q, int err)
-{
-	if (!q->dev)
-		return;
-
-	spin_lock_irq(q->queue_lock);
-	if (!err) {
-		q->rpm_status = RPM_SUSPENDED;
-	} else {
-		q->rpm_status = RPM_ACTIVE;
-		pm_runtime_mark_last_busy(q->dev);
-	}
-	spin_unlock_irq(q->queue_lock);
-}
-EXPORT_SYMBOL(blk_post_runtime_suspend);
-
-/**
- * blk_pre_runtime_resume - Pre runtime resume processing
- * @q: the queue of the device
- *
- * Description:
- *    Update the queue's runtime status to RESUMING in preparation for the
- *    runtime resume of the device.
- *
- *    This function should be called near the start of the device's
- *    runtime_resume callback.
- */
-void blk_pre_runtime_resume(struct request_queue *q)
-{
-	if (!q->dev)
-		return;
-
-	spin_lock_irq(q->queue_lock);
-	q->rpm_status = RPM_RESUMING;
-	spin_unlock_irq(q->queue_lock);
-}
-EXPORT_SYMBOL(blk_pre_runtime_resume);
-
-/**
- * blk_post_runtime_resume - Post runtime resume processing
- * @q: the queue of the device
- * @err: return value of the device's runtime_resume function
- *
- * Description:
- *    Update the queue's runtime status according to the return value of the
- *    device's runtime_resume function. If it is successfully resumed, process
- *    the requests that are queued into the device's queue when it is resuming
- *    and then mark last busy and initiate autosuspend for it.
- *
- *    This function should be called near the end of the device's
- *    runtime_resume callback.
- */
-void blk_post_runtime_resume(struct request_queue *q, int err)
-{
-	if (!q->dev)
-		return;
-
-	spin_lock_irq(q->queue_lock);
-	if (!err) {
-		q->rpm_status = RPM_ACTIVE;
-		__blk_run_queue(q);
-		pm_runtime_mark_last_busy(q->dev);
-		pm_request_autosuspend(q->dev);
-	} else {
-		q->rpm_status = RPM_SUSPENDED;
-	}
-	spin_unlock_irq(q->queue_lock);
-}
-EXPORT_SYMBOL(blk_post_runtime_resume);
-
-/**
- * blk_set_runtime_active - Force runtime status of the queue to be active
- * @q: the queue of the device
- *
- * If the device is left runtime suspended during system suspend the resume
- * hook typically resumes the device and corrects runtime status
- * accordingly. However, that does not affect the queue runtime PM status
- * which is still "suspended". This prevents processing requests from the
- * queue.
- *
- * This function can be used in driver's resume hook to correct queue
- * runtime PM status and re-enable peeking requests from the queue. It
- * should be called before first request is added to the queue.
- */
-void blk_set_runtime_active(struct request_queue *q)
-{
-	spin_lock_irq(q->queue_lock);
-	q->rpm_status = RPM_ACTIVE;
-	pm_runtime_mark_last_busy(q->dev);
-	pm_request_autosuspend(q->dev);
-	spin_unlock_irq(q->queue_lock);
-}
-EXPORT_SYMBOL(blk_set_runtime_active);
-#endif
-
 int __init blk_dev_init(void)
 {
 	BUILD_BUG_ON(REQ_OP_LAST >= (1 << REQ_OP_BITS));
@@ -3957,7 +3802,8 @@ int __init blk_dev_init(void)
 
 	/* used for unplugging and affects IO latency/throughput - HIGHPRI */
 	kblockd_workqueue = alloc_workqueue("kblockd",
-					    WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
+					    WQ_MEM_RECLAIM | WQ_HIGHPRI |
+					    WQ_POWER_EFFICIENT, 0);
 	if (!kblockd_workqueue)
 		panic("Failed to create kblockd\n");
 
@@ -3970,6 +3816,12 @@ int __init blk_dev_init(void)
 #ifdef CONFIG_DEBUG_FS
 	blk_debugfs_root = debugfs_create_dir("block", NULL);
 #endif
+
+	if (bio_crypt_ctx_init() < 0)
+		panic("Failed to allocate mem for bio crypt ctxs\n");
+
+	if (blk_crypto_fallback_init() < 0)
+		panic("Failed to init blk-crypto-fallback\n");
 
 	return 0;
 }

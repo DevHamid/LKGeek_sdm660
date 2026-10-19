@@ -3,7 +3,6 @@
  *  any CPU: unbound workqueues, timers, kthreads and any offloadable work.
  *
  * Copyright (C) 2017 Red Hat, Inc., Frederic Weisbecker
- * Copyright (C) 2017-2018 SUSE, Frederic Weisbecker
  *
  */
 #include "sched.h"
@@ -80,7 +79,7 @@ static int __init housekeeping_setup(char *str, enum hk_flags flags)
 		cpumask_andnot(housekeeping_mask,
 			       cpu_possible_mask, non_housekeeping_mask);
 		if (cpumask_empty(housekeeping_mask))
-			cpumask_set_cpu(smp_processor_id(), housekeeping_mask);
+			__cpumask_set_cpu(smp_processor_id(), housekeeping_mask);
 	} else {
 		cpumask_var_t tmp;
 
@@ -117,7 +116,7 @@ static int __init housekeeping_nohz_full_setup(char *str)
 {
 	unsigned int flags;
 
-	flags = HK_FLAG_TICK | HK_FLAG_WQ | HK_FLAG_TIMER | HK_FLAG_RCU | HK_FLAG_MISC;
+	flags = HK_FLAG_TICK | HK_FLAG_TIMER | HK_FLAG_RCU | HK_FLAG_MISC;
 
 	return housekeeping_setup(str, flags);
 }

@@ -19,7 +19,10 @@ files can be found in mm/swap.c.
 Currently, these files are in /proc/sys/vm:
 
 - admin_reserve_kbytes
+- anon_min_kbytes
 - block_dump
+- clean_low_kbytes
+- clean_min_kbytes
 - compact_memory
 - compact_unevictable_allowed
 - dirty_background_bytes
@@ -31,6 +34,7 @@ Currently, these files are in /proc/sys/vm:
 - dirty_writeback_centisecs
 - drop_caches
 - extfrag_threshold
+- extra_free_kbytes
 - hugetlb_shm_group
 - laptop_mode
 - legacy_va_layout
@@ -65,6 +69,7 @@ Currently, these files are in /proc/sys/vm:
 - vfs_cache_pressure
 - watermark_scale_factor
 - zone_reclaim_mode
+- want_old_faultaround_pte
 
 ==============================================================
 
@@ -96,6 +101,22 @@ On x86_64 this is about 128MB.
 Changing this takes effect whenever an application requests memory.
 
 ==============================================================
+anon_min_kbytes
+
+This knob provides *hard* protection of anonymous pages. The anonymous pages
+on the current node won't be reclaimed under any conditions when their amount
+is below vm.anon_min_kbytes.
+
+This knob may be used to prevent excessive swap thrashing when anonymous
+memory is low (for example, when memory is going to be overfilled by
+compressed data of zram module).
+
+Setting this value too high (close to MemTotal) can result in inability to
+swap and can lead to early OOM under memory pressure.
+
+The default value is defined by CONFIG_ANON_MIN_KBYTES.
+
+==============================================================
 
 block_dump
 
@@ -103,6 +124,45 @@ block_dump enables block I/O debugging when set to a nonzero value. More
 information on block I/O debugging is in Documentation/laptops/laptop-mode.txt.
 
 ==============================================================
+
+clean_low_kbytes
+
+This knob provides *best-effort* protection of clean file pages. The file pages
+on the current node won't be reclaimed under memory pressure when the amount of
+clean file pages is below vm.clean_low_kbytes *unless* we threaten to OOM.
+
+Protection of clean file pages using this knob may be used when swapping is
+still possible to
+  - prevent disk I/O thrashing under memory pressure;
+  - improve performance in disk cache-bound tasks under memory pressure.
+
+Setting it to a high value may result in a early eviction of anonymous pages
+into the swap space by attempting to hold the protected amount of clean file
+pages in memory.
+
+The default value is defined by CONFIG_CLEAN_LOW_KBYTES.
+
+==============================================================
+
+clean_min_kbytes
+
+This knob provides *hard* protection of clean file pages. The file pages on the
+current node won't be reclaimed under memory pressure when the amount of clean
+file pages is below vm.clean_min_kbytes.
+
+Hard protection of clean file pages using this knob may be used to
+  - prevent disk I/O thrashing under memory pressure even with no free swap space;
+  - improve performance in disk cache-bound tasks under memory pressure;
+  - avoid high latency and prevent livelock in near-OOM conditions.
+
+Setting it to a high value may result in a early out-of-memory condition due to
+the inability to reclaim the protected amount of clean file pages when other
+types of pages cannot be reclaimed.
+
+The default value is defined by CONFIG_CLEAN_MIN_KBYTES.
+
+==============================================================
+
 
 compact_memory
 
@@ -271,6 +331,21 @@ storage more effectively. Note this also comes with a risk of pre-mature
 OOM killer because some writers (e.g. direct block device writes) can
 only use the low memory and they can fill it up with dirty data without
 any throttling.
+
+==============================================================
+
+extra_free_kbytes
+
+This parameter tells the VM to keep extra free memory between the threshold
+where background reclaim (kswapd) kicks in, and the threshold where direct
+reclaim (by allocating processes) kicks in.
+
+This is useful for workloads that require low latency memory allocations
+and have a bounded burstiness in memory allocations, for example a
+realtime application that receives and transmits network traffic
+(causing in-kernel memory allocations) with a maximum total message burst
+size of 200MB may need 200MB of extra free memory to avoid direct reclaim
+related latencies.
 
 ==============================================================
 
@@ -813,6 +888,14 @@ decrease the amount of swap.  A value of 0 instructs the kernel not to
 initiate swap until the amount of free and file-backed pages is less
 than the high water mark in a zone.
 
+This knob has no effect if the amount of clean file pages on the current
+node is below vm.clean_low_kbytes or vm.clean_min_kbytes. In this case,
+only anonymous pages can be reclaimed.
+
+If the number of anonymous pages on the current node is below
+vm.anon_min_kbytes, then only file pages can be reclaimed with
+any vm.swappiness value.
+
 The default value is 60.
 
 ==============================================================
@@ -909,5 +992,26 @@ of other processes running on other nodes will not be affected.
 Allowing regular swap effectively restricts allocations to the local
 node unless explicitly overridden by memory policies or cpuset
 configurations.
+
+=============================================================
+
+want_old_faultaround_pte:
+
+By default faultaround code produces young pte. When want_old_faultaround_pte is
+set to 1, faultaround produces old ptes.
+
+During sparse file access faultaround gets more pages mapped and when all of
+them are young (default), under memory pressure, this makes vmscan swap out anon
+pages instead, or to drop other page cache pages which otherwise stay resident.
+Setting want_old_faultaround_pte to 1 avoids this.
+
+Making the faultaround ptes old can result in performance regression on some
+architectures. This is due to cycles spent in micro-faults which would take page
+walk to set young bit in the pte. One such known test that shows a regression on
+x86 is unixbench shell8. Set want_old_faultaround_pte to 1 on architectures
+which does not show this regression or if the workload shows overall performance
+benefit with old faultaround ptes.
+
+The default value is 0.
 
 ============ End of Document =================================

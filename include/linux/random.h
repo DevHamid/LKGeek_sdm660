@@ -17,7 +17,7 @@ void __init add_bootloader_randomness(const void *buf, size_t len);
 void add_input_randomness(unsigned int type, unsigned int code,
 			  unsigned int value) __latent_entropy;
 void add_interrupt_randomness(int irq) __latent_entropy;
-void add_hwgenerator_randomness(const void *buf, size_t len, size_t entropy);
+void add_hwgenerator_randomness(const char *buf, size_t len, size_t entropy, bool sleep_after);
 
 static inline void add_latent_entropy(void)
 {
@@ -28,8 +28,9 @@ static inline void add_latent_entropy(void)
 #endif
 }
 
-void get_random_bytes(void *buf, size_t len);
-size_t __must_check get_random_bytes_arch(void *buf, size_t len);
+void get_random_bytes(void *buf, int len);
+u8 get_random_u8(void);
+u16 get_random_u16(void);
 u32 get_random_u32(void);
 u64 get_random_u64(void);
 static inline unsigned int get_random_int(void)
@@ -67,8 +68,6 @@ static inline unsigned long get_random_canary(void)
 int __init random_init(const char *command_line);
 bool rng_is_initialized(void);
 int wait_for_random_bytes(void);
-int register_random_ready_notifier(struct notifier_block *nb);
-int unregister_random_ready_notifier(struct notifier_block *nb);
 
 /* Calls wait_for_random_bytes() and then calls get_random_bytes(buf, nbytes).
  * Returns the result of the call to wait_for_random_bytes. */
@@ -87,6 +86,8 @@ static inline int get_random_bytes_wait(void *buf, size_t nbytes)
 		*out = get_random_ ## name(); \
 		return 0; \
 	}
+declare_get_random_var_wait(u8, u8)
+declare_get_random_var_wait(u16, u16)
 declare_get_random_var_wait(u32, u32)
 declare_get_random_var_wait(u64, u32)
 declare_get_random_var_wait(int, unsigned int)
@@ -135,7 +136,7 @@ int random_online_cpu(unsigned int cpu);
 #endif
 
 #ifndef MODULE
-extern const struct file_operations random_fops, urandom_fops;
+extern const struct file_operations random_fops;
 #endif
 
 #endif /* _LINUX_RANDOM_H */

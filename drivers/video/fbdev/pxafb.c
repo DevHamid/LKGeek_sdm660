@@ -2108,7 +2108,7 @@ static void pxafb_check_options(struct device *dev, struct pxafb_mach_info *inf)
 				"passive mode\n");
 }
 #else
-#define pxafb_check_options(...)	do {} while (0)
+#define pxafb_check_options(...)	((void)0)
 #endif
 
 #if defined(CONFIG_OF)
@@ -2437,7 +2437,6 @@ static int pxafb_remove(struct platform_device *dev)
 	info = &fbi->fb;
 
 	pxafb_overlay_exit(fbi);
-	cancel_work_sync(&fbi->task);
 	unregister_framebuffer(info);
 
 	pxafb_disable_controller(fbi);

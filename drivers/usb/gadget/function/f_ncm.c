@@ -1349,15 +1349,7 @@ parse_ntb:
 	     "Parsed NTB with %d frames\n", dgram_counter);
 
 	to_process -= block_len;
-
-	/*
-	 * Windows NCM driver avoids USB ZLPs by adding a 1-byte
-	 * zero pad as needed.
-	 */
-	if (to_process == 1 &&
-	    (*(unsigned char *)(ntb_ptr + block_len) == 0x00)) {
-		to_process--;
-	} else if ((to_process > 0) && (block_len != 0)) {
+	if (to_process != 0) {
 		ntb_ptr = (unsigned char *)(ntb_ptr + block_len);
 		goto parse_ntb;
 	}
@@ -1625,9 +1617,57 @@ static const struct config_item_type ncm_func_type = {
 	.ct_owner	= THIS_MODULE,
 };
 
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+
+struct ncm_setup_desc {
+	struct work_struct work;
+	struct device *device;
+	uint8_t major; // Mirror Link major version
+	uint8_t minor; // Mirror Link minor version
+};
+
+static struct ncm_setup_desc *_ncm_setup_desc;
+
+#define MIRROR_LINK_STRING_LENGTH_MAX 32
+static void ncm_setup_work(struct work_struct *data)
+{
+	char mirror_link_string[MIRROR_LINK_STRING_LENGTH_MAX];
+	char *envp[2] = { mirror_link_string, NULL };
+
+	snprintf(mirror_link_string, MIRROR_LINK_STRING_LENGTH_MAX,
+		"MirrorLink=V%d.%d",
+		_ncm_setup_desc->major, _ncm_setup_desc->minor);
+	kobject_uevent_env(&_ncm_setup_desc->device->kobj, KOBJ_CHANGE, envp);
+}
+
+int ncm_ctrlrequest(struct usb_composite_dev *cdev,
+			const struct usb_ctrlrequest *ctrl)
+{
+	int value = -EOPNOTSUPP;
+
+	if (ctrl->bRequestType == 0x40 && ctrl->bRequest == 0xF0
+			&& _ncm_setup_desc) {
+		_ncm_setup_desc->minor = (uint8_t)(ctrl->wValue >> 8);
+		_ncm_setup_desc->major = (uint8_t)(ctrl->wValue & 0xFF);
+		schedule_work(&_ncm_setup_desc->work);
+		value = 0;
+	}
+
+	return value;
+}
+#endif
+
 static void ncm_free_inst(struct usb_function_instance *f)
 {
 	struct f_ncm_opts *opts;
+
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+	cancel_work_sync(&_ncm_setup_desc->work);
+	/* release _ncm_setup_desc related resource */
+	device_destroy(_ncm_setup_desc->device->class,
+		_ncm_setup_desc->device->devt);
+	kfree(_ncm_setup_desc);
+#endif
 
 	opts = container_of(f, struct f_ncm_opts, func_inst);
 	if (opts->bound)
@@ -1672,6 +1712,14 @@ static struct usb_function_instance *ncm_alloc_inst(void)
 		return ERR_CAST(ncm_interf_group);
 	}
 	opts->ncm_interf_group = ncm_interf_group;
+
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+	_ncm_setup_desc = kzalloc(sizeof(*_ncm_setup_desc), GFP_KERNEL);
+	if (!_ncm_setup_desc)
+		return ERR_PTR(-ENOMEM);
+	INIT_WORK(&_ncm_setup_desc->work, ncm_setup_work);
+	_ncm_setup_desc->device = create_function_device("f_ncm");
+#endif
 
 	return &opts->func_inst;
 }

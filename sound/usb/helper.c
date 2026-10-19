@@ -75,20 +75,7 @@ void *snd_usb_find_csint_desc(void *buffer, int buflen, void *after, u8 dsubtype
 	}
 	return NULL;
 }
-
-/* check the validity of pipe and EP types */
-int snd_usb_pipe_sanity_check(struct usb_device *dev, unsigned int pipe)
-{
-	static const int pipetypes[4] = {
-		PIPE_CONTROL, PIPE_ISOCHRONOUS, PIPE_BULK, PIPE_INTERRUPT
-	};
-	struct usb_host_endpoint *ep;
-
-	ep = usb_pipe_endpoint(dev, pipe);
-	if (!ep || usb_pipetype(pipe) != pipetypes[usb_endpoint_type(&ep->desc)])
-		return -EINVAL;
-	return 0;
-}
+EXPORT_SYMBOL_GPL(snd_usb_find_csint_desc);
 
 /*
  * Wrapper for usb_control_msg().
@@ -101,9 +88,6 @@ int snd_usb_ctl_msg(struct usb_device *dev, unsigned int pipe, __u8 request,
 	int err;
 	void *buf = NULL;
 	int timeout;
-
-	if (snd_usb_pipe_sanity_check(dev, pipe))
-		return -EINVAL;
 
 	if (size > 0) {
 		buf = kmemdup(data, size, GFP_KERNEL);
@@ -139,7 +123,7 @@ unsigned char snd_usb_parse_datainterval(struct snd_usb_audio *chip,
 	case USB_SPEED_SUPER:
 	case USB_SPEED_SUPER_PLUS:
 		if (get_endpoint(alts, 0)->bInterval >= 1 &&
-		    get_endpoint(alts, 0)->bInterval <= 4)
+		    get_endpoint(alts, 0)->bInterval <= 16)
 			return get_endpoint(alts, 0)->bInterval - 1;
 		break;
 	default:

@@ -44,6 +44,7 @@
 #include <linux/trace.h>
 #include <linux/sched/clock.h>
 #include <linux/sched/rt.h>
+#include <linux/coresight-stm.h>
 
 #include "trace.h"
 #include "trace_output.h"
@@ -2394,14 +2395,15 @@ int tracepoint_printk_sysctl(struct ctl_table *table, int write,
 	return ret;
 }
 
-void trace_event_buffer_commit(struct trace_event_buffer *fbuffer)
+void trace_event_buffer_commit(struct trace_event_buffer *fbuffer,
+			       unsigned long len)
 {
 	if (static_key_false(&tracepoint_printk_key.key))
 		output_printk(fbuffer);
 
 	event_trigger_unlock_commit(fbuffer->trace_file, fbuffer->buffer,
 				    fbuffer->event, fbuffer->entry,
-				    fbuffer->flags, fbuffer->pc);
+				    fbuffer->flags, fbuffer->pc, len);
 }
 EXPORT_SYMBOL_GPL(trace_event_buffer_commit);
 
@@ -2844,6 +2846,7 @@ static void put_trace_buf(void)
 	this_cpu_dec(trace_percpu_buffer->nesting);
 }
 
+#ifdef CONFIG_TRACE_PRINTK
 static int alloc_percpu_trace_buffer(void)
 {
 	struct trace_buffer_struct __percpu *buffers;
@@ -2855,11 +2858,13 @@ static int alloc_percpu_trace_buffer(void)
 	trace_percpu_buffer = buffers;
 	return 0;
 }
+#endif /* CONFIG_TRACE_PRINTK */
 
 static int buffers_allocated;
 
 void trace_printk_init_buffers(void)
 {
+#ifdef CONFIG_TRACE_PRINTK
 	if (buffers_allocated)
 		return;
 
@@ -2896,6 +2901,9 @@ void trace_printk_init_buffers(void)
 	 */
 	if (global_trace.trace_buffer.buffer)
 		tracing_start_cmdline_record();
+#else
+	return;
+#endif /* CONFIG_TRACE_PRINTK */
 }
 
 void trace_printk_start_comm(void)
@@ -2965,6 +2973,9 @@ int trace_vbprintk(unsigned long ip, const char *fmt, va_list args)
 
 	memcpy(entry->buf, tbuffer, sizeof(u32) * len);
 	if (!call_filter_check_discard(call, entry, buffer, event)) {
+		len = vscnprintf(tbuffer, TRACE_BUF_SIZE, fmt, args);
+		stm_log(OST_ENTITY_TRACE_PRINTK, tbuffer, len+1);
+
 		__buffer_unlock_commit(buffer, event);
 		ftrace_trace_stack(tr, buffer, flags, 6, pc, NULL);
 	}
@@ -3021,6 +3032,7 @@ __trace_array_vprintk(struct ring_buffer *buffer,
 
 	memcpy(&entry->buf, tbuffer, len + 1);
 	if (!call_filter_check_discard(call, entry, buffer, event)) {
+		stm_log(OST_ENTITY_TRACE_PRINTK, entry->buf, len + 1);
 		__buffer_unlock_commit(buffer, event);
 		ftrace_trace_stack(&global_trace, buffer, flags, 6, pc, NULL);
 	}
@@ -3090,7 +3102,7 @@ static void trace_iterator_increment(struct trace_iterator *iter)
 
 	iter->idx++;
 	if (buf_iter)
-		ring_buffer_iter_advance(buf_iter);
+		ring_buffer_read(buf_iter, NULL);
 }
 
 static struct trace_entry *
@@ -3250,9 +3262,7 @@ void tracing_iter_reset(struct trace_iterator *iter, int cpu)
 		if (ts >= iter->trace_buffer->time_start)
 			break;
 		entries++;
-		ring_buffer_iter_advance(buf_iter);
-		/* This could be a big loop */
-		cond_resched();
+		ring_buffer_read(buf_iter, NULL);
 	}
 
 	per_cpu_ptr(iter->trace_buffer->data, cpu)->skipped_entries = entries;
@@ -4526,7 +4536,7 @@ tracing_trace_options_write(struct file *filp, const char __user *ubuf,
 {
 	struct seq_file *m = filp->private_data;
 	struct trace_array *tr = m->private;
-	char buf[64];
+	char buf[64] = "0";
 	int ret;
 
 	if (cnt >= sizeof(buf))
@@ -4683,9 +4693,6 @@ static const char readme_msg[] =
 	"\t  accepts: event-definitions (one definition per line)\n"
 	"\t   Format: p[:[<group>/]<event>] <place> [<args>]\n"
 	"\t           r[maxactive][:[<group>/]<event>] <place> [<args>]\n"
-#ifdef CONFIG_HIST_TRIGGERS
-	"\t           s:[synthetic/]<event> <field> [<field>]\n"
-#endif
 	"\t           -:[<group>/]<event>\n"
 #ifdef CONFIG_KPROBE_EVENTS
 	"\t    place: [<module>:]<symbol>[+<offset>]|<memaddr>\n"
@@ -4699,11 +4706,6 @@ static const char readme_msg[] =
 	"\t           $stack<index>, $stack, $retval, $comm\n"
 	"\t     type: s8/16/32/64, u8/16/32/64, x8/16/32/64, string,\n"
 	"\t           b<bit-width>@<bit-offset>/<container-size>\n"
-#ifdef CONFIG_HIST_TRIGGERS
-	"\t    field: <stype> <name>;\n"
-	"\t    stype: u8/u16/u32/u64, s8/s16/s32/s64, pid_t,\n"
-	"\t           [unsigned] char/int/long\n"
-#endif
 #endif
 	"  events/\t\t- Directory containing all trace event subsystems:\n"
 	"      enable\t\t- Write 0/1 to enable/disable tracing of all events\n"
@@ -4756,7 +4758,6 @@ static const char readme_msg[] =
 	"\t            [:size=#entries]\n"
 	"\t            [:pause][:continue][:clear]\n"
 	"\t            [:name=histname1]\n"
-	"\t            [:<handler>.<action>]\n"
 	"\t            [if <filter>]\n\n"
 	"\t    Note, special fields can be used as well:\n"
 	"\t            common_timestamp - to record current timestamp\n"
@@ -4802,16 +4803,7 @@ static const char readme_msg[] =
 	"\t    The enable_hist and disable_hist triggers can be used to\n"
 	"\t    have one event conditionally start and stop another event's\n"
 	"\t    already-attached hist trigger.  The syntax is analagous to\n"
-	"\t    the enable_event and disable_event triggers.\n\n"
-	"\t    Hist trigger handlers and actions are executed whenever a\n"
-	"\t    a histogram entry is added or updated.  They take the form:\n\n"
-	"\t        <handler>.<action>\n\n"
-	"\t    The available handlers are:\n\n"
-	"\t        onmatch(matching.event)  - invoke on addition or update\n"
-	"\t        onmax(var)               - invoke if var exceeds current max\n\n"
-	"\t    The available actions are:\n\n"
-	"\t        <synthetic_event>(param list)        - generate synthetic event\n"
-	"\t        save(field,...)                      - save current event fields\n"
+	"\t    the enable_event and disable_event triggers.\n"
 #endif
 ;
 
@@ -5518,7 +5510,7 @@ tracing_set_trace_write(struct file *filp, const char __user *ubuf,
 			size_t cnt, loff_t *ppos)
 {
 	struct trace_array *tr = filp->private_data;
-	char buf[MAX_TRACER_SIZE+1];
+	char buf[MAX_TRACER_SIZE+1] = "0";
 	int i;
 	size_t ret;
 	int err;
@@ -6172,6 +6164,7 @@ tracing_mark_write(struct file *filp, const char __user *ubuf,
 	struct trace_array *tr = filp->private_data;
 	struct ring_buffer_event *event;
 	enum event_trigger_type tt = ETT_NONE;
+	struct trace_entry *trace_entry;
 	struct ring_buffer *buffer;
 	struct print_entry *entry;
 	unsigned long irq_flags;
@@ -6209,7 +6202,8 @@ tracing_mark_write(struct file *filp, const char __user *ubuf,
 		return -EBADF;
 
 	entry = ring_buffer_event_data(event);
-	entry->ip = _THIS_IP_;
+	trace_entry = (struct trace_entry *)entry;
+	entry->ip = trace_entry->pid;
 
 	len = __copy_from_user_inatomic(&entry->buf, ubuf, cnt);
 	if (len) {
@@ -6229,9 +6223,12 @@ tracing_mark_write(struct file *filp, const char __user *ubuf,
 	if (entry->buf[cnt - 1] != '\n') {
 		entry->buf[cnt] = '\n';
 		entry->buf[cnt + 1] = '\0';
-	} else
+		stm_log(OST_ENTITY_TRACE_MARKER, entry, sizeof(*entry)+cnt + 2);
+	} else {
 		entry->buf[cnt] = '\0';
-
+		stm_log(OST_ENTITY_TRACE_MARKER, entry, sizeof(*entry)+cnt + 1);
+	}
+	entry->ip = _THIS_IP_;
 	__buffer_unlock_commit(buffer, event);
 
 	if (tt)
@@ -6361,7 +6358,7 @@ static ssize_t tracing_clock_write(struct file *filp, const char __user *ubuf,
 {
 	struct seq_file *m = filp->private_data;
 	struct trace_array *tr = m->private;
-	char buf[64];
+	char buf[64] = "0";
 	const char *clockstr;
 	int ret;
 

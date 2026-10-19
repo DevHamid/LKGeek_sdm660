@@ -352,7 +352,7 @@ static int seg6_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 	local_bh_disable();
 	dst = dst_cache_get(&slwt->cache);
-	local_bh_enable();
+	local_bh_disable();
 
 	if (unlikely(!dst)) {
 		struct ipv6hdr *hdr = ipv6_hdr(skb);
@@ -374,7 +374,7 @@ static int seg6_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 		local_bh_disable();
 		dst_cache_set_ip6(&slwt->cache, dst, &fl6.saddr);
-		local_bh_enable();
+		local_bh_disable();
 	}
 
 	skb_dst_drop(skb);

@@ -55,6 +55,17 @@
 #define VSE_UNCOR_ERR_STATUS		0x234	/* 32bit */
 #define VSE_UNCOR_ERR_CVP_CFG_ERR	BIT(5)	/* CVP_CONFIG_ERROR_LATCHED */
 
+#define V1_VSEC_OFFSET			0x200	/* Vendor Specific Offset V1 */
+/* V2 Defines */
+#define VSE_CVP_TX_CREDITS		0x49	/* 8bit */
+
+#define V2_CREDIT_TIMEOUT_US		40000
+#define V2_CHECK_CREDIT_US		10
+#define V2_POLL_TIMEOUT_US		1000000
+#define V2_USER_TIMEOUT_US		500000
+
+#define V1_POLL_TIMEOUT_US		10
+
 #define DRV_NAME		"altera-cvp"
 #define ALTERA_CVP_MGR_NAME	"Altera CvP FPGA Manager"
 

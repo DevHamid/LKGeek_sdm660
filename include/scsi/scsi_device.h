@@ -8,6 +8,7 @@
 #include <linux/blkdev.h>
 #include <scsi/scsi.h>
 #include <linux/atomic.h>
+#include <linux/android_kabi.h>
 
 struct device;
 struct request_queue;
@@ -199,6 +200,14 @@ struct scsi_device {
 	unsigned broken_fua:1;		/* Don't set FUA bit */
 	unsigned lun_in_cdb:1;		/* Store LUN bits in CDB[1] */
 	unsigned unmap_limit_for_ws:1;	/* Use the UNMAP limit for WRITE SAME */
+	unsigned use_rpm_auto:1; /* Enable runtime PM auto suspend */
+
+#define SCSI_DEFAULT_AUTOSUSPEND_DELAY  -1
+	int autosuspend_delay;
+	unsigned rpm_autosuspend:1;	/* Enable runtime autosuspend at device
+					 * creation time */
+	/* If non-zero, use timeout (in jiffies) for all commands */
+	unsigned int timeout_override;
 
 	atomic_t disk_events_disable_depth; /* disable depth for disk events */
 
@@ -228,6 +237,11 @@ struct scsi_device {
 	enum scsi_device_state sdev_state;
 	struct task_struct	*quiesced_by;
 	unsigned long		sdev_data[0];
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
+	ANDROID_KABI_RESERVE(3);
+	ANDROID_KABI_RESERVE(4);
 } __attribute__((aligned(sizeof(unsigned long))));
 
 #define	to_scsi_device(d)	\
@@ -244,15 +258,25 @@ struct scsi_device {
  * like scmd_printk, but the device name is passed in
  * as a string pointer
  */
+#ifdef CONFIG_DEBUG_KERNEL
 __printf(4, 5) void
 sdev_prefix_printk(const char *, const struct scsi_device *, const char *,
 		const char *, ...);
+#else
+static inline void sdev_prefix_printk(const char *level, const struct scsi_device *sdev,
+			const char *name, const char *fmt, ...) {}
+#endif
 
 #define sdev_printk(l, sdev, fmt, a...)				\
 	sdev_prefix_printk(l, sdev, NULL, fmt, ##a)
 
+#ifdef CONFIG_DEBUG_KERNEL
 __printf(3, 4) void
 scmd_printk(const char *, const struct scsi_cmnd *, const char *, ...);
+#else
+static inline void scmd_printk(const char *level, const struct scsi_cmnd *scmd,
+		const char *fmt, ...) {}
+#endif
 
 #define scmd_dbg(scmd, fmt, a...)					   \
 	do {								   \
@@ -455,6 +479,8 @@ extern void sdev_disable_disk_events(struct scsi_device *sdev);
 extern void sdev_enable_disk_events(struct scsi_device *sdev);
 extern int scsi_vpd_lun_id(struct scsi_device *, char *, size_t);
 extern int scsi_vpd_tpg_id(struct scsi_device *, int *);
+extern void scsi_set_cmd_timeout_override(struct scsi_device *sdev,
+					  unsigned int timeout);
 
 #ifdef CONFIG_PM
 extern int scsi_autopm_get_device(struct scsi_device *);

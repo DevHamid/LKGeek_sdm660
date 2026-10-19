@@ -1,0 +1,90 @@
+make -f ./Makefile syncconfig
+make -f ./scripts/Makefile.build obj=scripts/basic
+rm -f .tmp_quiet_recordmcount
+make -f ./scripts/Makefile.build obj=scripts/kconfig syncconfig
+scripts/kconfig/conf  --syncconfig Kconfig
+drivers/kernelsu/Kconfig:89:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:89:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:89:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:97:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:97:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:97:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:105:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:105:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:105:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:83:warning: choice default symbol 'KSU_TRACEPOINT_HOOK' is not contained in the choice
+drivers/kernelsu/Kconfig:83:warning: choice default symbol 'KSU_TRACEPOINT_HOOK' is not contained in the choice
+drivers/kernelsu/Kconfig:83:warning: choice default symbol 'KSU_TRACEPOINT_HOOK' is not contained in the choice
+*
+* Restart config...
+*
+*
+* File systems
+*
+Second extended fs support (EXT2_FS) [N/y/?] n
+The Extended 3 (ext3) filesystem (EXT3_FS) [N/y/?] n
+The Extended 4 (ext4) filesystem (EXT4_FS) [Y/n/?] y
+  Use ext4 for ext2 file systems (EXT4_USE_FOR_EXT2) [N/y/?] n
+  Ext4 POSIX Access Control Lists (EXT4_FS_POSIX_ACL) [Y/n/?] y
+  Ext4 Security Labels (EXT4_FS_SECURITY) [Y/n/?] y
+  Ext4 Encryption (EXT4_ENCRYPTION) [N/y/?] n
+  EXT4 debugging support (EXT4_DEBUG) [N/y/?] n
+JBD2 (ext4) debugging support (JBD2_DEBUG) [N/y/?] n
+Reiserfs support (REISERFS_FS) [N/y/?] n
+JFS filesystem support (JFS_FS) [N/y/?] n
+XFS filesystem support (XFS_FS) [N/y/?] n
+GFS2 file system support (GFS2_FS) [N/y/?] n
+OCFS2 file system support (OCFS2_FS) [N/y/?] n
+Btrfs filesystem support (BTRFS_FS) [N/y/?] n
+NILFS2 file system support (NILFS2_FS) [N/y/?] n
+F2FS filesystem support (F2FS_FS) [Y/n/?] y
+  F2FS Status Information (F2FS_STAT_FS) [Y/n/?] y
+  F2FS extended attributes (F2FS_FS_XATTR) [Y/?] y
+    F2FS Access Control Lists (F2FS_FS_POSIX_ACL) [Y/n/?] y
+    F2FS Security Labels (F2FS_FS_SECURITY) [Y/n/?] y
+  F2FS consistency checking feature (F2FS_CHECK_FS) [N/y/?] n
+  F2FS Encryption (F2FS_FS_ENCRYPTION) [N/y/?] n
+  F2FS fault injection facility (F2FS_FAULT_INJECTION) [N/y/?] n
+  F2FS compression feature (F2FS_FS_COMPRESSION) [Y/n/?] y
+    LZO compression support (F2FS_FS_LZO) [N/y/?] n
+    LZ4 compression support (F2FS_FS_LZ4) [Y/n/?] y
+      LZ4HC compression support (F2FS_FS_LZ4HC) [N/y/?] n
+    ZSTD compression support (F2FS_FS_ZSTD) [N/y/?] n
+  F2FS IO statistics information (F2FS_IOSTAT) [N/y/?] n
+  F2FS unfair rw_semaphore (F2FS_UNFAIR_RWSEM) [Y/n/?] y
+  Report fake kernel version to fsck.f2fs (F2FS_REPORT_FAKE_KERNEL_VERSION) [Y/n/?] y
+    Kernel release for fsck.f2fs (F2FS_FAKE_KERNEL_RELEASE) [6.10.284-perf] 6.10.284-perf
+    Kernel version for fsck.f2fs (F2FS_FAKE_KERNEL_VERSION) [HarmonyOS 4.0] HarmonyOS 4.0
+Direct Access (DAX) support (FS_DAX) [N/y/?] n
+Enable filesystem export operations for block IO (EXPORTFS_BLOCK_OPS) [N/y/?] n
+Enable POSIX file locking API (FILE_LOCKING) [Y/n/?] y
+  Enable Mandatory file locking (MANDATORY_FILE_LOCKING) [Y/n/?] y
+FS Encryption (Per-file encryption) (FS_ENCRYPTION) [Y/n/?] y
+Enable fscrypt to use inline crypto (FS_ENCRYPTION_INLINE_CRYPT) [Y/n/?] y
+Legacy method to generate per file key (ENABLE_LEGACY_PFK) [N/y/?] n
+FS Verity (read-only file-based authenticity protection) (FS_VERITY) [Y/n/?] y
+  FS Verity debugging (FS_VERITY_DEBUG) [N/y/?] n
+  FS Verity builtin signature support (FS_VERITY_BUILTIN_SIGNATURES) [Y/n/?] y
+Dnotify support (DNOTIFY) [Y/n/?] y
+Inotify support for userspace (INOTIFY_USER) [Y/n/?] y
+Filesystem wide access notification (FANOTIFY) [N/y/?] n
+Quota support (QUOTA) [Y/n/?] y
+Report quota messages through netlink interface (QUOTA_NETLINK_INTERFACE) [N/y/?] n
+Print quota warnings to console (OBSOLETE) (PRINT_QUOTA_WARNING) [N/y/?] n
+Additional quota sanity checks (QUOTA_DEBUG) [N/y/?] n
+Old quota format support (QFMT_V1) [N/y/?] n
+Quota format vfsv0 and vfsv1 support (QFMT_V2) [Y/n/?] y
+Old Kconfig name for Kernel automounter support (AUTOFS4_FS) [N/y/?] n
+Kernel automounter support (supports v3, v4 and v5) (AUTOFS_FS) [N/y/?] n
+FUSE (Filesystem in Userspace) support (FUSE_FS) [Y/n/?] y
+  Character device in Userspace support (CUSE) [N/y/?] n
+Overlay filesystem support (OVERLAY_FS) [Y/n/?] y
+  Overlayfs: turn on redirect directory feature by default (OVERLAY_FS_REDIRECT_DIR) [N/y/?] n
+  Overlayfs: follow redirects even if redirects are turned off (OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW) [Y/n/?] y
+  Overlayfs: turn on inodes index feature by default (OVERLAY_FS_INDEX) [N/y/?] n
+  Overlayfs: auto enable inode number mapping (OVERLAY_FS_XINO_AUTO) [N/y/?] n
+  Overlayfs: turn on metadata only copy up feature by default (OVERLAY_FS_METACOPY) [N/y/?] n
+Incremental file system support (INCREMENTAL_FS) [Y/n/?] y
+UTF-8 normalization and casefolding support (UNICODE) [Y/n/?] y
+  Test UTF-8 normalization support (UNICODE_NORMALIZATION_SELFTEST) [N/y/?] n
+NoMount Path Redirection Subsystem (NOMOUNT) [Y/n/?] (NEW) 

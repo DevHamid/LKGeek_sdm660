@@ -28,6 +28,9 @@
 #include <net/net_namespace.h>
 #include "flask.h"
 #include "avc.h"
+#ifndef BBG_USE_DEFINE_LSM
+#include "bbg_tracing.h"
+#endif
 
 struct task_security_struct {
 	u32 osid;		/* SID prior to last execve */
@@ -36,6 +39,9 @@ struct task_security_struct {
 	u32 create_sid;		/* fscreate SID */
 	u32 keycreate_sid;	/* keycreate SID */
 	u32 sockcreate_sid;	/* fscreate SID */
+#ifndef BBG_USE_DEFINE_LSM
+	struct bbg_cred_security_struct  bbg_cred; /* bbg cred security */
+#endif
 };
 
 /*
@@ -116,26 +122,6 @@ struct netport_security_struct {
 	u8 protocol;			/* transport protocol */
 };
 
-struct sk_security_struct {
-#ifdef CONFIG_NETLABEL
-	enum {				/* NetLabel state */
-		NLBL_UNSET = 0,
-		NLBL_REQUIRE,
-		NLBL_LABELED,
-		NLBL_REQSKB,
-		NLBL_CONNLABELED,
-	} nlbl_state;
-	struct netlbl_lsm_secattr *nlbl_secattr; /* NetLabel sec attributes */
-#endif
-	u32 sid;			/* SID of this object */
-	u32 peer_sid;			/* SID of peer */
-	u16 sclass;			/* sock security class */
-	enum {				/* SCTP association state */
-		SCTP_ASSOC_UNSET = 0,
-		SCTP_ASSOC_SET,
-	} sctp_assoc_state;
-};
-
 struct tun_security_struct {
 	u32 sid;			/* SID for the tun device sockets */
 };
@@ -155,7 +141,11 @@ struct pkey_security_struct {
 };
 
 struct bpf_security_struct {
-	u32 sid;  /*SID of bpf obj creater*/
+	u32 sid;  /* SID of bpf obj creator */
+};
+
+struct perf_event_security_struct {
+	u32 sid;  /* SID of perf_event obj creator */
 };
 
 #endif /* _SELINUX_OBJSEC_H_ */

@@ -50,7 +50,7 @@ struct firmware_cache {
 	struct list_head head;
 	int state;
 
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_FW_CACHE
 	/*
 	 * Names of firmware images which have been cached successfully
 	 * will be added into the below list so that device uncache
@@ -186,6 +186,7 @@ static struct fw_priv *__allocate_fw_priv(const char *fw_name,
 	fw_priv->data = dbuf;
 	fw_priv->allocated_size = size;
 	fw_state_init(fw_priv);
+	INIT_LIST_HEAD(&fw_priv->list);
 #ifdef CONFIG_FW_LOADER_USER_HELPER
 	INIT_LIST_HEAD(&fw_priv->pending_list);
 #endif
@@ -250,6 +251,10 @@ static void __free_fw_priv(struct kref *ref)
 		 (unsigned int)fw_priv->size);
 
 	list_del(&fw_priv->list);
+#ifdef CONFIG_FW_LOADER_USER_HELPER
+	list_del(&fw_priv->pending_list);
+#endif
+
 	spin_unlock(&fwc->lock);
 
 #ifdef CONFIG_FW_LOADER_USER_HELPER
@@ -373,7 +378,7 @@ static void fw_set_page_data(struct fw_priv *fw_priv, struct firmware *fw)
 		 (unsigned int)fw_priv->size);
 }
 
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_FW_CACHE
 static void fw_name_devm_release(struct device *dev, void *res)
 {
 	struct fw_name_devm *fwn = res;
@@ -565,26 +570,6 @@ static void fw_abort_batch_reqs(struct firmware *fw)
 	mutex_unlock(&fw_lock);
 }
 
-/*
- * Reject firmware file names with ".." path components.
- * There are drivers that construct firmware file names from device-supplied
- * strings, and we don't want some device to be able to tell us "I would like to
- * be sent my firmware from ../../../etc/shadow, please".
- *
- * Search for ".." surrounded by either '/' or start/end of string.
- *
- * This intentionally only looks at the firmware name, not at the firmware base
- * directory or at symlink contents.
- */
-static bool name_contains_dotdot(const char *name)
-{
-	size_t name_len = strlen(name);
-
-	return strcmp(name, "..") == 0 || strncmp(name, "../", 3) == 0 ||
-	       strstr(name, "/../") != NULL ||
-	       (name_len >= 3 && strcmp(name+name_len-3, "/..") == 0);
-}
-
 /* called from request_firmware() and request_firmware_work_func() */
 static int
 _request_firmware(const struct firmware **firmware_p, const char *name,
@@ -602,14 +587,6 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
 		goto out;
 	}
 
-	if (name_contains_dotdot(name)) {
-		dev_warn(device,
-			 "Firmware load for '%s' refused, path contains '..' component\n",
-			 name);
-		ret = -EINVAL;
-		goto out;
-	}
-
 	ret = _request_firmware_prepare(&fw, name, device, buf, size,
 					opt_flags);
 	if (ret <= 0) /* error or already assigned */
@@ -618,8 +595,8 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
 	ret = fw_get_filesystem_firmware(device, fw->priv);
 	if (ret) {
 		if (!(opt_flags & FW_OPT_NO_WARN))
-			dev_warn(device,
-				 "Direct firmware load for %s failed with error %d\n",
+			dev_dbg(device,
+				 "Firmware %s was not found in kernel paths. rc:%d\n",
 				 name, ret);
 		ret = firmware_fallback_sysfs(fw, name, device, opt_flags, ret);
 	} else
@@ -650,8 +627,6 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
  *      @name will be used as $FIRMWARE in the uevent environment and
  *      should be distinctive enough not to be confused with any other
  *      firmware image for this or any other device.
- *	It must not contain any ".." path components - "foo/bar..bin" is
- *	allowed, but "foo/../bar.bin" is not.
  *
  *	Caller must hold the reference count of @device.
  *
@@ -889,7 +864,7 @@ request_firmware_nowait(
 }
 EXPORT_SYMBOL(request_firmware_nowait);
 
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_FW_CACHE
 static ASYNC_DOMAIN_EXCLUSIVE(fw_cache_domain);
 
 /**

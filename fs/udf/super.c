@@ -86,13 +86,6 @@ enum {
 #define UDF_MAX_LVID_NESTING 1000
 
 enum { UDF_MAX_LINKS = 0xffff };
-/*
- * We limit filesize to 4TB. This is arbitrary as the on-disk format supports
- * more but because the file space is described by a linked list of extents,
- * each of which can have at most 1GB, the creation and handling of extents
- * gets unusably slow beyond certain point...
- */
-#define UDF_MAX_FILESIZE (1ULL << 42)
 
 /* These are the "meat" - everything else is stuffing */
 static int udf_fill_super(struct super_block *, void *, int);
@@ -1054,19 +1047,12 @@ static int udf_fill_partdesc_info(struct super_block *sb,
 	struct udf_part_map *map;
 	struct udf_sb_info *sbi = UDF_SB(sb);
 	struct partitionHeaderDesc *phd;
-	u32 sum;
 	int err;
 
 	map = &sbi->s_partmaps[p_index];
 
 	map->s_partition_len = le32_to_cpu(p->partitionLength); /* blocks */
 	map->s_partition_root = le32_to_cpu(p->partitionStartingLocation);
-	if (check_add_overflow(map->s_partition_root, map->s_partition_len,
-			       &sum)) {
-		udf_err(sb, "Partition %d has invalid location %u + %u\n",
-			p_index, map->s_partition_root, map->s_partition_len);
-		return -EFSCORRUPTED;
-	}
 
 	if (p->accessType == cpu_to_le32(PD_ACCESS_TYPE_READ_ONLY))
 		map->s_partition_flags |= UDF_PART_FLAG_READ_ONLY;
@@ -1122,14 +1108,6 @@ static int udf_fill_partdesc_info(struct super_block *sb,
 		bitmap->s_extPosition = le32_to_cpu(
 				phd->unallocSpaceBitmap.extPosition);
 		map->s_partition_flags |= UDF_PART_FLAG_UNALLOC_BITMAP;
-		/* Check whether math over bitmap won't overflow. */
-		if (check_add_overflow(map->s_partition_len,
-				       sizeof(struct spaceBitmapDesc) << 3,
-				       &sum)) {
-			udf_err(sb, "Partition %d is too long (%u)\n", p_index,
-				map->s_partition_len);
-			return -EFSCORRUPTED;
-		}
 		udf_debug("unallocSpaceBitmap (part %d) @ %u\n",
 			  p_index, bitmap->s_extPosition);
 	}
@@ -2329,7 +2307,7 @@ static int udf_fill_super(struct super_block *sb, void *options, int silent)
 		ret = -ENOMEM;
 		goto error_out;
 	}
-	sb->s_maxbytes = UDF_MAX_FILESIZE;
+	sb->s_maxbytes = MAX_LFS_FILESIZE;
 	sb->s_max_links = UDF_MAX_LINKS;
 	return 0;
 
@@ -2434,8 +2412,7 @@ static int udf_statfs(struct dentry *dentry, struct kstatfs *buf)
 			+ buf->f_bfree;
 	buf->f_ffree = buf->f_bfree;
 	buf->f_namelen = UDF_NAME_LEN;
-	buf->f_fsid.val[0] = (u32)id;
-	buf->f_fsid.val[1] = (u32)(id >> 32);
+	buf->f_fsid = u64_to_fsid(id);
 
 	return 0;
 }

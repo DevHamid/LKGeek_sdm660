@@ -19,6 +19,8 @@
 #include <linux/spinlock.h>
 #include <linux/rcupdate.h>
 
+#include "internal.h"
+
 unsigned int sysctl_nr_open __read_mostly = 1024*1024;
 unsigned int sysctl_nr_open_min = BITS_PER_LONG;
 /* our min() is unusable in constant expressions ;-/ */
@@ -41,23 +43,27 @@ static void free_fdtable_rcu(struct rcu_head *rcu)
 #define BITBIT_NR(nr)	BITS_TO_LONGS(BITS_TO_LONGS(nr))
 #define BITBIT_SIZE(nr)	(BITBIT_NR(nr) * sizeof(long))
 
-#define fdt_words(fdt) ((fdt)->max_fds / BITS_PER_LONG) // words in ->open_fds
 /*
  * Copy 'count' fd bits from the old table to the new table and clear the extra
  * space if any.  This does not copy the file pointers.  Called with the files
  * spinlock held for write.
  */
-static inline void copy_fd_bitmaps(struct fdtable *nfdt, struct fdtable *ofdt,
-			    unsigned int copy_words)
+static void copy_fd_bitmaps(struct fdtable *nfdt, struct fdtable *ofdt,
+			    unsigned int count)
 {
-	unsigned int nwords = fdt_words(nfdt);
+	unsigned int cpy, set;
 
-	bitmap_copy_and_extend(nfdt->open_fds, ofdt->open_fds,
-			copy_words * BITS_PER_LONG, nwords * BITS_PER_LONG);
-	bitmap_copy_and_extend(nfdt->close_on_exec, ofdt->close_on_exec,
-			copy_words * BITS_PER_LONG, nwords * BITS_PER_LONG);
-	bitmap_copy_and_extend(nfdt->full_fds_bits, ofdt->full_fds_bits,
-			copy_words, nwords);
+	cpy = count / BITS_PER_BYTE;
+	set = (nfdt->max_fds - count) / BITS_PER_BYTE;
+	memcpy(nfdt->open_fds, ofdt->open_fds, cpy);
+	memset((char *)nfdt->open_fds + cpy, 0, set);
+	memcpy(nfdt->close_on_exec, ofdt->close_on_exec, cpy);
+	memset((char *)nfdt->close_on_exec + cpy, 0, set);
+
+	cpy = BITBIT_SIZE(count);
+	set = BITBIT_SIZE(nfdt->max_fds) - cpy;
+	memcpy(nfdt->full_fds_bits, ofdt->full_fds_bits, cpy);
+	memset((char *)nfdt->full_fds_bits + cpy, 0, set);
 }
 
 /*
@@ -75,7 +81,7 @@ static void copy_fdtable(struct fdtable *nfdt, struct fdtable *ofdt)
 	memcpy(nfdt->fd, ofdt->fd, cpy);
 	memset((char *)nfdt->fd + cpy, 0, set);
 
-	copy_fd_bitmaps(nfdt, ofdt, fdt_words(ofdt));
+	copy_fd_bitmaps(nfdt, ofdt, ofdt->max_fds);
 }
 
 static struct fdtable * alloc_fdtable(unsigned int nr)
@@ -326,7 +332,7 @@ struct files_struct *dup_fd(struct files_struct *oldf, int *errorp)
 		open_files = count_open_files(old_fdt);
 	}
 
-	copy_fd_bitmaps(new_fdt, old_fdt, open_files / BITS_PER_LONG);
+	copy_fd_bitmaps(new_fdt, old_fdt, open_files);
 
 	old_fds = old_fdt->fd;
 	new_fds = new_fdt->fd;
@@ -638,6 +644,49 @@ out_unlock:
 }
 EXPORT_SYMBOL(__close_fd); /* for ksys_close() */
 
+/*
+ * See close_fd_get_file() below, this variant assumes current->files->file_lock
+ * is held.
+ */
+int __close_fd_get_file(unsigned int fd, struct file **res)
+{
+	struct files_struct *files = current->files;
+	struct file *file;
+	struct fdtable *fdt;
+
+	fdt = files_fdtable(files);
+	if (fd >= fdt->max_fds)
+		goto out_err;
+	file = fdt->fd[fd];
+	if (!file)
+		goto out_err;
+	rcu_assign_pointer(fdt->fd[fd], NULL);
+	__put_unused_fd(files, fd);
+	get_file(file);
+	*res = file;
+	return 0;
+out_err:
+	*res = NULL;
+	return -ENOENT;
+}
+
+/*
+ * variant of close_fd that gets a ref on the file for later fput.
+ * The caller must ensure that filp_close() called on the file, and then
+ * an fput().
+ */
+int close_fd_get_file(unsigned int fd, struct file **res)
+{
+	struct files_struct *files = current->files;
+	int ret;
+
+	spin_lock(&files->file_lock);
+	ret = __close_fd_get_file(fd, res);
+	spin_unlock(&files->file_lock);
+
+	return ret;
+}
+
 void do_close_on_exec(struct files_struct *files)
 {
 	unsigned i;
@@ -875,7 +924,6 @@ __releases(&files->file_lock)
 	 * tables and this condition does not arise without those.
 	 */
 	fdt = files_fdtable(files);
-	fd = array_index_nospec(fd, fdt->max_fds);
 	tofree = fdt->fd[fd];
 	if (!tofree && fd_is_open(fd, fdt))
 		goto Ebusy;

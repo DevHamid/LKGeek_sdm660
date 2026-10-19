@@ -2214,8 +2214,8 @@ static int fsl_proc_read(struct seq_file *m, void *v)
 
 #else				/* !CONFIG_USB_GADGET_DEBUG_FILES */
 
-#define create_proc_file()	do {} while (0)
-#define remove_proc_file()	do {} while (0)
+#define create_proc_file()	((void)0)
+#define remove_proc_file()	((void)0)
 
 #endif				/* CONFIG_USB_GADGET_DEBUG_FILES */
 
@@ -2501,7 +2501,7 @@ static int fsl_udc_probe(struct platform_device *pdev)
 	/* setup the udc->eps[] for non-control endpoints and link
 	 * to gadget.ep_list */
 	for (i = 1; i < (int)(udc_controller->max_ep / 2); i++) {
-		char name[16];
+		char name[14];
 
 		sprintf(name, "ep%dout", i);
 		struct_ep_setup(udc_controller, i * 2, name, 1);

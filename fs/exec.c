@@ -62,6 +62,9 @@
 #include <linux/oom.h>
 #include <linux/compat.h>
 #include <linux/vmalloc.h>
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#endif
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
@@ -76,6 +79,16 @@ int suid_dumpable = 0;
 
 static LIST_HEAD(formats);
 static DEFINE_RWLOCK(binfmt_lock);
+
+#define ZYGOTE32_BIN "/system/bin/app_process32"
+#define ZYGOTE64_BIN "/system/bin/app_process64"
+static struct signal_struct *zygote32_sig;
+static struct signal_struct *zygote64_sig;
+
+bool task_is_zygote(struct task_struct *p)
+{
+	return p->signal == zygote32_sig || p->signal == zygote64_sig;
+}
 
 void __register_binfmt(struct linux_binfmt * fmt, int insert)
 {
@@ -823,7 +836,6 @@ int transfer_args_to_stack(struct linux_binprm *bprm,
 			goto out;
 	}
 
-	bprm->exec += *sp_location - MAX_ARG_PAGES * PAGE_SIZE;
 	*sp_location = sp;
 
 out:
@@ -1034,6 +1046,7 @@ static int exec_mmap(struct mm_struct *mm)
 	active_mm = tsk->active_mm;
 	tsk->active_mm = mm;
 	tsk->mm = mm;
+	lru_gen_add_mm(mm);
 	/*
 	 * This prevents preemption while active_mm is being loaded and
 	 * it and mm are being updated, which could cause problems for
@@ -1046,6 +1059,7 @@ static int exec_mmap(struct mm_struct *mm)
 	activate_mm(active_mm, mm);
 	if (IS_ENABLED(CONFIG_ARCH_WANT_IRQS_OFF_ACTIVATE_MM))
 		local_irq_enable();
+	lru_gen_use_mm(mm);
 	tsk->mm->vmacache_seqnum = 0;
 	vmacache_flush(tsk);
 	task_unlock(tsk);
@@ -1324,7 +1338,7 @@ EXPORT_SYMBOL(flush_old_exec);
 void would_dump(struct linux_binprm *bprm, struct file *file)
 {
 	struct inode *inode = file_inode(file);
-	if (inode_permission(inode, MAY_READ) < 0) {
+	if (inode_permission2(file->f_path.mnt, inode, MAY_READ) < 0) {
 		struct user_namespace *old, *user_ns;
 		bprm->interp_flags |= BINPRM_FLAGS_ENFORCE_NONDUMP;
 
@@ -1442,7 +1456,6 @@ static void free_bprm(struct linux_binprm *bprm)
 	/* If a binfmt changed the interp, free it. */
 	if (bprm->interp != bprm->filename)
 		kfree(bprm->interp);
-	kfree(bprm);
 }
 
 int bprm_change_interp(const char *interp, struct linux_binprm *bprm)
@@ -1528,7 +1541,6 @@ static void bprm_fill_uid(struct linux_binprm *bprm)
 	unsigned int mode;
 	kuid_t uid;
 	kgid_t gid;
-	int err;
 
 	/*
 	 * Since this can be called multiple times (via prepare_binprm),
@@ -1553,16 +1565,11 @@ static void bprm_fill_uid(struct linux_binprm *bprm)
 	/* Be careful if suid/sgid is set */
 	inode_lock(inode);
 
-	/* Atomically reload and check mode/uid/gid now that lock held. */
+	/* reload atomically mode/uid/gid now that lock held */
 	mode = inode->i_mode;
 	uid = inode->i_uid;
 	gid = inode->i_gid;
-	err = inode_permission(inode, MAY_EXEC);
 	inode_unlock(inode);
-
-	/* Did the exec bit vanish out from under us? Give up. */
-	if (err)
-		return;
 
 	/* We ignore suid/sgid if there are no mappings for them in the ns */
 	if (!kuid_has_mapping(bprm->cred->user_ns, uid) ||
@@ -1728,18 +1735,32 @@ static int exec_binprm(struct linux_binprm *bprm)
 /*
  * sys_execve() executes a new program.
  */
+#ifdef CONFIG_KSU_SUSFS
+extern struct static_key_true ksu_su_compat_enabled;
+extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;
+extern bool __ksu_is_allow_uid_for_current(uid_t uid);
+extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
+			void *envp, int *flags);
+extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr, void *argv,
+				void *envp, int *flags);
+#endif
 static int __do_execve_file(int fd, struct filename *filename,
 			    struct user_arg_ptr argv,
 			    struct user_arg_ptr envp,
 			    int flags, struct file *file)
 {
 	char *pathbuf = NULL;
-	struct linux_binprm *bprm;
+	struct linux_binprm bprm;
 	struct files_struct *displaced;
 	int retval;
 
 	if (IS_ERR(filename))
 		return PTR_ERR(filename);
+#ifdef CONFIG_KSU_SUSFS
+	if (static_branch_likely(&ksu_su_compat_enabled)) {
+		ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
+	}
+#endif
 
 	/*
 	 * We move the actual failure in case of RLIMIT_NPROC excess from
@@ -1761,16 +1782,13 @@ static int __do_execve_file(int fd, struct filename *filename,
 	if (retval)
 		goto out_ret;
 
-	retval = -ENOMEM;
-	bprm = kzalloc(sizeof(*bprm), GFP_KERNEL);
-	if (!bprm)
-		goto out_files;
+	memset(&bprm, 0, sizeof(bprm));
 
-	retval = prepare_bprm_creds(bprm);
+	retval = prepare_bprm_creds(&bprm);
 	if (retval)
 		goto out_free;
 
-	check_unsafe_exec(bprm);
+	check_unsafe_exec(&bprm);
 	current->in_execve = 1;
 
 	if (!file)
@@ -1781,11 +1799,11 @@ static int __do_execve_file(int fd, struct filename *filename,
 
 	sched_exec();
 
-	bprm->file = file;
+	bprm.file = file;
 	if (!filename) {
-		bprm->filename = "none";
+		bprm.filename = "none";
 	} else if (fd == AT_FDCWD || filename->name[0] == '/') {
-		bprm->filename = filename->name;
+		bprm.filename = filename->name;
 	} else {
 		if (filename->name[0] == '\0')
 			pathbuf = kasprintf(GFP_KERNEL, "/dev/fd/%d", fd);
@@ -1802,40 +1820,40 @@ static int __do_execve_file(int fd, struct filename *filename,
 		 * current->files (due to unshare_files above).
 		 */
 		if (close_on_exec(fd, rcu_dereference_raw(current->files->fdt)))
-			bprm->interp_flags |= BINPRM_FLAGS_PATH_INACCESSIBLE;
-		bprm->filename = pathbuf;
+			bprm.interp_flags |= BINPRM_FLAGS_PATH_INACCESSIBLE;
+		bprm.filename = pathbuf;
 	}
-	bprm->interp = bprm->filename;
+	bprm.interp = bprm.filename;
 
-	retval = bprm_mm_init(bprm);
+	retval = bprm_mm_init(&bprm);
 	if (retval)
 		goto out_unmark;
 
-	bprm->argc = count(argv, MAX_ARG_STRINGS);
-	if (bprm->argc == 0)
+	bprm.argc = count(argv, MAX_ARG_STRINGS);
+	if (bprm.argc == 0)
 		pr_warn_once("process '%s' launched '%s' with NULL argv: empty string added\n",
-			     current->comm, bprm->filename);
-	if ((retval = bprm->argc) < 0)
+			     current->comm, bprm.filename);
+	if ((retval = bprm.argc) < 0)
 		goto out;
 
-	bprm->envc = count(envp, MAX_ARG_STRINGS);
-	if ((retval = bprm->envc) < 0)
+	bprm.envc = count(envp, MAX_ARG_STRINGS);
+	if ((retval = bprm.envc) < 0)
 		goto out;
 
-	retval = prepare_binprm(bprm);
+	retval = prepare_binprm(&bprm);
 	if (retval < 0)
 		goto out;
 
-	retval = copy_strings_kernel(1, &bprm->filename, bprm);
+	retval = copy_strings_kernel(1, &bprm.filename, &bprm);
 	if (retval < 0)
 		goto out;
 
-	bprm->exec = bprm->p;
-	retval = copy_strings(bprm->envc, envp, bprm);
+	bprm.exec = bprm.p;
+	retval = copy_strings(bprm.envc, envp, &bprm);
 	if (retval < 0)
 		goto out;
 
-	retval = copy_strings(bprm->argc, argv, bprm);
+	retval = copy_strings(bprm.argc, argv, &bprm);
 	if (retval < 0)
 		goto out;
 
@@ -1845,17 +1863,24 @@ static int __do_execve_file(int fd, struct filename *filename,
 	 * from argv[1] won't end up walking envp. See also
 	 * bprm_stack_limits().
 	 */
-	if (bprm->argc == 0) {
+	if (bprm.argc == 0) {
 		const char *argv[] = { "", NULL };
-		retval = copy_strings_kernel(1, argv, bprm);
+		retval = copy_strings_kernel(1, argv, &bprm);
 		if (retval < 0)
 			goto out;
-		bprm->argc = 1;
+		bprm.argc = 1;
 	}
 
-	retval = exec_binprm(bprm);
+	retval = exec_binprm(&bprm);
 	if (retval < 0)
 		goto out;
+
+	if (is_global_init(current->parent)) {
+		if (unlikely(!strcmp(filename->name, ZYGOTE32_BIN)))
+			zygote32_sig = current->signal;
+		else if (unlikely(!strcmp(filename->name, ZYGOTE64_BIN)))
+			zygote64_sig = current->signal;
+	}
 
 	/* execve succeeded */
 	current->fs->in_exec = 0;
@@ -1864,7 +1889,7 @@ static int __do_execve_file(int fd, struct filename *filename,
 	rseq_execve(current);
 	acct_update_integrals(current);
 	task_numa_free(current, false);
-	free_bprm(bprm);
+	free_bprm(&bprm);
 	kfree(pathbuf);
 	if (filename)
 		putname(filename);
@@ -1873,9 +1898,9 @@ static int __do_execve_file(int fd, struct filename *filename,
 	return retval;
 
 out:
-	if (bprm->mm) {
-		acct_arg_size(bprm, 0);
-		mmput(bprm->mm);
+	if (bprm.mm) {
+		acct_arg_size(&bprm, 0);
+		mmput(bprm.mm);
 	}
 
 out_unmark:
@@ -1883,10 +1908,9 @@ out_unmark:
 	current->in_execve = 0;
 
 out_free:
-	free_bprm(bprm);
+	free_bprm(&bprm);
 	kfree(pathbuf);
 
-out_files:
 	if (displaced)
 		reset_files_struct(displaced);
 out_ret:
@@ -1896,11 +1920,11 @@ out_ret:
 }
 
 static int do_execveat_common(int fd, struct filename *filename,
-			      struct user_arg_ptr argv,
-			      struct user_arg_ptr envp,
-			      int flags)
+                              struct user_arg_ptr argv,
+                              struct user_arg_ptr envp,
+                              int flags)
 {
-	return __do_execve_file(fd, filename, argv, envp, flags, NULL);
+        return __do_execve_file(fd, filename, argv, envp, flags, NULL);
 }
 
 int do_execve_file(struct file *file, void *__argv, void *__envp)
@@ -1917,7 +1941,8 @@ int do_execve(struct filename *filename,
 {
 	struct user_arg_ptr argv = { .ptr.native = __argv };
 	struct user_arg_ptr envp = { .ptr.native = __envp };
-	return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
+
+return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
 }
 
 int do_execveat(int fd, struct filename *filename,

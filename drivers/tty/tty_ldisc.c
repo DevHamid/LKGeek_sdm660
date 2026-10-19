@@ -633,6 +633,12 @@ static void tty_ldisc_kill(struct tty_struct *tty)
 {
 	if (!tty->ldisc)
 		return;
+
+#if defined(CONFIG_TTY_FLUSH_LOCAL_ECHO)
+	if (tty->echo_delayed_work.work.func)
+		cancel_delayed_work_sync(&tty->echo_delayed_work);
+#endif
+
 	/*
 	 * Now kill off the ldisc
 	 */
@@ -841,8 +847,13 @@ int tty_ldisc_init(struct tty_struct *tty)
  */
 void tty_ldisc_deinit(struct tty_struct *tty)
 {
-	if (tty->ldisc)
+	if (tty->ldisc) {
+#if defined(CONFIG_TTY_FLUSH_LOCAL_ECHO)
+		if (tty->echo_delayed_work.work.func)
+			cancel_delayed_work_sync(&tty->echo_delayed_work);
+#endif
 		tty_ldisc_put(tty->ldisc);
+	}
 	tty->ldisc = NULL;
 }
 
@@ -854,7 +865,7 @@ static struct ctl_table tty_table[] = {
 		.data		= &tty_ldisc_autoload,
 		.maxlen		= sizeof(tty_ldisc_autoload),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
+		.proc_handler	= proc_dointvec,
 		.extra1		= &zero,
 		.extra2		= &one,
 	},

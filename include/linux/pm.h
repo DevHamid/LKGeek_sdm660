@@ -591,6 +591,7 @@ struct dev_pm_info {
 	bool			is_suspended:1;	/* Ditto */
 	bool			is_noirq_suspended:1;
 	bool			is_late_suspended:1;
+	bool			no_pm:1;
 	bool			early_init:1;	/* Owned by the PM core */
 	bool			direct_complete:1;	/* Owned by the PM core */
 	u32			driver_flags;
@@ -778,15 +779,15 @@ extern bool dev_pm_smart_suspend_and_suspended(struct device *dev);
 
 #else /* !CONFIG_PM_SLEEP */
 
-#define device_pm_lock() do {} while (0)
-#define device_pm_unlock() do {} while (0)
+#define device_pm_lock() ((void)0)
+#define device_pm_unlock() ((void)0)
 
 static inline int dpm_suspend_start(pm_message_t state)
 {
 	return 0;
 }
 
-#define suspend_report_result(fn, ret)		do {} while (0)
+#define suspend_report_result(fn, ret)		((void)0)
 
 static inline int device_pm_wait_for_dev(struct device *a, struct device *b)
 {

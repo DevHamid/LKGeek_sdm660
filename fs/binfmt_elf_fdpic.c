@@ -49,13 +49,13 @@ typedef char *elf_caddr_t;
 #if 0
 #define kdebug(fmt, ...) printk("FDPIC "fmt"\n" ,##__VA_ARGS__ )
 #else
-#define kdebug(fmt, ...) do {} while(0)
+#define kdebug(fmt, ...) ((void)0)
 #endif
 
 #if 0
 #define kdcore(fmt, ...) printk("FDPIC "fmt"\n" ,##__VA_ARGS__ )
 #else
-#define kdcore(fmt, ...) do {} while(0)
+#define kdcore(fmt, ...) ((void)0)
 #endif
 
 MODULE_LICENSE("GPL");
@@ -324,7 +324,7 @@ static int load_elf_fdpic_binary(struct linux_binprm *bprm)
 	else
 		executable_stack = EXSTACK_DEFAULT;
 
-	if (stack_size == 0 && interp_params.flags & ELF_FDPIC_FLAG_PRESENT) {
+	if (stack_size == 0) {
 		stack_size = interp_params.stack_size;
 		if (interp_params.flags & ELF_FDPIC_FLAG_EXEC_STACK)
 			executable_stack = EXSTACK_ENABLE_X;

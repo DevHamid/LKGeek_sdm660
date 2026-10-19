@@ -39,6 +39,7 @@
 *.so.dbg
 *.su
 *.symtypes
+*.symversions
 *.tab.[ch]
 *.tar
 *.xz
@@ -114,6 +115,7 @@ GTAGS
 # id-utils files
 ID
 
+*.orig
 *~
 \#*#
 
@@ -131,3 +133,22 @@ all.config
 
 # Kdevelop4
 *.kdev4
+
+# fetched Android config fragments
+kernel/configs/android-*.cfg
+
+# Build scripts
+/build-scripts
+
+# Build directories
+/out
+/work
+/wayne
+/tulip
+/lavender
+/whyred
+/CLANG
+/GCC
+
+# Build log
+log.txt

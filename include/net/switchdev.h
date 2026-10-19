@@ -155,8 +155,7 @@ struct switchdev_notifier_fdb_info {
 	struct switchdev_notifier_info info; /* must be first */
 	const unsigned char *addr;
 	u16 vid;
-	u8 added_by_user:1,
-	   offloaded:1;
+	bool added_by_user;
 };
 
 static inline struct net_device *
@@ -241,7 +240,7 @@ static inline bool switchdev_port_same_parent_id(struct net_device *a,
 	return false;
 }
 
-#define SWITCHDEV_SET_OPS(netdev, ops) do {} while (0)
+#define SWITCHDEV_SET_OPS(netdev, ops) ((void)0)
 
 #endif
 

@@ -110,7 +110,7 @@ static inline int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 	return 0;
 }
 
-#define usb_autosuspend_device(udev)		do {} while (0)
+#define usb_autosuspend_device(udev)		((void)0)
 static inline int usb_autoresume_device(struct usb_device *udev)
 {
 	return 0;
@@ -192,6 +192,7 @@ extern void usb_notify_add_device(struct usb_device *udev);
 extern void usb_notify_remove_device(struct usb_device *udev);
 extern void usb_notify_add_bus(struct usb_bus *ubus);
 extern void usb_notify_remove_bus(struct usb_bus *ubus);
+extern void usb_atomic_notify_dead_bus(struct usb_bus *ubus);
 extern void usb_hub_adjust_deviceremovable(struct usb_device *hdev,
 		struct usb_hub_descriptor *desc);
 

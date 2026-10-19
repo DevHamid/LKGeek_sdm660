@@ -57,6 +57,27 @@ config ARM_GIC_V3_ITS_FSL_MC
 	depends on FSL_MC_BUS
 	default ARM_GIC_V3_ITS
 
+config ARM_GIC_V3_ACL
+	bool "GICv3 Access control"
+	depends on ARM_GIC_V3
+	help
+	  Access to GIC ITS address space is controlled by EL2.
+	  Kernel has no permission to access GIC ITS address space.
+	  If you wish to enforce the Acces control then set this
+	  option to Y, if you are unsure please say N.
+
+config ARM_GIC_V3_NO_ACCESS_CONTROL
+	bool "GICv3 No Access Control Configuration"
+	depends on ARM_GIC_V3
+	help
+	  On some SOCs with the access control configurations it is
+	  not allowed to access certain set of the GIC registers
+	  from non-secure world. Provide a common flag to protect
+	  those functionalities and compile them out for such
+	  configurations, so that specific registers are not touched.
+
+	  For production kernels, you should say 'N' here.
+
 config ARM_NVIC
 	bool
 	select IRQ_DOMAIN
@@ -128,6 +149,16 @@ config BRCMSTB_L2_IRQ
 	bool
 	select GENERIC_IRQ_CHIP
 	select IRQ_DOMAIN
+
+config QCOM_SHOW_RESUME_IRQ
+	bool "Enable logging of interrupts that could have caused resume"
+	depends on ARM_GIC
+	default n
+	help
+	  This option logs wake up interrupts that have triggered just before
+	  the resume loop unrolls. It helps to debug to know any unnecessary
+	  wake up interrupts that causes system to come out of low power modes.
+	  Say Y if you want to debug why the system resumed.
 
 config DW_APB_ICTL
 	bool
@@ -371,6 +402,69 @@ config QCOM_PDC
 	help
 	  Power Domain Controller driver to manage and configure wakeup
 	  IRQs for Qualcomm Technologies Inc (QTI) mobile chips.
+
+config QCOM_MPM
+	bool "QCOM MPM"
+	depends on ARCH_QCOM
+	select IRQ_DOMAIN
+	select IRQ_DOMAIN_HIERARCHY
+	help
+	  MSM Power Manager driver to manage and configure wakeup
+	  IRQs for Qualcomm Technologies Inc (QTI) mobile chips.
+	  Say yes here to enable the MSM Power Manager interrupt
+	  controller to use as a wakeup interrupt controller.
+
+choice
+	prompt "GIC chip data for MSM Power Manager Driver"
+	depends on QCOM_MPM
+	help
+	  This option sets the Generic Interrupt Controller
+	  data for MSM Power Manager Driver that will be used
+	  for the suitable ARCH platform.
+
+config QCOM_MPM_BENGAL
+	bool "QCOM BENGAL MPM"
+	depends on ARCH_BENGAL
+	help
+	  This adds Generic Interrupt Controller data for MSM Power
+	  Manager Driver for Bengal.
+
+config QCOM_MPM_SCUBA
+	bool "QCOM SCUBA MPM"
+	depends on ARCH_SCUBA
+	help
+	  This adds Generic Interrupt Controller data for MSM Power
+	  Manager Driver for Scuba.
+
+config QCOM_MPM_SDM660
+	bool "QCOM SDM660 MPM"
+	depends on ARCH_SDM660
+	help
+	  This adds Generic Interrupt Controller data for MSM Power
+	  Manager Driver for SDM660.
+
+config QCOM_MPM_MSM8937
+	bool "QCOM MSM8937 MPM"
+	depends on ARCH_MSM8937
+	help
+	  This adds Generic Interrupt Controller data for MSM Power
+	  Manager Driver for MSM8937.
+
+config QCOM_MPM_MSM8953
+	bool "QCOM MSM8953 MPM"
+	depends on ARCH_MSM8953
+	help
+	  This adds Generic Interrupt Controller data for MSM Power
+	  Manager Driver for MSM8953.
+
+config QCOM_MPM_KHAJE
+	bool "QCOM KHAJE MPM"
+	depends on ARCH_KHAJE
+	help
+	  This adds Generic Interrupt Controller data for MSM Power
+	  Manager Driver for KHAJE.
+
+endchoice
 
 config SIFIVE_PLIC
 	bool "SiFive Platform-Level Interrupt Controller"

@@ -629,8 +629,6 @@ static int sta_info_insert_finish(struct sta_info *sta) __acquires(RCU)
 	if (ieee80211_vif_is_mesh(&sdata->vif))
 		mesh_accept_plinks_update(sdata);
 
-	ieee80211_check_fast_xmit(sta);
-
 	return 0;
  out_remove:
 	sta_info_hash_del(local, sta);
@@ -1304,7 +1302,7 @@ void ieee80211_sta_ps_deliver_wakeup(struct sta_info *sta)
 	 */
 	clear_sta_flag(sta, WLAN_STA_PSPOLL);
 	clear_sta_flag(sta, WLAN_STA_UAPSD);
-	spin_unlock_bh(&sta->ps_lock);
+	spin_lock_bh(&sta->ps_lock);
 
 	atomic_dec(&ps->num_sta_ps);
 

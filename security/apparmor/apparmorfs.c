@@ -1593,7 +1593,7 @@ int __aafs_profile_mkdir(struct aa_profile *profile, struct dentry *parent)
 		struct aa_profile *p;
 		p = aa_deref_parent(profile);
 		dent = prof_dir(p);
-		if (!dent) {
+        if (!dent) {
 			error = -ENOENT;
 			goto fail2;
 		}

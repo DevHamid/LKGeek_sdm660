@@ -2074,7 +2074,7 @@ int hci_get_dev_info(void __user *arg)
 	else
 		flags = hdev->flags;
 
-	strscpy(di.name, hdev->name, sizeof(di.name));
+	strcpy(di.name, hdev->name);
 	di.bdaddr   = hdev->bdaddr;
 	di.type     = (hdev->bus & 0x0f) | ((hdev->dev_type & 0x03) << 4);
 	di.flags    = flags;
@@ -2217,7 +2217,6 @@ static void hci_error_reset(struct work_struct *work)
 {
 	struct hci_dev *hdev = container_of(work, struct hci_dev, error_reset);
 
-	hci_dev_hold(hdev);
 	BT_DBG("%s", hdev->name);
 
 	if (hdev->hw_error)
@@ -2225,10 +2224,10 @@ static void hci_error_reset(struct work_struct *work)
 	else
 		bt_dev_err(hdev, "hardware error 0x%2.2x", hdev->hw_error_code);
 
-	if (!hci_dev_do_close(hdev))
-		hci_dev_do_open(hdev);
+	if (hci_dev_do_close(hdev))
+		return;
 
-	hci_dev_put(hdev);
+	hci_dev_do_open(hdev);
 }
 
 void hci_uuids_clear(struct hci_dev *hdev)
@@ -3194,11 +3193,7 @@ int hci_register_dev(struct hci_dev *hdev)
 	if (id < 0)
 		return id;
 
-	error = dev_set_name(&hdev->dev, "hci%u", id);
-	if (error)
-		return error;
-
-	hdev->name = dev_name(&hdev->dev);
+	snprintf(hdev->name, sizeof(hdev->name), "hci%d", id);
 	hdev->id = id;
 
 	BT_DBG("%p name %s bus %d", hdev, hdev->name, hdev->bus);
@@ -3219,6 +3214,8 @@ int hci_register_dev(struct hci_dev *hdev)
 
 	if (!IS_ERR_OR_NULL(bt_debugfs))
 		hdev->debugfs = debugfs_create_dir(hdev->name, bt_debugfs);
+
+	dev_set_name(&hdev->dev, "%s", hdev->name);
 
 	error = device_add(&hdev->dev);
 	if (error < 0)
@@ -3931,27 +3928,15 @@ static inline int __get_blocks(struct hci_dev *hdev, struct sk_buff *skb)
 	return DIV_ROUND_UP(skb->len - HCI_ACL_HDR_SIZE, hdev->block_len);
 }
 
-static void __check_timeout(struct hci_dev *hdev, unsigned int cnt, u8 type)
+static void __check_timeout(struct hci_dev *hdev, unsigned int cnt)
 {
-	unsigned long last_tx;
-
-	if (hci_dev_test_flag(hdev, HCI_UNCONFIGURED))
-		return;
-
-	switch (type) {
-	case LE_LINK:
-		last_tx = hdev->le_last_tx;
-		break;
-	default:
-		last_tx = hdev->acl_last_tx;
-		break;
+	if (!hci_dev_test_flag(hdev, HCI_UNCONFIGURED)) {
+		/* ACL tx timeout must be longer than maximum
+		 * link supervision timeout (40.9 seconds) */
+		if (!cnt && time_after(jiffies, hdev->acl_last_tx +
+				       HCI_ACL_TX_TIMEOUT))
+			hci_link_tx_to(hdev, ACL_LINK);
 	}
-
-	/* tx timeout must be longer than maximum link supervision timeout
-	 * (40.9 seconds)
-	 */
-	if (!cnt && time_after(jiffies, last_tx + HCI_ACL_TX_TIMEOUT))
-		hci_link_tx_to(hdev, type);
 }
 
 static void hci_sched_acl_pkt(struct hci_dev *hdev)
@@ -3961,7 +3946,7 @@ static void hci_sched_acl_pkt(struct hci_dev *hdev)
 	struct sk_buff *skb;
 	int quote;
 
-	__check_timeout(hdev, cnt, ACL_LINK);
+	__check_timeout(hdev, cnt);
 
 	while (hdev->acl_cnt &&
 	       (chan = hci_chan_sent(hdev, ACL_LINK, &quote))) {
@@ -4000,14 +3985,14 @@ static void hci_sched_acl_blk(struct hci_dev *hdev)
 	int quote;
 	u8 type;
 
+	__check_timeout(hdev, cnt);
+
 	BT_DBG("%s", hdev->name);
 
 	if (hdev->dev_type == HCI_AMP)
 		type = AMP_LINK;
 	else
 		type = ACL_LINK;
-
-	__check_timeout(hdev, cnt, type);
 
 	while (hdev->block_cnt > 0 &&
 	       (chan = hci_chan_sent(hdev, type, &quote))) {
@@ -4121,19 +4106,24 @@ static void hci_sched_le(struct hci_dev *hdev)
 {
 	struct hci_chan *chan;
 	struct sk_buff *skb;
-	int quote, *cnt, tmp;
+	int quote, cnt, tmp;
 
 	BT_DBG("%s", hdev->name);
 
 	if (!hci_conn_num(hdev, LE_LINK))
 		return;
 
-	cnt = hdev->le_pkts ? &hdev->le_cnt : &hdev->acl_cnt;
+	if (!hci_dev_test_flag(hdev, HCI_UNCONFIGURED)) {
+		/* LE tx timeout must be longer than maximum
+		 * link supervision timeout (40.9 seconds) */
+		if (!hdev->le_cnt && hdev->le_pkts &&
+		    time_after(jiffies, hdev->le_last_tx + HZ * 45))
+			hci_link_tx_to(hdev, LE_LINK);
+	}
 
-	__check_timeout(hdev, *cnt, LE_LINK);
-
-	tmp = *cnt;
-	while (*cnt && (chan = hci_chan_sent(hdev, LE_LINK, &quote))) {
+	cnt = hdev->le_pkts ? hdev->le_cnt : hdev->acl_cnt;
+	tmp = cnt;
+	while (cnt && (chan = hci_chan_sent(hdev, LE_LINK, &quote))) {
 		u32 priority = (skb_peek(&chan->data_q))->priority;
 		while (quote-- && (skb = skb_peek(&chan->data_q))) {
 			BT_DBG("chan %p skb %p len %d priority %u", chan, skb,
@@ -4148,13 +4138,18 @@ static void hci_sched_le(struct hci_dev *hdev)
 			hci_send_frame(hdev, skb);
 			hdev->le_last_tx = jiffies;
 
-			(*cnt)--;
+			cnt--;
 			chan->sent++;
 			chan->conn->sent++;
 		}
 	}
 
-	if (*cnt != tmp)
+	if (hdev->le_pkts)
+		hdev->le_cnt = cnt;
+	else
+		hdev->acl_cnt = cnt;
+
+	if (cnt != tmp)
 		hci_prio_recalculate(hdev, LE_LINK);
 }
 
@@ -4433,8 +4428,8 @@ static void hci_cmd_work(struct work_struct *work)
 			if (test_bit(HCI_RESET, &hdev->flags))
 				cancel_delayed_work(&hdev->cmd_timer);
 			else
-				schedule_delayed_work(&hdev->cmd_timer,
-						      HCI_CMD_TIMEOUT);
+				queue_delayed_work(system_power_efficient_wq,
+					&hdev->cmd_timer, HCI_CMD_TIMEOUT);
 		} else {
 			skb_queue_head(&hdev->cmd_q, skb);
 			queue_work(hdev->workqueue, &hdev->cmd_work);

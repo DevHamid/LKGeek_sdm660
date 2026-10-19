@@ -484,6 +484,7 @@ static inline int num_node_state(enum node_states state)
 #define first_online_node	0
 #define first_memory_node	0
 #define next_online_node(nid)	(MAX_NUMNODES)
+#define next_memory_node(nid)	(MAX_NUMNODES)
 #define nr_node_ids		1
 #define nr_online_nodes		1
 
@@ -523,7 +524,7 @@ static inline int node_random(const nodemask_t *mask)
 #define NODEMASK_FREE(m)			kfree(m)
 #else
 #define NODEMASK_ALLOC(type, name, gfp_flags)	type _##name, *name = &_##name
-#define NODEMASK_FREE(m)			do {} while (0)
+#define NODEMASK_FREE(m)			((void)0)
 #endif
 
 /* A example struture for using NODEMASK_ALLOC, used in mempolicy. */

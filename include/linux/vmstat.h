@@ -29,6 +29,7 @@ struct reclaim_stat {
 	unsigned nr_activate;
 	unsigned nr_ref_keep;
 	unsigned nr_unmap_fail;
+	unsigned nr_lazyfree_fail;
 };
 
 #ifdef CONFIG_VM_EVENT_COUNTERS
@@ -104,7 +105,7 @@ static inline void vm_events_fold_cpu(int cpu)
 #define count_vm_numa_event(x)     count_vm_event(x)
 #define count_vm_numa_events(x, y) count_vm_events(x, y)
 #else
-#define count_vm_numa_event(x) do {} while (0)
+#define count_vm_numa_event(x) ((void)0)
 #define count_vm_numa_events(x, y) do { (void)(y); } while (0)
 #endif /* CONFIG_NUMA_BALANCING */
 
@@ -112,14 +113,14 @@ static inline void vm_events_fold_cpu(int cpu)
 #define count_vm_tlb_event(x)	   count_vm_event(x)
 #define count_vm_tlb_events(x, y)  count_vm_events(x, y)
 #else
-#define count_vm_tlb_event(x)     do {} while (0)
+#define count_vm_tlb_event(x)     ((void)0)
 #define count_vm_tlb_events(x, y) do { (void)(y); } while (0)
 #endif
 
 #ifdef CONFIG_DEBUG_VM_VMACACHE
 #define count_vm_vmacache_event(x) count_vm_event(x)
 #else
-#define count_vm_vmacache_event(x) do {} while (0)
+#define count_vm_vmacache_event(x) ((void)0)
 #endif
 
 #define __count_zid_vm_events(item, zid, delta) \

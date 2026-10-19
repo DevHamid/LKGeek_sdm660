@@ -42,6 +42,8 @@
 #include <linux/syscore_ops.h>
 #include <linux/version.h>
 #include <linux/ctype.h>
+#include <linux/mm.h>
+#include <linux/mempolicy.h>
 
 #include <linux/compat.h>
 #include <linux/syscalls.h>
@@ -120,6 +122,12 @@
 #endif
 #ifndef SVE_GET_VL
 # define SVE_GET_VL()		(-EINVAL)
+#endif
+#ifndef SET_TAGGED_ADDR_CTRL
+# define SET_TAGGED_ADDR_CTRL(a)	(-EINVAL)
+#endif
+#ifndef GET_TAGGED_ADDR_CTRL
+# define GET_TAGGED_ADDR_CTRL()		(-EINVAL)
 #endif
 
 /*
@@ -617,7 +625,7 @@ SYSCALL_DEFINE1(setuid, uid_t, uid)
  */
 long __sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 {
-	struct user_namespace *ns = current_user_ns();
+        struct user_namespace *ns = current_user_ns();
 	const struct cred *old;
 	struct cred *new;
 	int retval;
@@ -680,8 +688,18 @@ error:
 	return retval;
 }
 
+#ifdef CONFIG_KSU
+extern int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid);
+#endif
+
 SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
 {
+#ifdef CONFIG_KSU_SUSFS
+	if (ksu_handle_setresuid(ruid, euid, suid)) {
+		pr_info("Something wrong with ksu_handle_setresuid()\\n");
+	}
+#endif
+
 	return __sys_setresuid(ruid, euid, suid);
 }
 
@@ -1232,12 +1250,59 @@ static int override_release(char __user *release, size_t len)
 	return ret;
 }
 
+static int override_version(struct new_utsname __user *name)
+{
+#ifdef CONFIG_F2FS_REPORT_FAKE_KERNEL_VERSION
+	int ret;
+
+	if (strcmp(current->comm, "fsck.f2fs"))
+		return 0;
+
+	ret = copy_to_user(name->release, CONFIG_F2FS_FAKE_KERNEL_RELEASE,
+			   strlen(CONFIG_F2FS_FAKE_KERNEL_RELEASE) + 1);
+	if (ret)
+		return ret;
+
+	ret = copy_to_user(name->version, CONFIG_F2FS_FAKE_KERNEL_VERSION,
+			   strlen(CONFIG_F2FS_FAKE_KERNEL_VERSION) + 1);
+
+	return ret;
+#else
+	return 0;
+#endif
+}
+
+#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+extern struct static_key_false susfs_is_uname_spoof_buffer_set;
+extern void susfs_spoof_uname(struct new_utsname* tmp);
+#endif
 SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 {
 	struct new_utsname tmp;
 
 	down_read(&uts_sem);
 	memcpy(&tmp, utsname(), sizeof(tmp));
+#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+	if (static_branch_likely(&susfs_is_uname_spoof_buffer_set))
+		susfs_spoof_uname(&tmp);
+#endif
+
+#ifdef CONFIG_ANDROID_SPOOF_KERNEL_VERSION_FOR_BPF
+	if (!strncmp(current->comm, "bpfloader", 9) ||
+	    !strncmp(current->comm, "netbpfload", 10) ||
+	    !strncmp(current->comm, "netd", 4)) {
+		strcpy(tmp.release, "5.10.186");
+		pr_debug("fake uname: %s/%d release=%s\n",
+			 current->comm, current->pid, tmp.release);
+	}
+#endif
+	if (!strncmp(current->comm, "bpfloader", 9) ||
+	    !strncmp(current->comm, "netbpfload", 10) ||
+	    !strncmp(current->comm, "netd", 4)) {
+		strcpy(tmp.release, "5.4.186");
+		pr_debug("fake uname: %s/%d release=%s\n",
+			 current->comm, current->pid, tmp.release);
+	}
 	up_read(&uts_sem);
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;
@@ -1245,6 +1310,8 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 	if (override_release(name->release, sizeof(name->release)))
 		return -EFAULT;
 	if (override_architecture(name))
+		return -EFAULT;
+	if (override_version(name))
 		return -EFAULT;
 	return 0;
 }
@@ -1262,6 +1329,11 @@ SYSCALL_DEFINE1(uname, struct old_utsname __user *, name)
 
 	down_read(&uts_sem);
 	memcpy(&tmp, utsname(), sizeof(tmp));
+#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+	if (static_branch_likely(&susfs_is_uname_spoof_buffer_set))
+		susfs_spoof_uname(&tmp);
+#endif
+
 	up_read(&uts_sem);
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;
@@ -1717,86 +1789,73 @@ void getrusage(struct task_struct *p, int who, struct rusage *r)
 	struct task_struct *t;
 	unsigned long flags;
 	u64 tgutime, tgstime, utime, stime;
-	unsigned long maxrss;
-	struct mm_struct *mm;
-	struct signal_struct *sig = p->signal;
-	unsigned int seq = 0;
+	unsigned long maxrss = 0;
 
-retry:
-	memset(r, 0, sizeof(*r));
+	memset((char *)r, 0, sizeof (*r));
 	utime = stime = 0;
-	maxrss = 0;
 
 	if (who == RUSAGE_THREAD) {
 		task_cputime_adjusted(current, &utime, &stime);
 		accumulate_thread_rusage(p, r);
-		maxrss = sig->maxrss;
-		goto out_thread;
+		maxrss = p->signal->maxrss;
+		goto out;
 	}
 
-	flags = read_seqbegin_or_lock_irqsave(&sig->stats_lock, &seq);
+	if (!lock_task_sighand(p, &flags))
+		return;
 
 	switch (who) {
 	case RUSAGE_BOTH:
 	case RUSAGE_CHILDREN:
-		utime = sig->cutime;
-		stime = sig->cstime;
-		r->ru_nvcsw = sig->cnvcsw;
-		r->ru_nivcsw = sig->cnivcsw;
-		r->ru_minflt = sig->cmin_flt;
-		r->ru_majflt = sig->cmaj_flt;
-		r->ru_inblock = sig->cinblock;
-		r->ru_oublock = sig->coublock;
-		maxrss = sig->cmaxrss;
+		utime = p->signal->cutime;
+		stime = p->signal->cstime;
+		r->ru_nvcsw = p->signal->cnvcsw;
+		r->ru_nivcsw = p->signal->cnivcsw;
+		r->ru_minflt = p->signal->cmin_flt;
+		r->ru_majflt = p->signal->cmaj_flt;
+		r->ru_inblock = p->signal->cinblock;
+		r->ru_oublock = p->signal->coublock;
+		maxrss = p->signal->cmaxrss;
 
 		if (who == RUSAGE_CHILDREN)
 			break;
 
 	case RUSAGE_SELF:
-		r->ru_nvcsw += sig->nvcsw;
-		r->ru_nivcsw += sig->nivcsw;
-		r->ru_minflt += sig->min_flt;
-		r->ru_majflt += sig->maj_flt;
-		r->ru_inblock += sig->inblock;
-		r->ru_oublock += sig->oublock;
-		if (maxrss < sig->maxrss)
-			maxrss = sig->maxrss;
-
-		rcu_read_lock();
-		__for_each_thread(sig, t)
+		thread_group_cputime_adjusted(p, &tgutime, &tgstime);
+		utime += tgutime;
+		stime += tgstime;
+		r->ru_nvcsw += p->signal->nvcsw;
+		r->ru_nivcsw += p->signal->nivcsw;
+		r->ru_minflt += p->signal->min_flt;
+		r->ru_majflt += p->signal->maj_flt;
+		r->ru_inblock += p->signal->inblock;
+		r->ru_oublock += p->signal->oublock;
+		if (maxrss < p->signal->maxrss)
+			maxrss = p->signal->maxrss;
+		t = p;
+		do {
 			accumulate_thread_rusage(t, r);
-		rcu_read_unlock();
-
+		} while_each_thread(p, t);
 		break;
 
 	default:
 		BUG();
 	}
+	unlock_task_sighand(p, &flags);
 
-	if (need_seqretry(&sig->stats_lock, seq)) {
-		seq = 1;
-		goto retry;
-	}
-	done_seqretry_irqrestore(&sig->stats_lock, seq, flags);
-
-	if (who == RUSAGE_CHILDREN)
-		goto out_children;
-
-	thread_group_cputime_adjusted(p, &tgutime, &tgstime);
-	utime += tgutime;
-	stime += tgstime;
-
-out_thread:
-	mm = get_task_mm(p);
-	if (mm) {
-		setmax_mm_hiwater_rss(&maxrss, mm);
-		mmput(mm);
-	}
-
-out_children:
-	r->ru_maxrss = maxrss * (PAGE_SIZE / 1024); /* convert pages to KBs */
+out:
 	r->ru_utime = ns_to_timeval(utime);
 	r->ru_stime = ns_to_timeval(stime);
+
+	if (who != RUSAGE_CHILDREN) {
+		struct mm_struct *mm = get_task_mm(p);
+
+		if (mm) {
+			setmax_mm_hiwater_rss(&maxrss, mm);
+			mmput(mm);
+		}
+	}
+	r->ru_maxrss = maxrss * (PAGE_SIZE / 1024); /* convert pages to KBs */
 }
 
 SYSCALL_DEFINE2(getrusage, int, who, struct rusage __user *, ru)
@@ -2077,7 +2136,7 @@ static int prctl_set_auxv(struct mm_struct *mm, unsigned long addr,
 	 * up to the caller to provide sane values here, otherwise userspace
 	 * tools which use this vector might be unhappy.
 	 */
-	unsigned long user_auxv[AT_VECTOR_SIZE];
+	unsigned long user_auxv[AT_VECTOR_SIZE] = { 0 };
 
 	if (len > sizeof(user_auxv))
 		return -EINVAL;
@@ -2268,6 +2327,153 @@ int __weak arch_prctl_spec_ctrl_set(struct task_struct *t, unsigned long which,
 	return -EINVAL;
 }
 
+#ifdef CONFIG_MMU
+static int prctl_update_vma_anon_name(struct vm_area_struct *vma,
+		struct vm_area_struct **prev,
+		unsigned long start, unsigned long end,
+		const char __user *name_addr)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	int error = 0;
+	pgoff_t pgoff;
+
+	if (name_addr == vma_get_anon_name(vma)) {
+		*prev = vma;
+		goto out;
+	}
+
+	pgoff = vma->vm_pgoff + ((start - vma->vm_start) >> PAGE_SHIFT);
+	*prev = vma_merge(mm, *prev, start, end, vma->vm_flags, vma->anon_vma,
+				vma->vm_file, pgoff, vma_policy(vma),
+				vma->vm_userfaultfd_ctx, name_addr);
+	if (*prev) {
+		vma = *prev;
+		goto success;
+	}
+
+	*prev = vma;
+
+	if (start != vma->vm_start) {
+		error = split_vma(mm, vma, start, 1);
+		if (error)
+			goto out;
+	}
+
+	if (end != vma->vm_end) {
+		error = split_vma(mm, vma, end, 0);
+		if (error)
+			goto out;
+	}
+
+success:
+	if (!vma->vm_file)
+		vma->anon_name = name_addr;
+
+out:
+	if (error == -ENOMEM)
+		error = -EAGAIN;
+	return error;
+}
+
+static int prctl_set_vma_anon_name(unsigned long start, unsigned long end,
+			unsigned long arg)
+{
+	unsigned long tmp;
+	struct vm_area_struct *vma, *prev;
+	int unmapped_error = 0;
+	int error = -EINVAL;
+
+	/*
+	 * If the interval [start,end) covers some unmapped address
+	 * ranges, just ignore them, but return -ENOMEM at the end.
+	 * - this matches the handling in madvise.
+	 */
+	vma = find_vma_prev(current->mm, start, &prev);
+	if (vma && start > vma->vm_start)
+		prev = vma;
+
+	for (;;) {
+		/* Still start < end. */
+		error = -ENOMEM;
+		if (!vma)
+			return error;
+
+		/* Here start < (end|vma->vm_end). */
+		if (start < vma->vm_start) {
+			unmapped_error = -ENOMEM;
+			start = vma->vm_start;
+			if (start >= end)
+				return error;
+		}
+
+		/* Here vma->vm_start <= start < (end|vma->vm_end) */
+		tmp = vma->vm_end;
+		if (end < tmp)
+			tmp = end;
+
+		/* Here vma->vm_start <= start < tmp <= (end|vma->vm_end). */
+		error = prctl_update_vma_anon_name(vma, &prev, start, tmp,
+				(const char __user *)arg);
+		if (error)
+			return error;
+		start = tmp;
+		if (prev && start < prev->vm_end)
+			start = prev->vm_end;
+		error = unmapped_error;
+		if (start >= end)
+			return error;
+		if (prev)
+			vma = prev->vm_next;
+		else	/* madvise_remove dropped mmap_sem */
+			vma = find_vma(current->mm, start);
+	}
+}
+
+static int prctl_set_vma(unsigned long opt, unsigned long start,
+		unsigned long len_in, unsigned long arg)
+{
+	struct mm_struct *mm = current->mm;
+	int error;
+	unsigned long len;
+	unsigned long end;
+
+	if (start & ~PAGE_MASK)
+		return -EINVAL;
+	len = (len_in + ~PAGE_MASK) & PAGE_MASK;
+
+	/* Check to see whether len was rounded up from small -ve to zero */
+	if (len_in && !len)
+		return -EINVAL;
+
+	end = start + len;
+	if (end < start)
+		return -EINVAL;
+
+	if (end == start)
+		return 0;
+
+	down_write(&mm->mmap_sem);
+
+	switch (opt) {
+	case PR_SET_VMA_ANON_NAME:
+		error = prctl_set_vma_anon_name(start, end, arg);
+		break;
+	default:
+		error = -EINVAL;
+	}
+
+	up_write(&mm->mmap_sem);
+
+	return error;
+}
+#else /* CONFIG_MMU */
+static int prctl_set_vma(unsigned long opt, unsigned long start,
+		unsigned long len_in, unsigned long arg)
+{
+	return -EINVAL;
+}
+#endif
+
 SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		unsigned long, arg4, unsigned long, arg5)
 {
@@ -2347,10 +2553,18 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		error = SET_ENDIAN(me, arg2);
 		break;
 	case PR_GET_SECCOMP:
+#ifdef CONFIG_SECCOMP
 		error = prctl_get_seccomp();
+#else
+		error = 0;
+#endif
 		break;
 	case PR_SET_SECCOMP:
+#ifdef CONFIG_SECCOMP
 		error = prctl_set_seccomp(arg2, (char __user *)arg3);
+#else
+		error = 0;
+#endif
 		break;
 	case PR_GET_TSC:
 		error = GET_TSC_CTL(arg2);
@@ -2486,6 +2700,19 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 			return -EINVAL;
 		error = arch_prctl_spec_ctrl_set(me, arg2, arg3);
 		break;
+	case PR_SET_VMA:
+		error = prctl_set_vma(arg2, arg3, arg4, arg5);
+		break;
+	case PR_SET_TAGGED_ADDR_CTRL:
+		if (arg3 || arg4 || arg5)
+			return -EINVAL;
+		error = SET_TAGGED_ADDR_CTRL(arg2);
+		break;
+	case PR_GET_TAGGED_ADDR_CTRL:
+		if (arg2 || arg3 || arg4 || arg5)
+			return -EINVAL;
+		error = GET_TAGGED_ADDR_CTRL();
+		break;
 	default:
 		error = -EINVAL;
 		break;
@@ -2615,6 +2842,7 @@ COMPAT_SYSCALL_DEFINE1(sysinfo, struct compat_sysinfo __user *, info)
 		int bitcount = 0;
 
 		while (s.mem_unit < PAGE_SIZE) {
+
 			s.mem_unit <<= 1;
 			bitcount++;
 		}

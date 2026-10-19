@@ -386,8 +386,12 @@ static int kcm_parse_func_strparser(struct strparser *strp, struct sk_buff *skb)
 {
 	struct kcm_psock *psock = container_of(strp, struct kcm_psock, strp);
 	struct bpf_prog *prog = psock->bpf_prog;
+	int res;
 
-	return (*prog->bpf_func)(skb, prog->insnsi);
+	preempt_disable();
+	res = BPF_PROG_RUN(prog, skb);
+	preempt_enable();
+	return res;
 }
 
 static int kcm_read_sock_done(struct strparser *strp, int err)
@@ -1279,10 +1283,9 @@ static int kcm_getsockopt(struct socket *sock, int level, int optname,
 	if (get_user(len, optlen))
 		return -EFAULT;
 
+	len = min_t(unsigned int, len, sizeof(int));
 	if (len < 0)
 		return -EINVAL;
-
-	len = min_t(unsigned int, len, sizeof(int));
 
 	switch (optname) {
 	case KCM_RECV_DISABLE:

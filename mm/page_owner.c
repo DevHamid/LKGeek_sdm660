@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/debugfs.h>
 #include <linux/mm.h>
-#include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/bootmem.h>
 #include <linux/stacktrace.h>
@@ -26,7 +25,8 @@ struct page_owner {
 	depot_stack_handle_t handle;
 };
 
-static bool page_owner_disabled = true;
+static bool page_owner_disabled =
+	!IS_ENABLED(CONFIG_PAGE_OWNER_ENABLE_DEFAULT);
 DEFINE_STATIC_KEY_FALSE(page_owner_inited);
 
 static depot_stack_handle_t dummy_handle;
@@ -42,6 +42,9 @@ static int __init early_page_owner_param(char *buf)
 
 	if (strcmp(buf, "on") == 0)
 		page_owner_disabled = false;
+
+	if (strcmp(buf, "off") == 0)
+		page_owner_disabled = true;
 
 	return 0;
 }
@@ -352,7 +355,8 @@ print_page_owner(char __user *buf, size_t count, unsigned long pfn,
 		.skip = 0
 	};
 
-	kbuf = kmalloc(count, GFP_KERNEL);
+	count = count > PAGE_SIZE ? PAGE_SIZE : count;
+	kbuf = kvmalloc(count, GFP_KERNEL);
 	if (!kbuf)
 		return -ENOMEM;
 
@@ -398,11 +402,11 @@ print_page_owner(char __user *buf, size_t count, unsigned long pfn,
 	if (copy_to_user(buf, kbuf, ret))
 		ret = -EFAULT;
 
-	kfree(kbuf);
+	kvfree(kbuf);
 	return ret;
 
 err:
-	kfree(kbuf);
+	kvfree(kbuf);
 	return -ENOMEM;
 }
 

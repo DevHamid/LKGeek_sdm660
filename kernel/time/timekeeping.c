@@ -27,6 +27,7 @@
 #include <linux/stop_machine.h>
 #include <linux/pvclock_gtod.h>
 #include <linux/compiler.h>
+#include <linux/random.h>
 
 #include "tick-internal.h"
 #include "ntp_internal.h"
@@ -151,6 +152,11 @@ static void tk_set_wall_to_mono(struct timekeeper *tk, struct timespec64 wtm)
 static inline void tk_update_sleep_time(struct timekeeper *tk, ktime_t delta)
 {
 	tk->offs_boot = ktime_add(tk->offs_boot, delta);
+	/*
+	 * Timespec representation for VDSO update to avoid 64bit division
+	 * on every update.
+	 */
+	tk->monotonic_to_boot = ktime_to_timespec64(tk->offs_boot);
 }
 
 /*
@@ -1091,15 +1097,13 @@ static int adjust_historical_crosststamp(struct system_time_snapshot *history,
 }
 
 /*
- * timestamp_in_interval - true if ts is chronologically in [start, end]
- *
- * True if ts occurs chronologically at or after start, and before or at end.
+ * cycle_between - true if test occurs chronologically between before and after
  */
-static bool timestamp_in_interval(u64 start, u64 end, u64 ts)
+static bool cycle_between(u64 before, u64 test, u64 after)
 {
-	if (ts >= start && ts <= end)
+	if (test > before && test < after)
 		return true;
-	if (start > end && (ts >= start || ts <= end))
+	if (test < before && before > after)
 		return true;
 	return false;
 }
@@ -1159,7 +1163,7 @@ int get_device_system_crosststamp(int (*get_time_fn)
 		 */
 		now = tk_clock_read(&tk->tkr_mono);
 		interval_start = tk->tkr_mono.cycle_last;
-		if (!timestamp_in_interval(interval_start, now, cycles)) {
+		if (!cycle_between(interval_start, cycles, now)) {
 			clock_was_set_seq = tk->clock_was_set_seq;
 			cs_was_changed_seq = tk->cs_was_changed_seq;
 			cycles = interval_start;
@@ -1172,8 +1176,10 @@ int get_device_system_crosststamp(int (*get_time_fn)
 				      tk_core.timekeeper.offs_real);
 		base_raw = tk->tkr_raw.base;
 
-		nsec_real = timekeeping_cycles_to_ns(&tk->tkr_mono, cycles);
-		nsec_raw = timekeeping_cycles_to_ns(&tk->tkr_raw, cycles);
+		nsec_real = timekeeping_cycles_to_ns(&tk->tkr_mono,
+						     system_counterval.cycles);
+		nsec_raw = timekeeping_cycles_to_ns(&tk->tkr_raw,
+						    system_counterval.cycles);
 	} while (read_seqcount_retry(&tk_core.seq, seq));
 
 	xtstamp->sys_realtime = ktime_add_ns(base_real, nsec_real);
@@ -1188,13 +1194,13 @@ int get_device_system_crosststamp(int (*get_time_fn)
 		bool discontinuity;
 
 		/*
-		 * Check that the counter value is not before the provided
+		 * Check that the counter value occurs after the provided
 		 * history reference and that the history doesn't cross a
 		 * clocksource change
 		 */
 		if (!history_begin ||
-		    !timestamp_in_interval(history_begin->cycles,
-					   cycles, system_counterval.cycles) ||
+		    !cycle_between(history_begin->cycles,
+				   system_counterval.cycles, cycles) ||
 		    history_begin->cs_was_changed_seq != cs_was_changed_seq)
 			return -EINVAL;
 		partial_history_cycles = cycles - system_counterval.cycles;
@@ -1254,6 +1260,9 @@ out:
 
 	/* signal hrtimers about time change */
 	clock_was_set();
+
+	if (!ret)
+		add_device_randomness(ts, sizeof(*ts));
 
 	return ret;
 }
@@ -2339,6 +2348,7 @@ int do_adjtimex(struct timex *txc)
 	ret = timekeeping_validate_timex(txc);
 	if (ret)
 		return ret;
+	add_device_randomness(txc, sizeof(*txc));
 
 	if (txc->modes & ADJ_SETOFFSET) {
 		struct timespec64 delta;
@@ -2352,6 +2362,7 @@ int do_adjtimex(struct timex *txc)
 	}
 
 	ktime_get_real_ts64(&ts);
+	add_device_randomness(&ts, sizeof(ts));
 
 	raw_spin_lock_irqsave(&timekeeper_lock, flags);
 	write_seqcount_begin(&tk_core.seq);

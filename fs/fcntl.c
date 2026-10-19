@@ -84,8 +84,8 @@ static int setfl(int fd, struct file * filp, unsigned long arg)
 	return error;
 }
 
-void __f_setown(struct file *filp, struct pid *pid, enum pid_type type,
-		int force)
+static void f_modown(struct file *filp, struct pid *pid, enum pid_type type,
+                     int force)
 {
 	write_lock_irq(&filp->f_owner.lock);
 	if (force || !filp->f_owner.pid) {
@@ -95,12 +95,18 @@ void __f_setown(struct file *filp, struct pid *pid, enum pid_type type,
 
 		if (pid) {
 			const struct cred *cred = current_cred();
-			security_file_set_fowner(filp);
 			filp->f_owner.uid = cred->uid;
 			filp->f_owner.euid = cred->euid;
 		}
 	}
 	write_unlock_irq(&filp->f_owner.lock);
+}
+
+void __f_setown(struct file *filp, struct pid *pid, enum pid_type type,
+		int force)
+{
+	security_file_set_fowner(filp);
+	f_modown(filp, pid, type, force);
 }
 EXPORT_SYMBOL(__f_setown);
 
@@ -137,7 +143,7 @@ EXPORT_SYMBOL(f_setown);
 
 void f_delown(struct file *filp)
 {
-	__f_setown(filp, NULL, PIDTYPE_TGID, 1);
+	f_modown(filp, NULL, PIDTYPE_TGID, 1);
 }
 
 pid_t f_getown(struct file *filp)
@@ -729,8 +735,8 @@ static void send_sigio_to_task(struct task_struct *p,
 		return;
 
 	switch (signum) {
+		default: {
 		siginfo_t si;
-		default:
 			/* Queue a rt signal with the appropriate fd as its
 			   value.  We use SI_SIGIO as the source, not 
 			   SI_KERNEL, since kernel signals always get 
@@ -763,7 +769,8 @@ static void send_sigio_to_task(struct task_struct *p,
 			si.si_fd    = fd;
 			if (!do_send_sig_info(signum, &si, p, type))
 				break;
-		/* fall-through: fall back on the old plain SIGIO signal */
+		}
+		/* fall-through - fall back on the old plain SIGIO signal */
 		case 0:
 			do_send_sig_info(SIGIO, SEND_SIG_PRIV, p, type);
 	}

@@ -26,6 +26,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/io-64-nonatomic-hi-lo.h>
+#include <linux/io-pgtable.h>
 #include <linux/iommu.h>
 #include <linux/iopoll.h>
 #include <linux/kconfig.h>
@@ -42,7 +43,6 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 
-#include "io-pgtable.h"
 #include "arm-smmu-regs.h"
 
 #define SMMU_INTR_SEL_NS     0x2000
@@ -917,6 +917,7 @@ static struct platform_driver qcom_iommu_driver = {
 		.name		= "qcom-iommu",
 		.of_match_table	= of_match_ptr(qcom_iommu_of_match),
 		.pm		= &qcom_iommu_pm_ops,
+		.probe_type	= PROBE_FORCE_SYNCHRONOUS,
 	},
 	.probe	= qcom_iommu_device_probe,
 	.remove	= qcom_iommu_device_remove,

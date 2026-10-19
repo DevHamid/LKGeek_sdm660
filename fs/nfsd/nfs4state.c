@@ -743,8 +743,7 @@ static void nfs4_free_deleg(struct nfs4_stid *stid)
  * When a delegation is recalled, the filehandle is stored in the "new"
  * filter.
  * Every 30 seconds we swap the filters and clear the "new" one,
- * unless both are empty of course.  This results in delegations for a
- * given filehandle being blocked for between 30 and 60 seconds.
+ * unless both are empty of course.
  *
  * Each filter is 256 bits.  We hash the filehandle to 32bit and use the
  * low 3 bytes as hash-table indices.
@@ -756,7 +755,7 @@ static void nfs4_free_deleg(struct nfs4_stid *stid)
 static DEFINE_SPINLOCK(blocked_delegations_lock);
 static struct bloom_pair {
 	int	entries, old_entries;
-	time64_t swap_time;
+	time_t	swap_time;
 	int	new; /* index into 'set' */
 	DECLARE_BITMAP(set[2], 256);
 } blocked_delegations;
@@ -768,15 +767,15 @@ static int delegation_blocked(struct knfsd_fh *fh)
 
 	if (bd->entries == 0)
 		return 0;
-	if (ktime_get_seconds() - bd->swap_time > 30) {
+	if (seconds_since_boot() - bd->swap_time > 30) {
 		spin_lock(&blocked_delegations_lock);
-		if (ktime_get_seconds() - bd->swap_time > 30) {
+		if (seconds_since_boot() - bd->swap_time > 30) {
 			bd->entries -= bd->old_entries;
 			bd->old_entries = bd->entries;
-			bd->new = 1-bd->new;
 			memset(bd->set[bd->new], 0,
 			       sizeof(bd->set[0]));
-			bd->swap_time = ktime_get_seconds();
+			bd->new = 1-bd->new;
+			bd->swap_time = seconds_since_boot();
 		}
 		spin_unlock(&blocked_delegations_lock);
 	}
@@ -806,7 +805,7 @@ static void block_delegations(struct knfsd_fh *fh)
 	__set_bit((hash>>8)&255, bd->set[bd->new]);
 	__set_bit((hash>>16)&255, bd->set[bd->new]);
 	if (bd->entries == 0)
-		bd->swap_time = ktime_get_seconds();
+		bd->swap_time = seconds_since_boot();
 	bd->entries += 1;
 	spin_unlock(&blocked_delegations_lock);
 }
@@ -5483,7 +5482,7 @@ out:
 	return status;
 }
 
-static bool nfsd4_close_open_stateid(struct nfs4_ol_stateid *s)
+static void nfsd4_close_open_stateid(struct nfs4_ol_stateid *s)
 {
 	struct nfs4_client *clp = s->st_stid.sc_client;
 	bool unhashed;
@@ -5497,11 +5496,11 @@ static bool nfsd4_close_open_stateid(struct nfs4_ol_stateid *s)
 			put_ol_stateid_locked(s, &reaplist);
 		spin_unlock(&clp->cl_lock);
 		free_ol_stateid_reaplist(&reaplist);
-		return false;
 	} else {
 		spin_unlock(&clp->cl_lock);
 		free_ol_stateid_reaplist(&reaplist);
-		return unhashed;
+		if (unhashed)
+			move_to_close_lru(s, clp->net);
 	}
 }
 
@@ -5517,7 +5516,6 @@ nfsd4_close(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct nfs4_ol_stateid *stp;
 	struct net *net = SVC_NET(rqstp);
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
-	bool need_move_to_close_list;
 
 	dprintk("NFSD: nfsd4_close on file %pd\n", 
 			cstate->current_fh.fh_dentry);
@@ -5540,10 +5538,8 @@ nfsd4_close(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	 */
 	nfs4_inc_and_copy_stateid(&close->cl_stateid, &stp->st_stid);
 
-	need_move_to_close_list = nfsd4_close_open_stateid(stp);
+	nfsd4_close_open_stateid(stp);
 	mutex_unlock(&stp->st_mutex);
-	if (need_move_to_close_list)
-		move_to_close_lru(stp, net);
 
 	/* v4.1+ suggests that we send a special stateid in here, since the
 	 * clients should just ignore this anyway. Since this is not useful

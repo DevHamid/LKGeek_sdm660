@@ -12,8 +12,9 @@ fhci-y += fhci-mem.o fhci-tds.o fhci-sched.o
 fhci-$(CONFIG_FHCI_DEBUG) += fhci-dbg.o
 
 xhci-hcd-y := xhci.o xhci-mem.o xhci-ext-caps.o
-xhci-hcd-y += xhci-ring.o xhci-hub.o xhci-dbg.o
-xhci-hcd-y += xhci-trace.o
+xhci-hcd-y += xhci-ring.o xhci-hub.o
+xhci-hcd-$(CONFIG_DEBUG_KERNEL)	+= xhci-dbg.o
+xhci-hcd-$(CONFIG_TRACEPOINTS)	+= xhci-trace.o
 
 ifneq ($(CONFIG_USB_XHCI_DBGCAP), )
 	xhci-hcd-y += xhci-dbgcap.o xhci-dbgtty.o
@@ -50,6 +51,7 @@ obj-$(CONFIG_USB_EHCI_HCD_SPEAR)	+= ehci-spear.o
 obj-$(CONFIG_USB_EHCI_HCD_STI)	+= ehci-st.o
 obj-$(CONFIG_USB_EHCI_EXYNOS)	+= ehci-exynos.o
 obj-$(CONFIG_USB_EHCI_HCD_AT91) += ehci-atmel.o
+obj-$(CONFIG_USB_EHCI_MSM)      += ehci-msm.o
 obj-$(CONFIG_USB_EHCI_TEGRA)	+= ehci-tegra.o
 obj-$(CONFIG_USB_W90X900_EHCI)	+= ehci-w90x900.o
 

@@ -71,6 +71,7 @@ struct zoneref *__next_zones_zonelist(struct zoneref *z,
 
 	return z;
 }
+EXPORT_SYMBOL_GPL(__next_zones_zonelist);
 
 #ifdef CONFIG_ARCH_HAS_HOLES_MEMORYMODEL
 bool memmap_valid_within(unsigned long pfn,
@@ -94,6 +95,14 @@ void lruvec_init(struct lruvec *lruvec)
 
 	for_each_lru(lru)
 		INIT_LIST_HEAD(&lruvec->lists[lru]);
+
+	/*
+	 * MGLRU gen lists, timestamps, max_seq and mm_state must be
+	 * initialised here. Without this, every lrugen list head is NULL
+	 * (memset above) and enabling MGLRU at runtime inserts pages into
+	 * them - immediate corruption, freeze and reboot.
+	 */
+	lru_gen_init_lruvec(lruvec);
 }
 
 #if defined(CONFIG_NUMA_BALANCING) && !defined(LAST_CPUPID_NOT_IN_PAGE_FLAGS)

@@ -508,10 +508,8 @@ static int __inet_insert_ifa(struct in_ifaddr *ifa, struct nlmsghdr *nlh,
 		return ret;
 	}
 
-	if (!(ifa->ifa_flags & IFA_F_SECONDARY)) {
-		prandom_seed((__force u32) ifa->ifa_local);
+	if (!(ifa->ifa_flags & IFA_F_SECONDARY))
 		ifap = last_primary;
-	}
 
 	ifa->ifa_next = *ifap;
 	*ifap = ifa;
@@ -541,6 +539,10 @@ static int inet_set_ifa(struct net_device *dev, struct in_ifaddr *ifa)
 
 	ASSERT_RTNL();
 
+	if (!in_dev) {
+		inet_free_ifa(ifa);
+		return -ENOBUFS;
+	}
 	ipv4_devconf_setall(in_dev);
 	neigh_parms_data_state_setall(in_dev->arp_parms);
 	if (ifa->ifa_dev != in_dev) {
@@ -1109,8 +1111,6 @@ int devinet_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr)
 
 		if (!ifa) {
 			ret = -ENOBUFS;
-			if (!in_dev)
-				break;
 			ifa = inet_alloc_ifa();
 			if (!ifa)
 				break;
@@ -2317,6 +2317,8 @@ static struct devinet_sysctl_table {
 					      "route_localnet"),
 		DEVINET_SYSCTL_FLUSHING_ENTRY(DROP_UNICAST_IN_L2_MULTICAST,
 					      "drop_unicast_in_l2_multicast"),
+		DEVINET_SYSCTL_RW_ENTRY(NF_IPV4_DEFRAG_SKIP,
+					"nf_ipv4_defrag_skip"),
 	},
 };
 

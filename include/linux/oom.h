@@ -64,7 +64,11 @@ static inline bool oom_task_origin(const struct task_struct *p)
 
 static inline bool tsk_is_oom_victim(struct task_struct * tsk)
 {
+#ifdef CONFIG_ANDROID_SIMPLE_LMK
+	return test_ti_thread_flag(task_thread_info(tsk), TIF_MEMDIE);
+#else
 	return tsk->signal->oom_mm;
+#endif
 }
 
 /*
@@ -114,6 +118,8 @@ extern void oom_killer_enable(void);
 
 extern struct task_struct *find_lock_task_mm(struct task_struct *p);
 
+extern void dump_tasks(struct mem_cgroup *memcg,
+		       const nodemask_t *nodemask);
 /* sysctls */
 extern int sysctl_oom_dump_tasks;
 extern int sysctl_oom_kill_allocating_task;

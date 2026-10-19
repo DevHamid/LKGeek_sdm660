@@ -1032,7 +1032,7 @@ static int sctp_setsockopt_bindx(struct sock *sk,
 		return -EINVAL;
 
 	kaddrs = memdup_user(addrs, addrs_size);
-	if (unlikely(IS_ERR(kaddrs)))
+	if (IS_ERR(kaddrs))
 		return PTR_ERR(kaddrs);
 
 	/* Walk through the addrs buffer and count the number of addresses. */
@@ -1362,7 +1362,7 @@ static int __sctp_setsockopt_connectx(struct sock *sk,
 		return -EINVAL;
 
 	kaddrs = memdup_user(addrs, addrs_size);
-	if (unlikely(IS_ERR(kaddrs)))
+	if (IS_ERR(kaddrs))
 		return PTR_ERR(kaddrs);
 
 	/* Allow security module to validate connectx addresses. */
@@ -5595,7 +5595,7 @@ out:
 static int sctp_getsockopt_peer_addr_params(struct sock *sk, int len,
 					    char __user *optval, int __user *optlen)
 {
-	struct sctp_paddrparams  params;
+	struct sctp_paddrparams params = { 0 };
 	struct sctp_transport   *trans = NULL;
 	struct sctp_association *asoc = NULL;
 	struct sctp_sock        *sp = sctp_sk(sk);
@@ -6893,7 +6893,7 @@ static int sctp_getsockopt_assoc_stats(struct sock *sk, int len,
 				       char __user *optval,
 				       int __user *optlen)
 {
-	struct sctp_assoc_stats sas;
+	struct sctp_assoc_stats sas = { 0 };
 	struct sctp_association *asoc = NULL;
 
 	/* User must provide at least the assoc id */
@@ -7845,10 +7845,8 @@ static int sctp_listen_start(struct sock *sk, int backlog)
 	 */
 	inet_sk_set_state(sk, SCTP_SS_LISTENING);
 	if (!ep->base.bind_addr.port) {
-		if (sctp_autobind(sk)) {
-			inet_sk_set_state(sk, SCTP_SS_CLOSED);
+		if (sctp_autobind(sk))
 			return -EAGAIN;
-		}
 	} else {
 		if (sctp_get_port(sk, inet_sk(sk)->inet_num)) {
 			inet_sk_set_state(sk, SCTP_SS_CLOSED);

@@ -677,12 +677,7 @@ static int begin_cmd(struct send_ctx *sctx, int cmd)
 	if (WARN_ON(!sctx->send_buf))
 		return -EINVAL;
 
-	if (unlikely(sctx->send_size != 0)) {
-		btrfs_err(sctx->send_root->fs_info,
-			  "send: command header buffer not empty cmd %d offset %llu",
-			  cmd, sctx->send_off);
-		return -EINVAL;
-	}
+	BUG_ON(sctx->send_size);
 
 	sctx->send_size += sizeof(*hdr);
 	hdr = (struct btrfs_cmd_header *)sctx->send_buf;
@@ -963,15 +958,7 @@ static int iterate_inode_ref(struct btrfs_root *root, struct btrfs_path *path,
 					ret = PTR_ERR(start);
 					goto out;
 				}
-				if (unlikely(start < p->buf)) {
-					btrfs_err(root->fs_info,
-			"send: path ref buffer underflow for key (%llu %u %llu)",
-						  found_key->objectid,
-						  found_key->type,
-						  found_key->offset);
-					ret = -EINVAL;
-					goto out;
-				}
+				BUG_ON(start < p->buf);
 			}
 			p->start = start;
 		} else {
