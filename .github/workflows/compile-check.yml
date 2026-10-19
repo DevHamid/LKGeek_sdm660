@@ -13,8 +13,6 @@ on:
         default: 'vendor/wayne-oss-perf_defconfig'
   push:
     branches: [devhamid-remastered]
-    paths-ignore:
-      - '.github/**'
 
 concurrency:
   group: compile-check-${{ github.ref }}
@@ -24,59 +22,58 @@ jobs:
   check:
     name: compile-check
     runs-on: ubuntu-22.04
-    timeout-minutes: 25
+    timeout-minutes: 30
+    env:
+      TARGETS: ${{ inputs.targets || 'vdso_prepare kernel/time/posix-timers.o kernel/cpu.o kernel/sched/fair.o' }}
+      DEFCONFIG: ${{ inputs.defconfig || 'vendor/wayne-oss-perf_defconfig' }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 1
 
-      - name: Cache clang-aosp
+      - name: Restore clang-aosp
         id: clangcache
         uses: actions/cache@v4
         with:
-          path: /opt/clang-aosp
-          key: clang-aosp-r547379-v1
+          path: ${{ runner.temp }}/clang-aosp
+          key: clang-aosp-r547379-v2
 
       - name: Fetch clang-aosp
         if: steps.clangcache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
-          mkdir -p /opt/clang-aosp
-          curl -sSL -o /tmp/clang.tar.gz \
-            https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master/clang-r547379.tar.gz
-          tar -C /opt/clang-aosp -zxf /tmp/clang.tar.gz
-          /opt/clang-aosp/bin/clang --version | head -1
+          mkdir -p "$RUNNER_TEMP/clang-aosp"
+          curl -sSL -o "$RUNNER_TEMP/clang.tar.gz" \
+            "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master/clang-r547379.tar.gz"
+          tar -C "$RUNNER_TEMP/clang-aosp" -zxf "$RUNNER_TEMP/clang.tar.gz"
 
-      - name: Fetch binutils (aarch64)
+      - name: Toolchain
         run: |
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
             bc bison flex libssl-dev libelf-dev make
-          ld.lld --version | head -1 || true
+          "$RUNNER_TEMP/clang-aosp/bin/clang" --version | head -1
 
-      - name: kconfig
+      - name: Configure
         run: |
           set -euo pipefail
-          export PATH=/opt/clang-aosp/bin:$PATH
+          export PATH="$RUNNER_TEMP/clang-aosp/bin:$PATH"
           make ARCH=arm64 O=out \
             CC=clang LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- \
-            "${{ inputs.defconfig }}"
-          grep -E '^CONFIG_(HAVE_GENERIC_VDSO|GENERIC_GETTIMEOFDAY)=' out/.config || {
-            echo "::error::vdso Kconfig selects missing from resolved .config"; exit 1; }
+            "$DEFCONFIG"
+          for c in HAVE_GENERIC_VDSO GENERIC_GETTIMEOFDAY; do
+            grep -q "^CONFIG_$c=y" out/.config \
+              && echo "ok CONFIG_$c=y" \
+              || { echo "::error::CONFIG_$c missing from resolved .config"; exit 1; }
+          done
 
-      - name: Compile targets
+      - name: Compile
         run: |
           set -euo pipefail
-          export PATH=/opt/clang-aosp/bin:$PATH
+          export PATH="$RUNNER_TEMP/clang-aosp/bin:$PATH"
           make -j"$(nproc)" ARCH=arm64 O=out \
             CC=clang LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- \
-            ${{ inputs.targets }}
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "targets: ${{ inputs.targets }}"
-          echo "defconfig: ${{ inputs.defconfig }}"
+            $TARGETS
