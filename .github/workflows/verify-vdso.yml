@@ -1,0 +1,22 @@
+name: Verify vDSO compile
+on:
+  push:
+    branches: [ devhamid-remastered ]
+  workflow_dispatch:
+
+jobs:
+  vdso-prepare:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang lld make bc bison flex libssl-dev gcc-aarch64-linux-gnu
+
+      - name: Configure
+        run: make ARCH=arm64 O=out vendor/wayne-oss-perf_defconfig
+
+      - name: vdso_prepare (the step that failed)
+        run: make ARCH=arm64 O=out CC=clang LD=ld.lld CROSS_COMPILE=aarch64-linux-gnu- vdso_prepare -j$(nproc)
