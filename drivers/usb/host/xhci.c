@@ -4205,7 +4205,7 @@ static int xhci_setup_device(struct usb_hcd *hcd, struct usb_device *udev,
 
 		mutex_unlock(&xhci->mutex);
 		ret = xhci_disable_slot(xhci, udev->slot_id);
-		xhci_free_virt_device(xhci, udev->slot_id);
+		xhci_free_virt_device(xhci, xhci->devs[udev->slot_id], udev->slot_id);
 		if (!ret)
 			xhci_alloc_dev(hcd, udev);
 		kfree(command->completion);
