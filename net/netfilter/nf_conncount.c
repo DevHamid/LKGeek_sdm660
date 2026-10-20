@@ -403,7 +403,12 @@ insert_tree(struct net *net,
 	bool do_gc = true, refcounted = false;
 	unsigned int count = 0, gc_count = 0;
 	u8 keylen = data->keylen;
-	bool do_gc = true;
+	struct rb_node *parent;
+	struct rb_node **rbnode;
+	struct nf_conncount_rb *rbconn;
+	struct nf_conncount_tuple *conn;
+	struct nf_conn *ct = NULL;
+	struct nf_conntrack_tuple tuple;
 
 	spin_lock_bh(&nf_conncount_locks[hash]);
 restart:
@@ -472,18 +477,6 @@ restart:
 		rb_link_node_rcu(&rbconn->node, parent, rbnode);
 		rb_insert_color(&rbconn->node, root);
 	}
-
-	conn->tuple = *tuple;
-	conn->zone = *zone;
-	memcpy(rbconn->key, key, sizeof(u32) * keylen);
-
-	nf_conncount_list_init(&rbconn->list);
-	list_add(&conn->node, &rbconn->list.head);
-	count = 1;
-	rbconn->list.count = count;
-
-	rb_link_node_rcu(&rbconn->node, parent, rbnode);
-	rb_insert_color(&rbconn->node, root);
 out_unlock:
 	if (refcounted)
 		nf_ct_put(ct);
