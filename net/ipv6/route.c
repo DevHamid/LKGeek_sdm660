@@ -2286,15 +2286,16 @@ static struct dst_entry *ip6_negative_advice(struct dst_entry *dst)
 {
 	struct rt6_info *rt = (struct rt6_info *) dst;
 
-	if (rt->rt6i_flags & RTF_CACHE) {
+	if (rt && (rt->rt6i_flags & RTF_CACHE)) {
 		rcu_read_lock();
 		if (rt6_check_expired(rt)) {
 			/* rt/dst can not be destroyed yet,
 			 * because of rcu_read_lock()
 			 */
-			sk_dst_reset(sk);
 			rt6_remove_exception_rt(rt);
+			dst = NULL;
 		}
+		rcu_read_unlock();
 	}
 	return dst;
 }
