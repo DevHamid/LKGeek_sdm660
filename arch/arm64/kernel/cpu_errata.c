@@ -689,6 +689,25 @@ has_neoverse_n1_erratum_1542419(const struct arm64_cpu_capabilities *entry,
 	return is_midr_in_range(midr, &range) && has_dic;
 }
 
+#ifdef CONFIG_ARM64_WORKAROUND_REPEAT_TLBI
+
+static const struct arm64_cpu_capabilities arm64_repeat_tlbi_list[] = {
+#ifdef CONFIG_QCOM_FALKOR_ERRATUM_1009
+	{
+		ERRATA_MIDR_REV(MIDR_QCOM_FALKOR_V1, 0, 0)
+	},
+#endif
+#ifdef CONFIG_ARM64_ERRATUM_1286807
+	{
+		/* Cortex-A76 r0p0 - r3p0 */
+		ERRATA_MIDR_RANGE(MIDR_CORTEX_A76, 0, 0, 3, 0)
+	},
+#endif
+	{}
+};
+
+#endif
+
 #ifdef CONFIG_HARDEN_EL2_VECTORS
 
 static const struct midr_range arm64_harden_el2_vectors[] = {
