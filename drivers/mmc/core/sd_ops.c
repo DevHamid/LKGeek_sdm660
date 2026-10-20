@@ -265,7 +265,9 @@ int mmc_send_if_cond_pcie(struct mmc_host *host, u32 ocr)
 		 * According to the spec the clock shall also be gated, but
 		 * let's leave this to the host driver for more flexibility.
 		 */
-		return host->ops->init_sd_express(host, &host->ios);
+		if (host->ops->init_sd_express)
+			return host->ops->init_sd_express(host, &host->ios);
+		return 0;
 	}
 
 	return 0;

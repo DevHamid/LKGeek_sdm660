@@ -200,6 +200,8 @@ struct mmc_host_ops {
 	int	(*select_drive_strength)(struct mmc_card *card,
 					 unsigned int max_dtr, int host_drv,
 					 int card_drv, int *drv_type);
+	/* Optional callback to init SD Express (PCIe) link */
+	int	(*init_sd_express)(struct mmc_host *host, struct mmc_ios *ios);
 	void	(*hw_reset)(struct mmc_host *host);
 	void    (*enter_dbg_mode)(struct mmc_host *host);
 	void    (*exit_dbg_mode)(struct mmc_host *host);
