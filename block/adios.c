@@ -25,6 +25,7 @@
 #include "blk.h"
 #include "blk-mq.h"
 #include "blk-mq-sched.h"
+#include "blk-stat.h"
 
 #define ADIOS_VERSION "3.3.0"
 
@@ -810,7 +811,7 @@ static void remove_request(struct adios_data *ad, struct request *rq) {
 }
 
 // We limit the depth of request allocation for asynchronous and write requests
-static void adios_limit_depth(blk_opf_t opf, struct blk_mq_alloc_data *data) {
+static void adios_limit_depth(unsigned int opf, struct blk_mq_alloc_data *data) {
 	struct adios_data *ad = data->q->elevator->elevator_data;
 
 	// Do not throttle synchronous reads
@@ -1527,7 +1528,7 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 
 	eq->elevator_data = ad;
 
-	ad->is_rotational = !!(q->limits.features & BLK_FEAT_ROTATIONAL);
+	ad->is_rotational = !blk_queue_nonrot(q);
 	ad->global_latency_window = (ad->is_rotational)?
 		default_global_latency_window_rotational:
 		default_global_latency_window;
@@ -1546,8 +1547,6 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 
 	timer_setup(&ad->update_timer, update_timer_callback, 0);
 
-	/* We dispatch from request queue wide instead of hw queue */
-	blk_queue_flag_set(QUEUE_FLAG_SQ_SCHED, q);
 
 	ad->queue = q;
 	blk_stat_enable_accounting(q);
@@ -1583,7 +1582,7 @@ put_eq:
 static void adios_exit_sched(struct elevator_queue *e) {
 	struct adios_data *ad = e->elevator_data;
 
-	timer_shutdown_sync(&ad->update_timer);
+	del_timer_sync(&ad->update_timer);
 
 	for (int i = 0; i < 2; i++)
 		WARN_ON_ONCE(!list_empty(&ad->prio_queue[i]));
@@ -1610,7 +1609,10 @@ static void adios_exit_sched(struct elevator_queue *e) {
 	if (ad->dl_group_pool)
 		kmem_cache_destroy(ad->dl_group_pool);
 
-	blk_stat_disable_accounting(ad->queue);
+	spin_lock(&ad->queue->stats->lock);
+	ad->queue->stats->enable_accounting = false;
+	blk_queue_flag_clear(QUEUE_FLAG_STATS, ad->queue);
+	spin_unlock(&ad->queue->stats->lock);
 
 	kfree(ad);
 }
