@@ -337,6 +337,7 @@ static bool lm_update_small_buckets(struct latency_model *model,
 	u8  outlier_threshold_bucket = 0;
 	u8  outlier_percentile = LM_OUTLIER_PERCENTILE;
 	u8  reduction;
+	u8  i;
 
 	if (count_all)
 		outlier_percentile = 100;
@@ -345,7 +346,7 @@ static bool lm_update_small_buckets(struct latency_model *model,
 	threshold_weight = (total_weight * outlier_percentile) / 100;
 
 	// Identify the bucket that corresponds to the outlier threshold
-	for (u8 i = 0; i < LM_LAT_BUCKET_COUNT; i++) {
+	for (i = 0; i < LM_LAT_BUCKET_COUNT; i++) {
 		cumulative_weight += buckets[i].sum_of_weights;
 		if (cumulative_weight >= threshold_weight) {
 			outlier_threshold_bucket = i;
@@ -354,7 +355,7 @@ static bool lm_update_small_buckets(struct latency_model *model,
 	}
 
 	// Calculate the average latency, excluding outliers
-	for (u8 i = 0; i <= outlier_threshold_bucket; i++) {
+	for (i = 0; i <= outlier_threshold_bucket; i++) {
 		struct latency_bucket_small *bucket = &buckets[i];
 		if (i < outlier_threshold_bucket) {
 			sum_latency += bucket->weighted_sum_latency;
@@ -410,6 +411,7 @@ static bool lm_update_large_buckets(struct latency_model *model,
 	u8  outlier_threshold_bucket = 0;
 	u8  outlier_percentile = LM_OUTLIER_PERCENTILE;
 	u8  reduction;
+	u8  i;
 
 	if (count_all)
 		outlier_percentile = 100;
@@ -418,7 +420,7 @@ static bool lm_update_large_buckets(struct latency_model *model,
 	threshold_weight = (total_weight * outlier_percentile) / 100;
 
 	// Identify the bucket that corresponds to the outlier threshold
-	for (u8 i = 0; i < LM_LAT_BUCKET_COUNT; i++) {
+	for (i = 0; i < LM_LAT_BUCKET_COUNT; i++) {
 		cumulative_weight += buckets[i].sum_of_weights;
 		if (cumulative_weight >= threshold_weight) {
 			outlier_threshold_bucket = i;
@@ -427,7 +429,7 @@ static bool lm_update_large_buckets(struct latency_model *model,
 	}
 
 	// Calculate the average latency and block size, excluding outliers
-	for (u8 i = 0; i <= outlier_threshold_bucket; i++) {
+	for (i = 0; i <= outlier_threshold_bucket; i++) {
 		struct latency_bucket_large *bucket = &buckets[i];
 		if (i < outlier_threshold_bucket) {
 			sum_latency += bucket->weighted_sum_latency;
@@ -616,7 +618,7 @@ static void latency_model_input(struct adios_data *ad,
 	struct latency_model_params *params;
 
 	local_irq_save(flags);
-	buckets = per_cpu_ptr(model->pcpu_buckets, __smp_processor_id());
+	buckets = per_cpu_ptr(model->pcpu_buckets, raw_smp_processor_id());
 
 	rcu_read_lock();
 	params = rcu_dereference(model->params);
@@ -856,7 +858,8 @@ static void adios_merged_requests(struct request_queue *q, struct request *req,
 }
 
 // Try to merge a bio into an existing rq before associating it with an rq
-static bool adios_bio_merge(struct request_queue *q, struct bio *bio) {
+static bool adios_bio_merge(struct blk_mq_hw_ctx *hctx, struct bio *bio) {
+	struct request_queue *q = hctx->queue;
 	unsigned long flags;
 	struct adios_data *ad = q->elevator->elevator_data;
 	struct request *free = NULL;
@@ -876,7 +879,7 @@ static bool adios_bio_merge(struct request_queue *q, struct bio *bio) {
 
 static bool merge_or_insert_to_dl_tree(struct adios_data *ad,
 		struct request *rq, struct request_queue *q, struct list_head *free) {
-	if (blk_mq_sched_try_insert_merge(q, rq, free))
+	if (blk_mq_sched_try_insert_merge(q, rq))
 		return true;
 
 	bool dl_idx = adios_optype_not_read(rq);
@@ -894,6 +897,7 @@ static bool merge_or_insert_to_dl_tree(struct adios_data *ad,
 static void insert_to_prio_queue(struct adios_data *ad,
 		struct request *rq, bool pq_idx) {
 	struct adios_rq_data *rd = get_rq_data(rq);
+	unsigned long flags;
 
 	/* We're sure that rd->managed == true */
 	union adios_in_flight_rqs ifr = {
@@ -1022,7 +1026,7 @@ static struct adios_rq_data *get_dl_first_rd(struct adios_data *ad, bool idx) {
 
 // Comparison function for sorting requests by block address
 static int cmp_rq_pos(void *priv,
-		const struct list_head *a, const struct list_head *b) {
+		struct list_head *a, struct list_head *b) {
 	struct request *rq_a = list_entry(a, struct request, queuelist);
 	struct request *rq_b = list_entry(b, struct request, queuelist);
 	u64 pos_a = blk_rq_pos(rq_a);
@@ -1463,8 +1467,8 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 		goto destroy_rq_data_pool;
 	}
 
-	for (int i = 0; i < ADIOS_PQ_LEVELS; i++)
-		INIT_LIST_HEAD(&ad->prio_queue[i]);
+	for (int j = 0; j < ADIOS_PQ_LEVELS; j++)
+		INIT_LIST_HEAD(&ad->prio_queue[j]);
 
 	for (u8 i = 0; i < ADIOS_DL_TYPES; i++) {
 		ad->dl_tree[i] = RB_ROOT_CACHED;
@@ -1584,8 +1588,8 @@ static void adios_exit_sched(struct elevator_queue *e) {
 
 	del_timer_sync(&ad->update_timer);
 
-	for (int i = 0; i < 2; i++)
-		WARN_ON_ONCE(!list_empty(&ad->prio_queue[i]));
+	for (int j = 0; j < 2; j++)
+		WARN_ON_ONCE(!list_empty(&ad->prio_queue[j]));
 
 	for (u8 i = 0; i < ADIOS_OPTYPES; i++) {
 		struct latency_model *model = &ad->latency_model[i];
@@ -1609,10 +1613,7 @@ static void adios_exit_sched(struct elevator_queue *e) {
 	if (ad->dl_group_pool)
 		kmem_cache_destroy(ad->dl_group_pool);
 
-	spin_lock(&ad->queue->stats->lock);
-	ad->queue->stats->enable_accounting = false;
 	blk_queue_flag_clear(QUEUE_FLAG_STATS, ad->queue);
-	spin_unlock(&ad->queue->stats->lock);
 
 	kfree(ad);
 }
@@ -1790,6 +1791,7 @@ static ssize_t adios_read_priority_show(
 static ssize_t adios_read_priority_store(
 		struct elevator_queue *e, const char *page, size_t count) {
 	struct adios_data *ad = e->elevator_data;
+	unsigned long flags;
 	int prio;
 	int ret;
 
