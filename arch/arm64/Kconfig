@@ -1385,6 +1385,35 @@ endmenu
 
 menu "Boot options"
 
+choice
+	prompt "Kernel compression mode"
+	default BUILD_ARM64_KERNEL_COMPRESSION_GZIP
+
+config BUILD_ARM64_KERNEL_COMPRESSION_NONE
+	bool "None"
+
+config BUILD_ARM64_KERNEL_COMPRESSION_GZIP
+	bool "Gzip"
+
+endchoice
+
+config BUILD_ARM64_APPENDED_DTB_IMAGE
+	bool "Build a legacy appended DTB image to the kernel image"
+
+config BUILD_ARM64_APPENDED_DTB_IMAGE_NAMES
+	string "Names of device trees to append"
+	depends on BUILD_ARM64_APPENDED_DTB_IMAGE
+	help
+	  Specifies the list of device trees to be appended to the kernel
+	  image. If no names are specified, all dtbs in dtb-y will be
+	  appended.
+
+config BUILD_ARM64_DT_OVERLAY
+	bool "Build DT overlay for the kernel image"
+	depends on OF_OVERLAY
+	help
+	  Enabled DT overlay support in the kernel image.
+
 config ARM64_ACPI_PARKING_PROTOCOL
 	bool "Enable support for the ARM64 ACPI parking protocol"
 	depends on ACPI
