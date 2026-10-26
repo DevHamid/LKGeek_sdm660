@@ -119,8 +119,7 @@ static void inotify_fdinfo(struct seq_file *m, struct fsnotify_mark *mark)
 						inode_mark->wd, ino, dev,
 						inotify_mark_user_mask(mark));
 				show_mark_fhandle(m, inode);
-				seq_putc(m, '
-');
+				seq_putc(m, '\n');
 				iput(inode);
 				return;
 			}
