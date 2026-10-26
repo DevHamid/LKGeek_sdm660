@@ -22,13 +22,16 @@ static __always_inline bool nm_is_uid_blocked(uid_t target_uid)
     if (likely(!rcu_access_pointer(nm_uids)))
         return false;
 
-    rcu_guard();
+    rcu_read_lock();
     if ((arr = rcu_dereference(nm_uids)) && nm_uid_bloom_test(arr, target_uid)) {
         for (int i = 0; i < arr->count; i++) {
-            if (arr->uids[i] == target_uid)
+            if (arr->uids[i] == target_uid) {
+                rcu_read_unlock();
                 return true;
+            }
         }
     }
+    rcu_read_unlock();
     return false;
 }
 
@@ -180,13 +183,15 @@ static NM_ACTOR_RET nm_actor_proxy(struct dir_context *ctx, const char *name, in
     NM_ACTOR_RET ret;
 
     {
-        rcu_guard();
+        rcu_read_lock();
         struct nm_leaf *leaf = nm_find_leaf_in_dir(proxy->dir_node, name, namelen);
         struct nm_rule *rule = leaf ? nm_select_rule(leaf, proxy->fsuid) : NULL;
         if (unlikely(rule && (!proxy->native_view || nm_rule_needs_readdir(leaf, rule)))) {
+            rcu_read_unlock();
             proxy->ctx.pos = offset;
             return NM_ACTOR_CONTINUE;
         }
+        rcu_read_unlock();
     }
 
     orig_ctx->pos = proxy->ctx.pos;
@@ -1883,7 +1888,7 @@ static int nm_process_payload(unsigned long user_addr)
             buf_ptr = payload->buffer;
             buf_end = payload->buffer + sizeof(payload->buffer);
 
-            rcu_guard();
+            rcu_read_lock();
             struct nm_leaf *leaf;
             hash_for_each_rcu(nm_leaves_ht, bkt, leaf, ht_node) {
                 struct nm_rule_array *rules = rcu_dereference(leaf->rules);
@@ -1892,7 +1897,7 @@ static int nm_process_payload(unsigned long user_addr)
                 for (int i = 0; i < rules->count; i++) {
                     struct nm_rule *r = &rules->rules[i];
                     if (current_idx++ < payload->arg1) { heap += r->r_len; continue; }
-                    if ((sizeof(struct nm_rule_hdr) + leaf->v_len + r->r_len) > (size_t)(buf_end - buf_ptr)) { current_idx--; goto list_done; }
+                    if ((sizeof(struct nm_rule_hdr) + leaf->v_len + r->r_len) > (size_t)(buf_end - buf_ptr)) { rcu_read_unlock(); current_idx--; goto list_done; }
                     *(struct nm_rule_hdr *)buf_ptr = (struct nm_rule_hdr){
                         .flags = r->flags, .v_len = leaf->v_len, .r_len = r->r_len,
                         .uid = r->target_uid, .uid_end = r->uid_end,
@@ -1904,6 +1909,7 @@ static int nm_process_payload(unsigned long user_addr)
                     heap += r->r_len;
                 }
             }
+            rcu_read_unlock();
         list_done:
             payload->data_size = buf_ptr - payload->buffer;
             payload->arg1 = current_idx;
@@ -1916,12 +1922,13 @@ static int nm_process_payload(unsigned long user_addr)
             struct nm_uid_array *arr;
             int count = 0;
 
-            rcu_guard();
+            rcu_read_lock();
             if ((arr = rcu_dereference(nm_uids))) {
                 while (start_idx < arr->count && count < (sizeof(payload->buffer) / sizeof(*out))) {
                     out[count++] = arr->uids[start_idx++];
                 }
             }
+            rcu_read_unlock();
             payload->data_size = count * sizeof(*out);
             payload->arg1 = start_idx;
             break;
