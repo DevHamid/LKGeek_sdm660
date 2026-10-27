@@ -1434,6 +1434,137 @@ sd_init(struct sched_domain_topology_level *tl,
 		atomic_set(&sd->shared->nr_busy_cpus, sd_weight);
 
 	sd->private = sdd;
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	if (sd->flags & SD_SHARE_PKG_RESOURCES) {
+		int range = cpumask_last(sched_domain_span(sd)) - sd_id + 1;
+
+		sd->shared->poc_cpu_base = sd_id;
+		sd->shared->poc_affinity_shift = sd_id & 63;
+
+		sd->shared->nr_idle_scan = 1;
+
+		if (range <= 64) {
+			sd->shared->poc_fast_eligible = true;
+			if (sd_id & 63)
+				static_branch_disable(&sched_poc_aligned);
+			if (range > 32)
+				static_branch_disable(&sched_poc_packed);
+		} else {
+			sd->shared->poc_fast_eligible = false;
+			static_branch_disable(&sched_poc_packed);
+		}
+		memset(sd->shared->poc_idle_cpus, 0,
+		       sizeof(sd->shared->poc_idle_cpus));
+		atomic64_set(&sd->shared->poc_idle_cpus_mask, 0);
+#ifdef CONFIG_SCHED_SMT
+		memset(sd->shared->poc_idle_cores, 0,
+		       sizeof(sd->shared->poc_idle_cores));
+		atomic64_set(&sd->shared->poc_idle_cores_mask, 0);
+#endif
+		{
+			u64 members = 0;
+			int cpu_iter;
+
+			for_each_cpu(cpu_iter, sched_domain_span(sd)) {
+				int bit = cpu_iter - sd_id;
+
+				if ((unsigned int)bit < 64)
+					members |= 1ULL << bit;
+			}
+			sd->shared->poc_llc_members = members;
+		}
+
+#ifdef CONFIG_SCHED_SMT
+		memset(sd->shared->poc_smt_mask, 0,
+		       sizeof(sd->shared->poc_smt_mask));
+		if (sd->shared->poc_fast_eligible) {
+			int cpu_iter;
+
+			for_each_cpu(cpu_iter, sched_domain_span(sd)) {
+				int bit = cpu_iter - sd_id;
+				int sibling;
+				u64 mask = 0;
+
+				for_each_cpu(sibling, cpu_smt_mask(cpu_iter)) {
+					int sib_bit;
+
+					sib_bit = sibling - sd_id;
+					if (sib_bit >= 0 && sib_bit < 64)
+						mask |= 1ULL << sib_bit;
+				}
+				if (bit >= 0 && bit < 64)
+					sd->shared->poc_smt_mask[bit] = mask;
+			}
+		}
+
+		sd->shared->poc_smt_shift = 1;
+		sd->shared->poc_primary_mask = 0;
+
+		if (sd->shared->poc_fast_eligible) {
+			int cpu_iter;
+			bool all_2way = true;
+			bool all_consecutive = true;
+			int uniform_stride = -1;
+			u64 primary_mask = 0;
+
+			for_each_cpu(cpu_iter, sched_domain_span(sd)) {
+				int bit = cpu_iter - sd_id;
+
+				if (bit < 0 || bit >= 64)
+					continue;
+				{
+					u64 mask = sd->shared->poc_smt_mask[bit];
+					int ways = hweight64(mask);
+
+					if (ways != 2) {
+						all_2way = false;
+						all_consecutive = false;
+						break;
+					}
+
+					{
+						int lo = __ffs(mask);
+						int hi = __fls(mask);
+						int stride = hi - lo;
+
+						primary_mask |= 1ULL << lo;
+
+						if ((lo & 1) || mask != (3ULL << lo))
+							all_consecutive = false;
+
+						if (uniform_stride < 0)
+							uniform_stride = stride;
+						else if (stride != uniform_stride)
+							all_2way = false;
+					}
+				}
+			}
+
+			if (!all_consecutive)
+				static_branch_disable(
+					&sched_poc_smt_consecutive);
+
+			if (all_2way && uniform_stride > 0) {
+				sd->shared->poc_smt_shift =
+					(u8)uniform_stride;
+				sd->shared->poc_primary_mask = primary_mask;
+			} else {
+				static_branch_disable(
+					&sched_poc_smt_consecutive);
+				static_branch_disable(
+					&sched_poc_smt_uniform);
+			}
+		}
+#endif /* CONFIG_SCHED_SMT */
+
+		memset(sd->shared->poc_cluster_mask, 0,
+		       sizeof(sd->shared->poc_cluster_mask));
+
+		sd->shared->poc_cluster_valid = false;
+	}
+#endif /* CONFIG_SCHED_POC_SELECTOR */
+
+	sd->private = sdd;
 
 	return sd;
 }

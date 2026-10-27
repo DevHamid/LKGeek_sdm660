@@ -954,3 +954,134 @@ struct cpufreq_governor *cpufreq_default_governor(void)
 #endif
 
 cpufreq_governor_init(schedutil_gov);
+/*************** Exported helpers for external cpufreq governors ***************/
+
+/*
+ * 4.9/4.19 keeps decay_load() and runnable_avg_yN_inv[] file-static inside
+ * kernel/sched/fair.c, so the PELT decay the Reflex governor needs is
+ * replicated here. This is 4.9's fair.c copy, verbatim.
+ */
+#define RFX_LOAD_AVG_PERIOD 32
+
+/* Precomputed fixed inverse multiplies for multiplication by y^n */
+static const u32 rfx_runnable_avg_yN_inv[] = {
+	0xffffffff, 0xfa83b2da, 0xf5257d14, 0xefe4b99a, 0xeac0c6e6, 0xe5b906e6,
+	0xe0ccdeeb, 0xdbfbb796, 0xd744fcc9, 0xd2a81d91, 0xce248c14, 0xc9b9bd85,
+	0xc5672a10, 0xc12c4cc9, 0xbd08a39e, 0xb8fbaf46, 0xb504f333, 0xb123f581,
+	0xad583ee9, 0xa9a15ab4, 0xa5fed6a9, 0xa2704302, 0x9ef5325f, 0x9b8d39b9,
+	0x9837f050, 0x94f4efa8, 0x91c3d373, 0x8ea4398a, 0x8b95c1e3, 0x88980e80,
+	0x85aac367, 0x82cd8698,
+};
+
+/*
+ * Approximate:
+ *   val * y^n,    where y^32 ~= 0.5 (~1 scheduling period)
+ */
+static u64 rfx_decay_load(u64 val, u64 n)
+{
+	unsigned int local_n;
+
+	if (!n)
+		return val;
+	else if (unlikely(n > RFX_LOAD_AVG_PERIOD * 63))
+		return 0;
+
+	/* after bounds checking we can collapse to 32-bit */
+	local_n = n;
+
+	/*
+	 * As y^PERIOD = 1/2, we can combine
+	 *    y^n = 1/2^(n/PERIOD) * y^(n%PERIOD)
+	 * With a look-up table which covers y^n (n<PERIOD)
+	 *
+	 * To achieve constant time decay_load.
+	 */
+	if (unlikely(local_n >= RFX_LOAD_AVG_PERIOD)) {
+		val >>= local_n / RFX_LOAD_AVG_PERIOD;
+		local_n %= RFX_LOAD_AVG_PERIOD;
+	}
+
+	val = mul_u64_u32_shr(val, rfx_runnable_avg_yN_inv[local_n], 32);
+	return val;
+}
+
+/**
+ * cpufreq_pelt_decay - Decay a value over a span exactly as PELT does.
+ * @val: the value to decay.
+ * @delta_ns: the span, in ns; counted in whole PELT periods (1024 * 1024 ns).
+ *
+ * For cpufreq governors that keep their own PELT-paced signal.
+ */
+u64 cpufreq_pelt_decay(u64 val, u64 delta_ns)
+{
+	return rfx_decay_load(val, delta_ns >> 20);
+}
+EXPORT_SYMBOL_GPL(cpufreq_pelt_decay);
+
+/**
+ * cpufreq_get_capacity_ref_freq - Get the reference frequency for capacity
+ * scaling of a given cpufreq policy.
+ * @policy: the cpufreq policy of the CPU in question.
+ *
+ * Return: the reference CPU frequency.
+ *
+ * 4.9 has no get_capacity_ref_freq(): there is no per-policy reference
+ * frequency distinct from cpuinfo.max_freq, so use that.
+ */
+unsigned long cpufreq_get_capacity_ref_freq(struct cpufreq_policy *policy)
+{
+	return policy->cpuinfo.max_freq;
+}
+EXPORT_SYMBOL_GPL(cpufreq_get_capacity_ref_freq);
+
+/**
+ * cpufreq_get_effective_util - Get effective CPU utilization for frequency
+ * scaling, combining all scheduling classes and applying DVFS headroom.
+ * @cpu: the CPU number.
+ * @boost: additional utilization boost (e.g. from IO wait).
+ * @out_util: pointer to store the effective utilization (with DVFS headroom).
+ * @out_bw_min: pointer to store the minimum bandwidth requirement.
+ * @out_bw_max: pointer to store the maximum (allowed) performance level,
+ *		as required by cpufreq_driver_adjust_perf().
+ *
+ * 4.9 has neither effective_cpu_util() nor uclamp, so there is no
+ * bandwidth aggregation to report: bw_min is the utilization itself and
+ * bw_max is the CPU's full capacity (i.e. nothing is capped).
+ */
+void cpufreq_get_effective_util(int cpu, unsigned long boost,
+				unsigned long *out_util,
+				unsigned long *out_bw_min,
+				unsigned long *out_bw_max)
+{
+	struct sugov_cpu *sg_cpu = &per_cpu(sugov_cpu, cpu);
+	unsigned long util, max;
+
+	sg_cpu->cpu = cpu;
+	util = sugov_get_util(sg_cpu);
+	max = sg_cpu->max;
+
+	util = max(util, boost);
+
+	*out_bw_min = util;
+	*out_bw_max = max;
+	*out_util = util;
+}
+EXPORT_SYMBOL_GPL(cpufreq_get_effective_util);
+
+/**
+ * cpufreq_cpu_dl_bw_exceeded - Check if DL bandwidth exceeds minimum.
+ * @cpu: the CPU number.
+ * @bw_min: the minimum bandwidth to compare against.
+ *
+ * Return: true if the deadline bandwidth of @cpu exceeds @bw_min.
+ *
+ * 4.9 has no cpu_bw_dl(): deadline demand is already surfaced to the
+ * governor through the SCHED_CPUFREQ_RT_DL flag (sugov_update_single()
+ * shoots to cpuinfo.max_freq on it), so there is no counter to compare
+ * against and nothing to bypass the rate limit for.
+ */
+bool cpufreq_cpu_dl_bw_exceeded(int cpu, unsigned long bw_min)
+{
+	return false;
+}
+EXPORT_SYMBOL_GPL(cpufreq_cpu_dl_bw_exceeded);

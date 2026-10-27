@@ -20,20 +20,34 @@
 struct cpufreq_policy;
 
 struct update_util_data {
-       void (*func)(struct update_util_data *data, u64 time, unsigned int flags);
+	void (*func)(struct update_util_data *data, u64 time, unsigned int flags);
 };
 
 void cpufreq_add_update_util_hook(int cpu, struct update_util_data *data,
-                       void (*func)(struct update_util_data *data, u64 time,
-				    unsigned int flags));
+		 void (*func)(struct update_util_data *data, u64 time,
+			      unsigned int flags));
 void cpufreq_remove_update_util_hook(int cpu);
 bool cpufreq_this_cpu_can_update(struct cpufreq_policy *policy);
 
 static inline unsigned long map_util_freq(unsigned long util,
-					unsigned long freq, unsigned long cap)
+					  unsigned long freq, unsigned long cap)
 {
 	return (freq + (freq >> 2)) * util / cap;
 }
+
+/*
+ * Exported helpers for external cpufreq governors (e.g. loadable modules),
+ * backported as part of the Reflex governor. Implementations live in
+ * kernel/sched/cpufreq_schedutil.c.
+ */
+unsigned long cpufreq_get_capacity_ref_freq(struct cpufreq_policy *policy);
+void cpufreq_get_effective_util(int cpu, unsigned long boost,
+				unsigned long *out_util,
+				unsigned long *out_bw_min,
+				unsigned long *out_bw_max);
+bool cpufreq_cpu_dl_bw_exceeded(int cpu, unsigned long bw_min);
+u64 cpufreq_pelt_decay(u64 val, u64 delta_ns);
+
 #endif /* CONFIG_CPU_FREQ */
 
 #endif /* _LINUX_SCHED_CPUFREQ_H */

@@ -813,7 +813,7 @@ static u64 sched_vslice(struct cfs_rq *cfs_rq, struct sched_entity *se)
 #include "pelt.h"
 #ifdef CONFIG_SMP
 
-static int select_idle_sibling(struct task_struct *p, int prev_cpu, int cpu);
+static int select_idle_sibling(struct task_struct *p, int prev_cpu, int cpu, int sync);
 static unsigned long task_h_load(struct task_struct *p);
 static unsigned long capacity_of(int cpu);
 
@@ -1856,7 +1856,7 @@ assign:
 		 */
 		local_irq_disable();
 		env->dst_cpu = select_idle_sibling(env->p, env->src_cpu,
-						   env->dst_cpu);
+						   env->dst_cpu, 0);
 		local_irq_enable();
 	}
 
@@ -6950,12 +6950,97 @@ next:
 	return target;
 }
 
-static int select_idle_sibling(struct task_struct *p, int prev, int target)
+#ifdef CONFIG_SCHED_POC_SELECTOR
+/* POC Selector: 4.9 port of the 6.18 non-SMT is_idle_core() variant */
+static inline bool is_idle_core(int cpu)
 {
-	if (!sysctl_sched_cstate_aware)
-		return __select_idle_sibling(p, prev, target);
+	return (available_idle_cpu(cpu) || sched_idle_cpu(cpu));
+}
+#endif /* CONFIG_SCHED_POC_SELECTOR */
 
-	return select_idle_sibling_cstate_aware(p, prev, target);
+#ifdef CONFIG_SCHED_POC_SELECTOR
+#include "poc_selector.c"
+#endif
+static int select_idle_sibling(struct task_struct *p, int prev, int target, int sync)
+{
+	int i = task_cpu(p);
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	int recent_used_cpu = -1;
+#endif
+
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	if (static_branch_likely(&poc_selector_active)) {
+		unsigned long poc_task_util = 0;
+		unsigned long poc_util_min = 0, poc_util_max = ULONG_MAX;
+
+		recent_used_cpu = p->recent_used_cpu;
+		p->recent_used_cpu = prev;
+
+		if (static_branch_unlikely(&sched_poc_early_select)) {
+			if (recent_used_cpu != prev &&
+			    recent_used_cpu != target &&
+			    cpus_share_cache(recent_used_cpu, target) &&
+			    (available_idle_cpu(recent_used_cpu) ||
+			     sched_idle_cpu(recent_used_cpu)) &&
+			    cpumask_test_cpu(recent_used_cpu,
+					     tsk_cpus_allowed(p)) &&
+			    (unsigned int)recent_used_cpu < nr_cpumask_bits &&
+			    is_idle_core(recent_used_cpu))
+				return recent_used_cpu;
+
+			if (sched_asym_cpucap_active()) {
+				poc_task_util = task_util(p);
+				poc_util_min = uclamp_eff_value(p, UCLAMP_MIN);
+				poc_util_max = uclamp_eff_value(p, UCLAMP_MAX);
+			}
+
+			if (is_idle_core(target) &&
+			    asym_fits_cpu(poc_task_util, poc_util_min,
+					  poc_util_max, target))
+				return target;
+		}
+
+		if (!sched_asym_cpucap_active()) {
+			struct sched_domain_shared *sd_share =
+				rcu_dereference(per_cpu(sd_llc_shared, target));
+
+			if (sd_share && likely(sd_share->poc_fast_eligible)) {
+				int poc_cpu = select_idle_cpu_poc(target, prev,
+						recent_used_cpu, sync,
+						sd_share,
+						tsk_cpus_allowed(p));
+
+				if (poc_cpu >= 0)
+					return poc_cpu;
+
+				if (poc_cpu == -2)
+					goto give_up;
+			} else {
+				poc_check_skip_fallback();
+			}
+		} else {
+			poc_check_skip_fallback();
+		}
+
+		poc_count(POC_FALLBACK);
+	}
+#endif /* CONFIG_SCHED_POC_SELECTOR */
+
+	if (!sysctl_sched_cstate_aware)
+		target = __select_idle_sibling(p, prev, target);
+	else
+		target = select_idle_sibling_cstate_aware(p, prev, target);
+
+#ifdef CONFIG_SCHED_POC_SELECTOR
+give_up:
+	/* Last resort (POC): avoid enqueuing behind an RT/DL task running
+	 * on the target CPU when the previous CPU is not running one. */
+	if (static_branch_likely(&poc_selector_active) &&
+	    rt_task(cpu_rq(target)->curr) &&
+	    prev != target && !rt_task(cpu_rq(prev)->curr))
+		return prev;
+#endif
+	return target;
 }
 
 /*
@@ -8262,7 +8347,7 @@ sd_loop:
 	} else if (sd_flag & SD_BALANCE_WAKE) { /* XXX always ? */
 		/* Fast path */
 
-		new_cpu = select_idle_sibling(p, prev_cpu, new_cpu);
+		new_cpu = select_idle_sibling(p, prev_cpu, new_cpu, sync);
 
 		if (want_affine)
 			current->recent_used_cpu = cpu;
