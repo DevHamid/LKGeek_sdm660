@@ -1513,6 +1513,12 @@ static struct ctl_table sched_poc_sysctls[] = {
 		.mode		= 0644,
 		.proc_handler	= sched_poc_lockless_bitmap_sysctl_handler,
 	},
+	{ } /* terminating sentinel: sysctl_check_table() and new_links() walk
+	     `for (; table->procname; table++)`, so the array must end on an
+	     entry with a NULL procname. Without it the walk runs off the end
+	     into adjacent data and sysctl_err() prints the garbage pointer,
+	     which is a fault inside vsnprintf() -- an early-boot panic in
+	     init, long before any of the selector code runs. */
 };
 
 static int __init sched_poc_sysctl_init(void)
