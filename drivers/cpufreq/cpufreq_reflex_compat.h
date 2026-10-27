@@ -97,14 +97,6 @@ static inline bool cpufreq_driver_has_adjust_perf(void)
  * drivers/cpufreq/cpufreq_governor.c does when it derives the sampling
  * rate, and never return 0 (an interval of 0 would disable rate limiting).
  */
-static inline unsigned int
-cpufreq_policy_transition_delay_us(struct cpufreq_policy *policy)
-{
-	unsigned int delay = policy->cpuinfo.transition_latency / 1000;
-
-	return delay ? delay : 1;
-}
-
 /* 4.9's <linux/math64.h> has no DIV64_U64_ROUND_UP; the 6.12 definition. */
 #ifndef DIV64_U64_ROUND_UP
 #define DIV64_U64_ROUND_UP(ll, d) \

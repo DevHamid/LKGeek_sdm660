@@ -61,6 +61,7 @@
 #include <asm/topology.h>
 
 #include "cpufreq_reflex_compat.h"
+#include <linux/sched/types.h>
 
 /**************************************************************
  * Version Information:
@@ -176,7 +177,7 @@ static bool rfx_should_update_freq(struct rfx_policy *rfx_pol, u64 time)
 	 * behalf of another policy's CPU.
 	 */
 	if (rfx_pol->policy->fast_switch_enabled &&
-	    !cpufreq_can_do_remote_dvfs(rfx_pol->policy))
+	    !cpufreq_this_cpu_can_update(rfx_pol->policy))
 		return false;
 
 	if (unlikely(READ_ONCE(rfx_pol->limits_changed))) {
@@ -422,7 +423,7 @@ static void rfx_sample(struct rfx_cpu *rfx_c, u64 time)
 	/* D = busy * freq_scale * capacity, in PELT's units */
 	rfx_c->H = max_t(unsigned long,
 			 div64_u64((dw - di) *
-				   arch_scale_freq_capacity(NULL, rfx_c->cpu) *
+				   arch_scale_freq_capacity(rfx_c->cpu) *
 				   arch_scale_cpu_capacity(NULL, rfx_c->cpu),
 				   dw << SCHED_CAPACITY_SHIFT),
 			 cpufreq_pelt_decay(rfx_c->H, dw * NSEC_PER_USEC));
