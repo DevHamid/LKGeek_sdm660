@@ -1,3 +1,5 @@
+#define NF_LOG_INTERNAL 1
+
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
