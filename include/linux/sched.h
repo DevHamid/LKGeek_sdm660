@@ -1866,7 +1866,10 @@ extern int available_idle_cpu(int cpu);
 /* POC Selector 4.9-backport shims (6.18 -> 4.9 interface) */
 static inline bool cpus_share_resources(int cpu_a, int cpu_b)
 {
-	return cpus_share_cache(cpu_a, cpu_b);
+	/* 4.19: no cpus_share_cache visible here; POC cluster paths are
+	 * gated by sched_cluster_active()==false on this tree, so this
+	 * shim is never consulted. Keep a safe value. */
+	return true;
 }
 
 /* No CONFIG_SCHED_CLUSTER on this tree: never a cluster machine. */
