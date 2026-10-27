@@ -6983,7 +6983,7 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target, int 
 			    (available_idle_cpu(recent_used_cpu) ||
 			     sched_idle_cpu(recent_used_cpu)) &&
 			    cpumask_test_cpu(recent_used_cpu,
-					     tsk_cpus_allowed(p)) &&
+					     &p->cpus_allowed) &&
 			    (unsigned int)recent_used_cpu < nr_cpumask_bits &&
 			    is_idle_core(recent_used_cpu))
 				return recent_used_cpu;
@@ -7008,7 +7008,7 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target, int 
 				int poc_cpu = select_idle_cpu_poc(target, prev,
 						recent_used_cpu, sync,
 						sd_share,
-						tsk_cpus_allowed(p));
+						&p->cpus_allowed);
 
 				if (poc_cpu >= 0)
 					return poc_cpu;
