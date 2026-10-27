@@ -1,0 +1,86 @@
+name: Control Build (pure stock)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [droidspaces-control]
+
+concurrency:
+  group: control-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: stock-control
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    env:
+      DEFCONFIG: vendor/wayne-oss-perf_defconfig
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Restore clang-aosp
+        id: clangcache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/clang-aosp
+          key: clang-aosp-r547379-v2
+
+      - name: Fetch clang-aosp
+        if: steps.clangcache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/clang-aosp"
+          curl -sSL -o "$RUNNER_TEMP/clang.tar.gz" \
+            "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master/clang-r547379.tar.gz"
+          tar -C "$RUNNER_TEMP/clang-aosp" -zxf "$RUNNER_TEMP/clang.tar.gz"
+
+      - name: Toolchain
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            bc bison flex libssl-dev libelf-dev make
+          "$RUNNER_TEMP/clang-aosp/bin/clang" --version | head -1
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/clang-aosp/bin:$PATH"
+          make ARCH=arm64 O=out \
+            CC=clang LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- \
+            "$DEFCONFIG"
+
+      - name: Compile
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/clang-aosp/bin:$PATH"
+          export MAKE_ARGS="ARCH=arm64 O=out CC=clang LD=ld.lld
+            CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu-"
+          # shellcheck disable=SC2086
+          make -j"$(nproc)" $MAKE_ARGS
+
+      - name: Report image
+        run: |
+          set -euo pipefail
+          for f in out/arch/arm64/boot/Image out/arch/arm64/boot/Image.gz out/vmlinux \
+                   out/arch/arm64/boot/dts/qcom/*.dtb; do
+            [ -e "$f" ] && ls -lh "$f" || true
+          done
+          test -s out/arch/arm64/boot/Image \
+            || { echo "::error::out/arch/arm64/boot/Image missing"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/artifacts"
+          cp -v out/arch/arm64/boot/Image out/arch/arm64/boot/Image.gz out/vmlinux \
+            "$RUNNER_TEMP/artifacts/" 2>/dev/null || true
+          cp -v out/arch/arm64/boot/dts/qcom/sdm660-mtp-wayne.dtb \
+            "$RUNNER_TEMP/artifacts/" 2>/dev/null || true
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: control-kernel
+          path: ${{ runner.temp }}/artifacts/
+          retention-days: 30
