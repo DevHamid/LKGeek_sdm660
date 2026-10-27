@@ -1274,7 +1274,7 @@ static void poc_reevaluate_active(void)
 static int poc_sysctl_zero;
 static int poc_sysctl_one = 1;
 
-static int sched_poc_sysctl_handler(const struct ctl_table *table, int write,
+static int sched_poc_sysctl_handler(struct ctl_table *table, int write,
 			    void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	int val = sched_poc_selector ? 1 : 0;
@@ -1295,7 +1295,7 @@ static int sched_poc_sysctl_handler(const struct ctl_table *table, int write,
 	return ret;
 }
 
-static int sched_poc_smt_fallback_sysctl_handler(const struct ctl_table *table,
+static int sched_poc_smt_fallback_sysctl_handler(struct ctl_table *table,
 					       int write, void __user *buffer,
 					       size_t *lenp, loff_t *ppos)
 {
@@ -1317,7 +1317,7 @@ static int sched_poc_smt_fallback_sysctl_handler(const struct ctl_table *table,
 	return ret;
 }
 
-static int sched_poc_rr_improved_sysctl_handler(const struct ctl_table *table,
+static int sched_poc_rr_improved_sysctl_handler(struct ctl_table *table,
 					     int write, void __user *buffer,
 					     size_t *lenp, loff_t *ppos)
 {
@@ -1339,7 +1339,7 @@ static int sched_poc_rr_improved_sysctl_handler(const struct ctl_table *table,
 	return ret;
 }
 
-static int sched_poc_target_sticky_sysctl_handler(const struct ctl_table *table,
+static int sched_poc_target_sticky_sysctl_handler(struct ctl_table *table,
 					       int write, void __user *buffer,
 					       size_t *lenp, loff_t *ppos)
 {
@@ -1361,7 +1361,7 @@ static int sched_poc_target_sticky_sysctl_handler(const struct ctl_table *table,
 	return ret;
 }
 
-static int sched_poc_early_select_handler(const struct ctl_table *table,
+static int sched_poc_early_select_handler(struct ctl_table *table,
 					  int write, void __user *buffer,
 					  size_t *lenp, loff_t *ppos)
 {
@@ -1383,7 +1383,7 @@ static int sched_poc_early_select_handler(const struct ctl_table *table,
 	return ret;
 }
 
-static int sched_poc_greedy_search_handler(const struct ctl_table *table,
+static int sched_poc_greedy_search_handler(struct ctl_table *table,
 					       int write, void __user *buffer,
 					       size_t *lenp, loff_t *ppos)
 {
@@ -1405,7 +1405,7 @@ static int sched_poc_greedy_search_handler(const struct ctl_table *table,
 	return ret;
 }
 
-static int sched_poc_count_sysctl_handler(const struct ctl_table *table,
+static int sched_poc_count_sysctl_handler(struct ctl_table *table,
 					  int write, void __user *buffer,
 					  size_t *lenp, loff_t *ppos)
 {
@@ -1427,7 +1427,7 @@ static int sched_poc_count_sysctl_handler(const struct ctl_table *table,
 	return ret;
 }
 
-static int sched_poc_lockless_bitmap_sysctl_handler(const struct ctl_table *table,
+static int sched_poc_lockless_bitmap_sysctl_handler(struct ctl_table *table,
 						int write, void __user *buffer,
 						size_t *lenp, loff_t *ppos)
 {
