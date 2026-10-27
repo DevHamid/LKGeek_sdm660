@@ -195,6 +195,7 @@ unsigned long vm_total_pages;
 static LIST_HEAD(shrinker_list);
 static DEFINE_SPINLOCK(shrinker_lock);
 static DEFINE_RWLOCK(shrinker_rwlock);
+static DEFINE_RWSEM(shrinker_rwsem);
 
 #ifdef CONFIG_MEMCG_KMEM
 
