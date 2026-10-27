@@ -9272,8 +9272,7 @@ static struct task_struct *detach_one_task(struct lb_env *env)
 
 static int __init sched_cambyses_init(void)
 {
-	printk(KERN_INFO "%s %s by %s
-",
+	printk(KERN_INFO "%s %s by %s\n",
 		SCHED_CAMBYSES_PROGNAME, SCHED_CAMBYSES_VERSION,
 		SCHED_CAMBYSES_AUTHOR);
 	return 0;
