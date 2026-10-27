@@ -8933,6 +8933,10 @@ enum group_type {
 #define LBF_SOME_PINNED	0x08
 #define LBF_NOHZ_STATS	0x10
 #define LBF_NOHZ_AGAIN	0x20
+/* This balance operation has detached at least one task. Sticky across the
+ * more_balance retries... 0x40 is free here (0x20 is LBF_NOHZ_AGAIN).
+ */
+#define LBF_MOVED	0x40
 #define LBF_IGNORE_BIG_TASKS 0x100
 #define LBF_IGNORE_PREFERRED_CLUSTER_TASKS 0x200
 
@@ -9256,6 +9260,60 @@ static struct task_struct *detach_one_task(struct lb_env *env)
 	return NULL;
 }
 
+/*
+ * Cambyses CFS Load Balancer v0.6.0 (Masahito Suzuki) -- backport, 4.19
+ * adaptation: tail->head walk area per-reject list_move to head, so the
+ * upstream block-rotation (LB_ROTATE_BLOCK) is natively redundant here and
+ * omitted. Only the strict-budget + concession logic is adopted.
+ */
+#define SCHED_CAMBYSES_AUTHOR	"Masahito Suzuki"
+#define SCHED_CAMBYSES_PROGNAME	"Cambyses CFS Load Balancer modification"
+#define SCHED_CAMBYSES_VERSION	"0.6.0"
+
+static int __init sched_cambyses_init(void)
+{
+	printk(KERN_INFO "%s %s by %s
+",
+		SCHED_CAMBYSES_PROGNAME, SCHED_CAMBYSES_VERSION,
+		SCHED_CAMBYSES_AUTHOR);
+	return 0;
+}
+late_initcall(sched_cambyses_init);
+
+/*
+ * The cheapest candidate a scan passed over because it did not fit the
+ * remaining imbalance budget. If the scan ends up taking nothing at all,
+ * detach_tasks() concedes to this one so balance still makes progress.
+ */
+struct lb_concession {
+	struct task_struct	*p;
+	unsigned long		cost;
+};
+
+/*
+ * Does moving @p, costing @cost, fit the remaining imbalance budget?
+ * LB_STRICT_BUDGET compares directly and notes the smallest overshoot seen
+ * so far, so an over-budget task still moves when nothing cheaper fits.
+ * (This tree has no shr_bound(); the !STRICT branch reproduces the native
+ * (cost / 2) rule exactly.)
+ */
+static bool lb_cost_fits(struct lb_env *env, struct lb_concession *concession,
+			 struct task_struct *p, unsigned long cost)
+{
+	if (!sched_feat(LB_STRICT_BUDGET))
+		return (cost / 2) <= env->imbalance;
+
+	if (cost <= env->imbalance)
+		return true;
+
+	if (!concession->p || cost < concession->cost) {
+		concession->p = p;
+		concession->cost = cost;
+	}
+
+	return false;
+}
+
 static const unsigned int sched_nr_migrate_break = 32;
 
 /*
@@ -9268,6 +9326,7 @@ static int detach_tasks(struct lb_env *env)
 {
 	struct list_head *tasks = &env->src_rq->cfs_tasks;
 	struct task_struct *p;
+	struct lb_concession concession = { NULL, 0 };
 	unsigned long load = 0;
 	int detached = 0;
 	int orig_loop = env->loop;
@@ -9362,7 +9421,7 @@ redo:
 		if (!env->prefer_spread &&
 			((cpu_rq(env->src_cpu)->nr_running > 2) ||
 			(env->flags & LBF_IGNORE_BIG_TASKS)) &&
-			((load / 2) > env->imbalance))
+			!lb_cost_fits(env, &concession, p, load))
 			goto next;
 #ifdef CONFIG_SONY_SCHED
 		}
@@ -9370,6 +9429,7 @@ redo:
 		detach_task(p, env);
 		list_add(&p->se.group_node, &env->tasks);
 
+		env->flags |= LBF_MOVED;
 		detached++;
 		env->imbalance -= load;
 
@@ -9414,6 +9474,20 @@ next:
 	 * so we can safely collect detach_one_task() stats here rather
 	 * than inside detach_one_task().
 	 */
+	/*
+	 * Nothing fit the budget and nothing has moved yet, so concede to the
+	 * smallest overshoot the scan found rather than leave the imbalance
+	 * standing. LBF_MOVED makes this fire at most once per balance op.
+	 */
+	if (concession.p && !(env->flags & LBF_MOVED)) {
+		detach_task(concession.p, env);
+		list_add(&concession.p->se.group_node, &env->tasks);
+
+		env->imbalance -= concession.cost;
+		env->flags |= LBF_MOVED;
+		detached++;
+	}
+
 	schedstat_add(env->sd->lb_gained[env->idle], detached);
 
 	return detached;
