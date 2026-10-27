@@ -1862,6 +1862,19 @@ extern int can_nice(const struct task_struct *p, const int nice);
 extern int task_curr(const struct task_struct *p);
 extern int idle_cpu(int cpu);
 extern int available_idle_cpu(int cpu);
+#ifdef CONFIG_SCHED_POC_SELECTOR
+/* POC Selector 4.9-backport shims (6.18 -> 4.9 interface) */
+static inline bool cpus_share_resources(int cpu_a, int cpu_b)
+{
+	return cpus_share_cache(cpu_a, cpu_b);
+}
+
+/* No CONFIG_SCHED_CLUSTER on this tree: never a cluster machine. */
+static inline bool sched_cluster_active(void)
+{
+	return false;
+}
+#endif /* CONFIG_SCHED_POC_SELECTOR */
 extern int sched_setscheduler(struct task_struct *, int, const struct sched_param *);
 extern int sched_setscheduler_nocheck(struct task_struct *, int, const struct sched_param *);
 extern int sched_setattr(struct task_struct *, const struct sched_attr *);

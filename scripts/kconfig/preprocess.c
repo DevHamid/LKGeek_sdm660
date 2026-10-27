@@ -175,6 +175,16 @@ static char *do_shell(int argc, char *argv[])
 	return xstrdup(buf);
 }
 
+static char *do_success(int argc, char *argv[])
+{
+	char *cmd;
+	cmd = argv[0];
+	if (system(cmd) == 0)
+		return xstrdup("y");
+	else
+		return xstrdup("n");
+}
+
 static char *do_warning_if(int argc, char *argv[])
 {
 	if (!strcmp(argv[0], "y"))
@@ -191,6 +201,7 @@ static const struct function function_table[] = {
 	{ "info",	1,	1,	do_info },
 	{ "lineno",	0,	0,	do_lineno },
 	{ "shell",	1,	1,	do_shell },
+	{ "success",	1,	1,	do_success },
 	{ "warning-if",	2,	2,	do_warning_if },
 };
 

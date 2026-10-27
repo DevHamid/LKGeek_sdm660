@@ -68,6 +68,30 @@ struct sched_domain_shared {
 	atomic_t	ref;
 	atomic_t	nr_busy_cpus;
 	int		has_idle_cores;
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	int		nr_idle_scan;
+	u64		poc_llc_members;
+	int		poc_cpu_base;
+	u8		poc_affinity_shift;
+	bool	poc_fast_eligible;
+	bool	poc_cluster_valid;
+#ifdef CONFIG_SCHED_SMT
+	u8		poc_smt_shift;
+	u64		poc_primary_mask;
+#endif
+	u8		poc_idle_cpus[64] ____cacheline_aligned;
+#ifdef CONFIG_SCHED_SMT
+	u8		poc_idle_cores[64] ____cacheline_aligned;
+#endif
+	atomic64_t	poc_idle_cpus_mask ____cacheline_aligned;
+#ifdef CONFIG_SCHED_SMT
+	atomic64_t	poc_idle_cores_mask ____cacheline_aligned;
+#endif
+	u64		poc_cluster_mask[64] ____cacheline_aligned;
+#ifdef CONFIG_SCHED_SMT
+	u64		poc_smt_mask[64] ____cacheline_aligned;
+#endif
+#endif /* CONFIG_SCHED_POC_SELECTOR */
 
 	bool            overutilized;
 };
