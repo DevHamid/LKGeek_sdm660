@@ -6,10 +6,10 @@
 		status = "ok";
 		compatible = "ramoops", "removed-dma-pool";
 		no-map;
-		reg = <0x0 0x88F00000 0x0 0x00400000>;
-		console-size = <0x0 0x100000>;
-		pmsg-size = <0x0 0x100000>;
-		record-size = <0x0 0x100000>;
+		reg = <0x0 0x88F00000 0x0 0x01000000>;
+		console-size = <0x800000>;
+		pmsg-size = <0x400000>;
+		record-size = <0x400000>;
 		max-reason = <0x4>;
 	};
 };
