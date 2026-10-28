@@ -132,6 +132,76 @@ unsigned int sysctl_sched_wakeup_granularity		= 2000000UL;
 unsigned int normalized_sysctl_sched_wakeup_granularity	= 2000000UL;
 
 const_debug unsigned int sysctl_sched_migration_cost	= 2000000UL;
+
+#ifdef CONFIG_SCHED_BORE
+unsigned int __read_mostly sched_bore                  = 1;
+unsigned int __read_mostly sched_burst_cache_lifetime  = 60000000;
+unsigned int __read_mostly sched_burst_penalty_offset  = 22;
+unsigned int __read_mostly sched_burst_penalty_scale   = 1366;
+unsigned int __read_mostly sched_burst_smoothness_up   = 1;
+unsigned int __read_mostly sched_burst_smoothness_down = 0;
+unsigned int __read_mostly sched_burst_fork_atavistic  = 2;
+
+#define MAX_BURST_PENALTY ((40U << 8) - 1)
+
+static inline u32 log2plus1_u64_u32f8(u64 v) {
+	x32 result;
+	int msb = fls64(v);
+	int excess_bits = msb - 9;
+	result.u8[0] = (0 <= excess_bits)? v >> excess_bits: v << -excess_bits;
+	result.u8[1] = msb;
+	return result.u32;
+}
+
+static inline u32 calc_burst_penalty(u64 burst_time) {
+	u32 greed, tolerance, penalty, scaled_penalty;
+	
+	greed = log2plus1_u64_u32f8(burst_time);
+	tolerance = sched_burst_penalty_offset << 8;
+	penalty = max(0, (s32)greed - (s32)tolerance);
+	scaled_penalty = penalty * sched_burst_penalty_scale >> 10;
+
+	return min(MAX_BURST_PENALTY, scaled_penalty);
+}
+
+static void update_burst_penalty(struct sched_entity *se) {
+	se->curr_burst_penalty = calc_burst_penalty(se->burst_time);
+	se->burst_penalty = max(se->prev_burst_penalty, se->curr_burst_penalty);
+}
+
+static inline u64
+penalty_scale_mayhalve(u64 delta, struct sched_entity *se, bool half) {
+	u32 score = ((x16*)&se->burst_penalty)->u8[1];
+	if (half) score >>= 1;
+	return mul_u64_u32_shr(delta, sched_prio_to_wmult[score], 22);
+}
+
+#define penalty_scale(delta, se) \
+        (penalty_scale_mayhalve(delta, se, false))
+
+static inline u32 binary_smooth(u32 new, u32 old) {
+  int increment = new - old;
+  return (0 <= increment)?
+    old + ( increment >> sched_burst_smoothness_up):
+    old - (-increment >> sched_burst_smoothness_down);
+}
+
+static void restart_burst(struct sched_entity *se) {
+	se->burst_penalty = se->prev_burst_penalty =
+		binary_smooth(se->curr_burst_penalty, se->prev_burst_penalty);
+	se->curr_burst_penalty = 0;
+	se->burst_time = 0;
+}
+
+static inline void vruntime_backstep(s64 *vdiff, struct sched_entity *se) {
+	u64 delta_exec = se->sum_exec_runtime - se->prev_sum_exec_runtime;
+	*vdiff += delta_exec - penalty_scale(delta_exec, se);
+}
+#endif // CONFIG_SCHED_BORE
+
+#ifdef CONFIG_SMP
+/*
+ * For asym packing, by default the lower numbered CPU has higher priority.
 DEFINE_PER_CPU_READ_MOSTLY(int, sched_load_boost);
 
 #ifdef CONFIG_SMP
@@ -748,11 +818,21 @@ int sched_proc_update_handler(struct ctl_table *table, int write,
 /*
  * delta /= w
  */
+#ifdef CONFIG_SCHED_BORE
+#define calc_delta_fair_enq(delta, se) __calc_delta_fair(delta, se, true)
+#define calc_delta_fair(delta, se) __calc_delta_fair(delta, se, false)
+static inline u64 __calc_delta_fair(u64 delta, struct sched_entity *se, bool half)
+#else // CONFIG_SCHED_BORE
+#define calc_delta_fair_enq(delta, se) calc_delta_fair(delta, se)
 static inline u64 calc_delta_fair(u64 delta, struct sched_entity *se)
+#endif // CONFIG_SCHED_BORE
 {
 	if (unlikely(se->load.weight != NICE_0_LOAD))
 		delta = __calc_delta(delta, NICE_0_LOAD, &se->load);
 
+#ifdef CONFIG_SCHED_BORE
+	if (likely(sched_bore)) delta = penalty_scale_mayhalve(delta, se, half);
+#endif // CONFIG_SCHED_BORE
 	return delta;
 }
 
@@ -807,7 +887,7 @@ static u64 sched_slice(struct cfs_rq *cfs_rq, struct sched_entity *se)
  */
 static u64 sched_vslice(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
-	return calc_delta_fair(sched_slice(cfs_rq, se), se);
+	return calc_delta_fair_enq(sched_slice(cfs_rq, se), se);
 }
 
 #include "pelt.h"
@@ -5765,6 +5845,9 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	schedtune_dequeue_task(p, cpu_of(rq));
 
 	for_each_sched_entity(se) {
+#ifdef CONFIG_SCHED_BORE
+		if (task_sleep) restart_burst(se);
+#endif // CONFIG_SCHED_BORE
 		cfs_rq = cfs_rq_of(se);
 		dequeue_entity(cfs_rq, se, flags);
 
@@ -6990,8 +7073,10 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target, int 
 
 			if (sched_asym_cpucap_active()) {
 				poc_task_util = task_util(p);
+#ifdef CONFIG_UCLAMP_TASK
 				poc_util_min = uclamp_eff_value(p, UCLAMP_MIN);
 				poc_util_max = uclamp_eff_value(p, UCLAMP_MAX);
+#endif
 			}
 
 			if (is_idle_core(target) &&
@@ -7000,7 +7085,13 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target, int 
 				return target;
 		}
 
-		if (!sched_asym_cpucap_active()) {
+		/*
+		 * POC takes over on symmetric and asymmetric systems alike:
+		 * select_idle_cpu_poc() intersects its candidate mask with the
+		 * target's capacity-class mask, so on a big.LITTLE system it
+		 * only ever offers a core of the same capacity as the target.
+		 */
+		{
 			struct sched_domain_shared *sd_share =
 				rcu_dereference(per_cpu(sd_llc_shared, target));
 
@@ -7018,8 +7109,6 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target, int 
 			} else {
 				poc_check_skip_fallback();
 			}
-		} else {
-			poc_check_skip_fallback();
 		}
 
 		poc_count(POC_FALLBACK);

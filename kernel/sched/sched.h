@@ -2185,8 +2185,12 @@ static inline void poc_check_skip_fallback(void) {}
 extern void __set_cpu_idle_state_poc(int cpu, int state);
 static __always_inline void set_cpu_idle_state_poc(int cpu, int state)
 {
-	if (static_branch_likely(&poc_selector_active) &&
-	    !sched_asym_cpucap_active())
+	/* No symmetry gate: with capacity-class gating in select_idle_cpu_poc() the
+	 * selector is safe on big.LITTLE, so the idle bitmaps must be maintained
+	 * there too. Gating them on !sched_asym_cpucap_active() would leave them
+	 * empty and POC would report saturation on every wakeup.
+	 */
+	if (static_branch_likely(&poc_selector_active))
 		__set_cpu_idle_state_poc(cpu, state);
 }
 
