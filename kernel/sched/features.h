@@ -83,6 +83,10 @@
 #define SCHED_FEAT_RT_RUNTIME_SHARE 0
 #define SCHED_FEAT_LB_MIN 0
 #define SCHED_FEAT_ATTACH_AGE_LOAD 1
+/* Cambyses v0.6.0: compare migration cost against imbalance directly,
+ * preferring strict fit but conceding to the smallest overshoot when nothing
+ * cheaper fits. (0 = native (cost/2) rule.) */
+#define SCHED_FEAT_LB_STRICT_BUDGET 1
 
 #define SCHED_FEAT_WA_IDLE 1
 #define SCHED_FEAT_WA_WEIGHT 1
