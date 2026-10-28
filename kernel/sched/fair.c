@@ -199,9 +199,6 @@ static inline void vruntime_backstep(s64 *vdiff, struct sched_entity *se) {
 }
 #endif // CONFIG_SCHED_BORE
 
-#ifdef CONFIG_SMP
-/*
- * For asym packing, by default the lower numbered CPU has higher priority.
 DEFINE_PER_CPU_READ_MOSTLY(int, sched_load_boost);
 
 #ifdef CONFIG_SMP
