@@ -3138,7 +3138,7 @@ static void binder_transaction(struct binder_proc *proc,
 		    && (task_uid(target_proc->tsk).val > MIN_USERAPP_UID || task_uid(target_proc->tsk).val <= MAX_SYSTEM_UID)
 		    && (proc->pid != target_proc->pid)
 		    && frozen_task_group(target_proc->tsk)) {
-			rekernel_report(BINDER, REPLY, proc->pid, proc->tsk, target_proc->pid, target_proc->tsk, 0, NULL, tr->code);
+			binder_reply_handler(proc->pid, proc->tsk, target_proc->pid, target_proc->tsk, false, tr);
 		}
 #endif
 		binder_inner_proc_unlock(target_thread->proc);
@@ -3207,7 +3207,7 @@ static void binder_transaction(struct binder_proc *proc,
 		    && (task_uid(target_proc->tsk).val > MIN_USERAPP_UID)
 		    && (proc->pid != target_proc->pid)
 		    && frozen_task_group(target_proc->tsk)) {
-			rekernel_report(BINDER, TRANSACTION, proc->pid, proc->tsk, target_proc->pid, target_proc->tsk, tr->flags & TF_ONE_WAY, NULL, tr->code);
+			binder_trans_handler(proc->pid, proc->tsk, target_proc->pid, target_proc->tsk, tr->flags & TF_ONE_WAY, tr);
 		}
 #endif
 		if (security_binder_transaction(binder_get_cred(proc),
