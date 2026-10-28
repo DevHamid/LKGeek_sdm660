@@ -5,7 +5,7 @@
 | Component | Version | Status |
 |---|---|---|
 | Kernel | 4.19.325-LKGeek-perf-devhamid | ✅ Built & Booting |
-| ReSukiSU | v4.2.0-rc1 (35061/2) | ✅ Root working (native `su`) |
+| BakaSU | v4.2.0-rc3 | ✅ Root working (native `su`) |
 | SuSFS | v2.3.0 | ✅ Active |
 | NoMount | v2.0.0 (Built-in) | ✅ Active |
 | Baseband-guard | v1.0.0 (Legacy LSM) | ✅ Active (Partitions Protected) |
@@ -121,7 +121,7 @@ Out of respect to **LKDenchin** and the **LKGeek Team**, who built the original 
 ```text
 CONTEXT: Xiaomi Wayne (Mi 6X / SDM660), Linux 4.19.325 custom kernel (fork: DevHamid/LKGeek_sdm660).
 ACTIVE INTEGRATIONS & ARCHITECTURE:
-1. ReSukiSU v4.2.0-rc1: Uses "CONFIG_KSU_SUSFS=y" (Inline Hook mode).
+1. BakaSU v4.2.0-rc3: Uses "CONFIG_KSU_SUSFS=y" (Inline Hook mode).
    - CRITICAL: "CONFIG_KSU_SUSFS_SUS_SU" MUST BE DISABLED in defconfig, or native su daemon fails to deploy.
 2. SuSFS v2.3.0: Manually backported via JackA1ltman NonGKI_Kernel_Build_2nd.
 3. NoMount v2.0.0: Built-in under fs/nomount/ (plain tracked files, no symlinks/submodules due to CI clone issues).
@@ -144,7 +144,7 @@ CONSTRAINT: Do not alter existing working hook placements without explicit verif
 - [Tashar02](https://github.com/Atom-X-Devs/scarlet_xiaomi_sdm660) & [LKGeek-Team](https://github.com/LKGeek-Team) — base SDM660 kernel
 - [Xiaolegun](https://github.com/xiaolegun) — Wayne boot & device development
 - [@LKDenchin](https://github.com/LKDenchin) — kernel & CI maintainer
-- [ReSukiSU](https://github.com/ReSukiSU/ReSukiSU) — kernel root engine & manager
+- [BakaSU](https://github.com/Baka-SU/BakaSU) — kernel root engine & manager
 - [JackA1ltman/NonGKI_Kernel_Build_2nd](https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd) — non-GKI SuSFS & Re-Kernel backport patches
 - [maxsteeel (NoMount)](https://github.com/maxsteeel/nomount) — VFS module redirection
 - [vc-teahouse (Baseband-guard)](https://github.com/vc-teahouse/Baseband-guard) — bootloader/modem partition defense
