@@ -276,6 +276,7 @@ enum poc_level {
 	POC_LV4T,		/* target's SMT sibling */
 	POC_LV5,		/* idle CPU in L2 cluster */
 	POC_LV6,		/* idle CPU across LLC (RR) */
+	POC_LV_REJECT,	/* selected CPU no longer idle → re-validate, CFS fallback */
 	POC_FALLBACK,	/* POC returned -1, CFS fallback */
 	POC_NR_LEVELS
 };
@@ -624,10 +625,6 @@ void __set_cpu_idle_state_poc(int cpu, int state)
 {
 	struct rq *rq = cpu_rq(cpu);
 	struct sched_domain_shared *sd_share;
-	if (!static_branch_unlikely(&sched_poc_lockless_bitmap) &&
-			!state && READ_ONCE(rq->poc_idle_committed))
-		return;
-
 	rcu_read_lock();
 	sd_share = rcu_dereference(per_cpu(sd_llc_shared, cpu));
 	if (!sd_share || !sd_share->poc_fast_eligible) {
@@ -918,40 +915,36 @@ static __always_inline int poc_try_idle_smt(int base, int cpu,
 #endif /* CONFIG_SCHED_SMT */
 
 /*
- * poc_commit_selection - Atomically clear selected CPU from idle bitmap
+ * poc_commit_selection - Selection-side hook (kept for symmetry)
  * @cpu: the CPU number selected by POC
  * @sd_share: per-LLC shared data
  *
- * Clears the selected CPU's bit in poc_idle_cpus_mask at selection
- * time to close the race window where multiple waker CPUs read the
- * same stale bitmap and select the same idle CPU.  The do_idle()
- * exit path performs an idempotent clear as a safety net for
- * non-POC wakeups; poc_idle_committed gates that path so the atomic
- * fires at most once per selection.
+ * No-op.  The idle bitmap is single-writer: only the idle CPU's own
+ * transition (__set_cpu_idle_state_poc) writes it.  A waker must
+ * never clear the selected CPU's bit here — doing so races the
+ * target's exit and desyncs the bitmap from reality.  Matches the
+ * reference selector, where selection is read-only w.r.t. the bitmap.
  */
 static __always_inline void poc_commit_selection(int cpu,
 	struct sched_domain_shared *sd_share)
 {
-	if (cpu_rq(cpu)->nr_running <= 2) {
-		int bit = cpu - sd_share->poc_cpu_base;
-
-		if (static_branch_unlikely(&sched_poc_lockless_bitmap)) {
-			WRITE_ONCE(sd_share->poc_idle_cpus[bit], 0);
-			smp_wmb();
-		} else {
-			atomic64_andnot(1ULL << bit, &sd_share->poc_idle_cpus_mask);
-			smp_mb__after_atomic();
-			/* Mark committed so target skips redundant andnot on wakeup */
-			WRITE_ONCE(cpu_rq(cpu)->poc_idle_committed, 1);
-		}
-	}
+	/*
+	 * Single-writer model: only the idle CPU's own transition
+	 * (__set_cpu_idle_state_poc) writes the bitmap.  A waker must
+	 * never clear the selected CPU's idle bit here — doing so races
+	 * the target's exit and desyncs the bitmap from reality.  Match
+	 * the reference selector: selection is read-only w.r.t. the idle
+	 * bitmap.
+	 */
+	(void)cpu;
+	(void)sd_share;
 }
 
 /*
  * POC_IDLE_CORE  - Test whether a CPU's core is fully idle.
  * POC_IDLE_SMT   - Find an idle CPU among @cpu and its SMT siblings.
  *
- * POC_RETURN     - Record hit counter, clear bitmap, return selected CPU.
+ * POC_RETURN     - Re-validate idleness, record hit counter, return CPU.
  * POC_RETURN_IF  - Same, but only if @cpu >= 0 (used after POC_IDLE_SMT).
  *
  * These assume core_mask, base, sd_share are in scope
@@ -961,8 +954,12 @@ static __always_inline void poc_commit_selection(int cpu,
 #define POC_IDLE_SMT(cpu)	poc_try_idle_smt(base, (cpu), cpu_mask, sd_share)
 
 #define POC_RETURN(cpu, level) do { \
+	if (static_branch_likely(&sched_poc_aligned) && \
+	    !idle_cpu(cpu)) { \
+		poc_count(POC_LV_REJECT); \
+		return -1; \
+	} \
 	poc_count(level); \
-	poc_commit_selection(cpu, sd_share); \
 	return cpu; \
 } while (0)
 
