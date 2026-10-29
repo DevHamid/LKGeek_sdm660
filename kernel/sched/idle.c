@@ -230,12 +230,13 @@ static void do_idle(void)
 	 */
 
 	__current_set_polling();
-	tick_nohz_idle_enter();
 
 #ifdef CONFIG_SCHED_POC_SELECTOR
 	/* POC Selector: publish this CPU as idle in per-LLC bitmap */
 	set_cpu_idle_state_poc(cpu, 1);
 #endif /* CONFIG_SCHED_POC_SELECTOR */
+
+	tick_nohz_idle_enter();
 
 	while (!need_resched()) {
 		check_pgt_cache();
