@@ -929,22 +929,18 @@ static __always_inline int poc_try_idle_smt(int base, int cpu,
  * non-POC wakeups; poc_idle_committed gates that path so the atomic
  * fires at most once per selection.
  */
-static __always_inline void poc_commit_selection(int cpu,
+static __always_inline bool poc_commit_selection(int cpu,
 	struct sched_domain_shared *sd_share)
 {
-	if (cpu_rq(cpu)->nr_running <= 2) {
-		int bit = cpu - sd_share->poc_cpu_base;
-
-		if (static_branch_unlikely(&sched_poc_lockless_bitmap)) {
-			WRITE_ONCE(sd_share->poc_idle_cpus[bit], 0);
-			smp_wmb();
-		} else {
-			atomic64_andnot(1ULL << bit, &sd_share->poc_idle_cpus_mask);
-			smp_mb__after_atomic();
-			/* Mark committed so target skips redundant andnot on wakeup */
-			WRITE_ONCE(cpu_rq(cpu)->poc_idle_committed, 1);
-		}
-	}
+	/*
+	 * Re-validate against the authoritative rq state before claiming.
+	 * The idle bitmap is advisory; idle_cpu() is ground truth. A
+	 * stale-set bit (CPU mid-exit) must not be handed out. The target
+	 * CPU owns its own bit and clears it on exit; the waker never
+	 * clears the bitmap here, so there is no waker-vs-exit race that
+	 * could lose a wakeup.
+	 */
+	return idle_cpu(cpu);
 }
 
 /*
@@ -961,8 +957,9 @@ static __always_inline void poc_commit_selection(int cpu,
 #define POC_IDLE_SMT(cpu)	poc_try_idle_smt(base, (cpu), cpu_mask, sd_share)
 
 #define POC_RETURN(cpu, level) do { \
+	if (!poc_commit_selection(cpu, sd_share)) \
+		return -1; \
 	poc_count(level); \
-	poc_commit_selection(cpu, sd_share); \
 	return cpu; \
 } while (0)
 
