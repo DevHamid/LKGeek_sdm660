@@ -331,6 +331,9 @@ struct net_bridge {
 		struct rt6_info		fake_rt6_info;
 	};
 	u32				metrics[RTAX_MAX];
+	bool				nf_call_iptables;
+	bool				nf_call_ip6tables;
+	bool				nf_call_arptables;
 #endif
 	u16				group_fwd_mask;
 	u16				group_fwd_mask_required;
