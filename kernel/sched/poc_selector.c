@@ -13,6 +13,7 @@
 #include <linux/prefetch.h>
 #include <linux/string.h>
 #include <linux/sysctl.h>
+#include <linux/suspend.h>
 /*
  * Piece-Of-Cake (POC) CPU Selector
  *
@@ -1540,12 +1541,59 @@ late_initcall(sched_poc_sysctl_init);
  * reducing cross-CPU collision probability when multiple CPUs
  * perform burst wakeups against the same idle bitmap snapshot.
  */
+
+/*
+ * Suspend/resume: the POC idle bitmaps are only kept in sync by the
+ * do_idle() exit path.  On suspend the bitmaps are left holding the
+ * pre-suspend idle state; after resume the first wakeup can select a
+ * CPU whose idle bit is stale (the CPU is still coming back, not yet
+ * servicing runqueues), and the woken task never runs -> freeze.
+ *
+ * Zero every LLC's idle bitmap at PM_SUSPEND_PREPARE so the waker
+ * falls through to the normal select_idle_sibling() path; do_idle()
+ * re-populates the bitmaps naturally as CPUs re-enter idle after
+ * resume.
+ */
+static int poc_suspend_notify(struct notifier_block *nb, unsigned long action,
+			      void *data)
+{
+	int cpu;
+
+	if (action != PM_SUSPEND_PREPARE &&
+	    action != PM_HIBERNATION_PREPARE &&
+	    action != PM_RESTORE_PREPARE)
+		return NOTIFY_OK;
+
+	for_each_possible_cpu(cpu) {
+		struct sched_domain_shared *sd_share;
+
+		rcu_read_lock();
+		sd_share = rcu_dereference(per_cpu(sd_llc_shared, cpu));
+		if (sd_share && sd_share->poc_fast_eligible) {
+			atomic64_set(&sd_share->poc_idle_cpus_mask, 0);
+#ifdef CONFIG_SCHED_SMT
+			atomic64_set(&sd_share->poc_idle_cores_mask, 0);
+#endif
+		}
+		rcu_read_unlock();
+		WRITE_ONCE(cpu_rq(cpu)->poc_idle_committed, 0);
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block poc_suspend_nb = {
+	.notifier_call = poc_suspend_notify,
+};
+
 static int __init sched_poc_rr_init(void)
 {
 	int cpu;
 
 	for_each_possible_cpu(cpu)
 		per_cpu(poc_rr_counter, cpu) = (u32)cpu;
+
+	register_pm_notifier(&poc_suspend_nb);
 	return 0;
 }
 early_initcall(sched_poc_rr_init);
