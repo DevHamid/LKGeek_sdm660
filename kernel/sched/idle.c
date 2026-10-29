@@ -232,6 +232,10 @@ static void do_idle(void)
 	__current_set_polling();
 	tick_nohz_idle_enter();
 
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	/* POC Selector: publish this CPU as idle in per-LLC bitmap */
+	set_cpu_idle_state_poc(cpu, 1);
+#endif /* CONFIG_SCHED_POC_SELECTOR */
 
 	while (!need_resched()) {
 		check_pgt_cache();
@@ -284,6 +288,10 @@ static void do_idle(void)
 	smp_mb__after_atomic();
 
 	sched_ttwu_pending();
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	/* POC Selector: drop this CPU's idle bit */
+	set_cpu_idle_state_poc(cpu, 0);
+#endif /* CONFIG_SCHED_POC_SELECTOR */
 	schedule_idle();
 
 	if (unlikely(klp_patch_pending(current)))

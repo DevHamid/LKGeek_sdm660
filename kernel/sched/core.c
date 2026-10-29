@@ -1948,6 +1948,15 @@ void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
 	}
 
 	__set_task_cpu(p, new_cpu);
+
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	/*
+	 * POC Selector: a task just landed on new_cpu, so it is no longer
+	 * idle. Keep the per-LLC idle bitmap honest. Only ever clears a bit,
+	 * so it can never create a false idle CPU.
+	 */
+	set_cpu_idle_state_poc(new_cpu, 0);
+#endif /* CONFIG_SCHED_POC_SELECTOR */
 }
 
 static void __migrate_swap_task(struct task_struct *p, int cpu)
