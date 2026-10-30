@@ -7116,7 +7116,7 @@ void check_move_unevictable_pages(struct page **pages, int nr_pages)
 
 			VM_BUG_ON_PAGE(PageActive(page), page);
 			ClearPageUnevictable(page);
-			del_page_from_lru_list(page, lruvec, LRU_UNEVICTABLE);
+			del_page_from_lru_list(page, lruvec);
 			add_page_to_lru_list(page, lruvec);
 			pgrescued++;
 		}
