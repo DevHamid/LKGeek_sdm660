@@ -74,7 +74,7 @@ void nf_logger_request_module(int pf, enum nf_log_type type);
 	MODULE_ALIAS("nf-logger-" __stringify(family) "-" __stringify(type))
 
 /* Calls the registered backend logging function */
-#ifdef CONFIG_DEBUG_KERNEL
+#if defined(CONFIG_DEBUG_KERNEL) || defined(NF_LOG_INTERNAL)
 __printf(8, 9)
 void nf_log_packet(struct net *net,
 		   u_int8_t pf,
