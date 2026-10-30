@@ -324,6 +324,9 @@ static bool platform_suspend_again(suspend_state_t state)
 		suspend_ops->suspend_again() : false;
 }
 
+static bool suspend_debug_panic;
+module_param(suspend_debug_panic, bool, 0644);
+
 #ifdef CONFIG_PM_DEBUG
 static unsigned int pm_test_delay = 5;
 module_param(pm_test_delay, uint, 0644);
@@ -409,6 +412,7 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 		goto Platform_finish;
 
 	error = dpm_suspend_late(PMSG_SUSPEND);
+	pr_info("suspend_enter: dpm_suspend_late done\n");
 	if (error) {
 		last_dev = suspend_stats.last_failed_dev + REC_FAILED_NUM - 1;
 		last_dev %= REC_FAILED_NUM;
@@ -418,6 +422,8 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 		goto Platform_finish;
 	}
 	error = platform_suspend_prepare_late(state);
+	if (!error)
+		pr_info("suspend_enter: platform_suspend_prepare_late done\n");
 	if (error)
 		goto Devices_early_resume;
 
@@ -427,6 +433,8 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 	}
 
 	error = dpm_suspend_noirq(PMSG_SUSPEND);
+	if (!error)
+		pr_info("suspend_enter: dpm_suspend_noirq done\n");
 	if (error) {
 		last_dev = suspend_stats.last_failed_dev + REC_FAILED_NUM - 1;
 		last_dev %= REC_FAILED_NUM;
@@ -436,6 +444,8 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 		goto Platform_early_resume;
 	}
 	error = platform_suspend_prepare_noirq(state);
+	if (!error)
+		pr_info("suspend_enter: platform_suspend_prepare_noirq done\n");
 	if (error)
 		goto Platform_wake;
 
@@ -443,6 +453,8 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 		goto Platform_wake;
 
 	error = disable_nonboot_cpus();
+	if (!error)
+		pr_info("suspend_enter: disable_nonboot_cpus done\n");
 	if (error || suspend_test(TEST_CPUS)) {
 		goto Enable_cpus;
 	}
@@ -458,6 +470,8 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 		if (!(suspend_test(TEST_CORE) || *wakeup)) {
 			trace_suspend_resume(TPS("machine_suspend"),
 				state, true);
+			if (suspend_debug_panic)
+				panic("POC suspend freeze: pre-enter dump");
 			error = suspend_ops->enter(state);
 			trace_suspend_resume(TPS("machine_suspend"),
 				state, false);
