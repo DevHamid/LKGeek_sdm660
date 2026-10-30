@@ -299,6 +299,8 @@ struct zone_reclaim_stat {
  */
 #define MAX_NR_TIERS		4U
 
+#define ANON_AND_FILE	2
+
 #ifndef __GENERATING_BOUNDS_H
 
 struct lruvec;
