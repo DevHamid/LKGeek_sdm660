@@ -13,7 +13,7 @@ int nf_queue(struct sk_buff *skb, struct nf_hook_state *state,
 void nf_queue_nf_hook_drop(struct net *net);
 
 /* nf_log.c */
-#ifdef CONFIG_DEBUG_KERNEL
+#if defined(CONFIG_DEBUG_KERNEL) || defined(NF_LOG_INTERNAL)
 int __init netfilter_log_init(void);
 #else
 static inline int __init netfilter_log_init(void) { return 0; }
