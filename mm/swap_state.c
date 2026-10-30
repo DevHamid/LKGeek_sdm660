@@ -175,7 +175,7 @@ int add_to_swap_cache(struct page *page, swp_entry_t entry, gfp_t gfp_mask)
  * This must be called only on pages that have
  * been verified to be in the swap cache.
  */
-void __delete_from_swap_cache(struct page *page)
+void __delete_from_swap_cache(struct page *page, void *shadow)
 {
 	struct address_space *address_space;
 	int i, nr = hpage_nr_pages(page);
@@ -185,12 +185,23 @@ void __delete_from_swap_cache(struct page *page)
 	VM_BUG_ON_PAGE(!PageLocked(page), page);
 	VM_BUG_ON_PAGE(!PageSwapCache(page), page);
 	VM_BUG_ON_PAGE(PageWriteback(page), page);
+	VM_BUG_ON(shadow && !radix_tree_exceptional_entry(shadow));
 
 	entry.val = page_private(page);
 	address_space = swap_address_space(entry);
 	idx = swp_offset(entry);
 	for (i = 0; i < nr; i++) {
-		radix_tree_delete(&address_space->i_pages, idx + i);
+		void *item;
+		void __rcu **slot;
+		struct radix_tree_node *node;
+
+		item = __radix_tree_lookup(&address_space->i_pages,
+					   idx + i, &node, &slot);
+		if (WARN_ON_ONCE(item != page + i))
+			continue;
+
+		__radix_tree_replace(&address_space->i_pages,
+				     node, slot, shadow, NULL);
 		set_page_private(page + i, 0);
 	}
 	ClearPageSwapCache(page);
@@ -272,7 +283,7 @@ void delete_from_swap_cache(struct page *page)
 
 	address_space = swap_address_space(entry);
 	xa_lock_irq(&address_space->i_pages);
-	__delete_from_swap_cache(page);
+	__delete_from_swap_cache(page, NULL);
 	xa_unlock_irq(&address_space->i_pages);
 
 	put_swap_page(page, entry);

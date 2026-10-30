@@ -1478,6 +1478,13 @@ struct mm_walk {
 	void *private;
 };
 
+#ifndef arch_has_hw_pte_young
+static inline bool arch_has_hw_pte_young(bool local)
+{
+	return false;
+}
+#endif
+
 int walk_page_range(unsigned long addr, unsigned long end,
 		struct mm_walk *walk);
 int walk_page_vma(struct vm_area_struct *vma, struct mm_walk *walk);
