@@ -1353,6 +1353,11 @@ static void adios_completed_request(struct request *rq, u64 now) {
 	struct adios_rq_data *rd = get_rq_data(rq);
 	union adios_in_flight_rqs ifr = { .scalar = 0 };
 
+	/* Flush requests skip adios_prepare_request (blk_mq_get_request takes
+	 * the bypass path), leaving rq->elv.priv[0] NULL. */
+	if (!rd)
+		return;
+
 	if (rd->managed) {
 		union adios_in_flight_rqs ifr_to_sub = {
 			.count          = 1,
