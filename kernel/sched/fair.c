@@ -145,7 +145,7 @@ unsigned int __read_mostly sched_burst_fork_atavistic  = 2;
 #define MAX_BURST_PENALTY ((40U << 8) - 1)
 
 static inline u32 log2plus1_u64_u32f8(u64 v) {
-	x32 result;
+	union x32 result;
 	int msb = fls64(v);
 	int excess_bits = msb - 9;
 	result.u8[0] = (0 <= excess_bits)? v >> excess_bits: v << -excess_bits;
@@ -171,7 +171,7 @@ static void update_burst_penalty(struct sched_entity *se) {
 
 static inline u64
 penalty_scale_mayhalve(u64 delta, struct sched_entity *se, bool half) {
-	u32 score = ((x16*)&se->burst_penalty)->u8[1];
+	u32 score = ((union x16*)&se->burst_penalty)->u8[1];
 	if (half) score >>= 1;
 	return mul_u64_u32_shr(delta, sched_prio_to_wmult[score], 22);
 }
