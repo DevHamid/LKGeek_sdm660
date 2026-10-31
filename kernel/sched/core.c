@@ -3099,7 +3099,7 @@ int wake_up_state(struct task_struct *p, unsigned int state)
 	return try_to_wake_up(p, state, 0, 1);
 }
 #ifdef CONFIG_SCHED_BORE
-extern u8   sched_burst_fork_atavistic;
+extern unsigned int sched_burst_fork_atavistic;
 extern uint sched_burst_cache_lifetime;
 
 static void __init sched_init_bore(void) {

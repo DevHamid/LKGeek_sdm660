@@ -149,6 +149,19 @@ struct sched_cluster {
 extern cpumask_t asym_cap_sibling_cpus;
 #endif /* CONFIG_SCHED_WALT */
 
+#ifdef CONFIG_SCHED_BORE
+union x16 {
+	u8	u8[2];
+	u16	u16;
+};
+
+union x32 {
+	u8	u8[4];
+	u16	u16[2];
+	u32	u32;
+};
+#endif
+
 /* task_struct::on_rq states: */
 #define TASK_ON_RQ_QUEUED	1
 #define TASK_ON_RQ_MIGRATING	2

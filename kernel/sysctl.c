@@ -171,8 +171,8 @@ static const int cap_last_cap = CAP_LAST_CAP;
 
 #ifdef CONFIG_SCHED_BORE
 extern uint sched_bore;
-extern uint sched_burst_smoothness_long;
-extern uint sched_burst_smoothness_short;
+extern uint sched_burst_smoothness_up;
+extern uint sched_burst_smoothness_down;
 extern uint sched_burst_fork_atavistic;
 extern uint sched_burst_penalty_offset;
 extern uint sched_burst_penalty_scale;
@@ -1605,8 +1605,8 @@ static struct ctl_table kern_table[] = {
 		.extra2		= &one,
 	},
 	{
-		.procname	= "sched_burst_smoothness_long",
-		.data		= &sched_burst_smoothness_long,
+		.procname	= "sched_burst_smoothness_up",
+		.data		= &sched_burst_smoothness_up,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler = proc_douintvec_minmax,
@@ -1614,8 +1614,8 @@ static struct ctl_table kern_table[] = {
 		.extra2		= &one,
 	},
 	{
-		.procname	= "sched_burst_smoothness_short",
-		.data		= &sched_burst_smoothness_short,
+		.procname	= "sched_burst_smoothness_down",
+		.data		= &sched_burst_smoothness_down,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler = proc_douintvec_minmax,
