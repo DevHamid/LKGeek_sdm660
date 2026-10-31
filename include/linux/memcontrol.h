@@ -312,7 +312,11 @@ struct mem_cgroup {
 	spinlock_t event_list_lock;
 
 #ifdef CONFIG_LRU_GEN
-	/* per-memcg mm_struct list */
+	/*
+	 * Must come before nodeinfo[0]. nodeinfo is a zero-length array that
+	 * contributes nothing to sizeof(), so anything placed after it shares
+	 * its address, and nodeinfo[0] would then alias mm_list.fifo.
+	 */
 	struct lru_gen_mm_list mm_list;
 #endif
 

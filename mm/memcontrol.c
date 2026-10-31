@@ -4484,6 +4484,12 @@ static int alloc_mem_cgroup_per_node_info(struct mem_cgroup *memcg, int node)
 	}
 
 	lruvec_init(&pn->lruvec);
+	/*
+	 * lruvec->pgdat is read by lruvec_pgdat() (e.g. lru_gen_change_state
+	 * takes &lruvec_pgdat(lruvec)->lru_lock). Nothing else sets it before
+	 * the first mem_cgroup_lruvec() call, so set it here.
+	 */
+	pn->lruvec.pgdat = NODE_DATA(node);
 	pn->usage_in_excess = 0;
 	pn->on_tree = false;
 	pn->memcg = memcg;
