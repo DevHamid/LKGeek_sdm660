@@ -1020,7 +1020,11 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	curr->sum_exec_runtime += delta_exec;
 	schedstat_add(cfs_rq->exec_clock, delta_exec);
 
-	curr->vruntime += calc_delta_fair(delta_exec, curr);
+#ifdef CONFIG_SCHED_BORE
+	curr->burst_time += delta_exec;
+	update_burst_penalty(curr);
+#endif // CONFIG_SCHED_BORE
+	curr->vruntime += max(1ULL, calc_delta_fair(delta_exec, curr));
 	update_min_vruntime(cfs_rq);
 
 	if (entity_is_task(curr)) {
@@ -8548,6 +8552,9 @@ static int
 wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se)
 {
 	s64 gran, vdiff = curr->vruntime - se->vruntime;
+#ifdef CONFIG_SCHED_BORE
+	if (likely(sched_bore)) vruntime_backstep(&vdiff, curr);
+#endif // CONFIG_SCHED_BORE
 
 	if (vdiff <= 0)
 		return -1;
@@ -8845,8 +8852,12 @@ static void yield_task_fair(struct rq *rq)
 	/*
 	 * Are we the only task in the tree?
 	 */
-	if (unlikely(rq->nr_running == 1))
+	if (unlikely(rq->nr_running == 1)) {
+#ifdef CONFIG_SCHED_BORE
+		restart_burst(se);
+#endif // CONFIG_SCHED_BORE
 		return;
+	}
 
 	clear_buddies(cfs_rq, se);
 
@@ -8856,6 +8867,9 @@ static void yield_task_fair(struct rq *rq)
 		 * Update run-time statistics of the 'current'.
 		 */
 		update_curr(cfs_rq);
+#ifdef CONFIG_SCHED_BORE
+		restart_burst(se);
+#endif // CONFIG_SCHED_BORE
 		/*
 		 * Tell update_rq_clock() that we've just updated,
 		 * so we don't do microscopic update in schedule()

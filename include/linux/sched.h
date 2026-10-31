@@ -558,6 +558,17 @@ struct sched_entity {
 	 */
 	struct sched_avg		avg;
 #endif
+
+#ifdef CONFIG_SCHED_BORE
+	u64				burst_time;
+	u64				prev_burst_penalty;
+	u64				curr_burst_penalty;
+	u64				burst_penalty;
+	u32				burst_score;
+	u64				child_burst;
+	u64				child_burst_cnt;
+	u64				child_burst_last_cached;
+#endif
 };
 
 struct sched_load {
