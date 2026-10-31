@@ -1351,6 +1351,11 @@ static void update_timer_callback(struct timer_list *t) {
 static void adios_completed_request(struct request *rq, u64 now) {
 	struct adios_data *ad = rq->q->elevator->elevator_data;
 	struct adios_rq_data *rd = get_rq_data(rq);
+	/* Flush requests skip adios_prepare_request: blk_mq_get_request
+	 * takes the bypass path, so rq->elv.priv[0] stays NULL. */
+	if (!rd)
+		return;
+
 	union adios_in_flight_rqs ifr = { .scalar = 0 };
 
 	if (rd->managed) {
