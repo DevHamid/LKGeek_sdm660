@@ -35,6 +35,7 @@
 #include <linux/pstore_ram.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/of_reserved_mem.h>
 
 #define RAMOOPS_KERNMSG_HDR "===="
 #define MIN_MEM_SIZE 4096UL
@@ -940,6 +941,39 @@ static struct platform_driver ramoops_driver = {
 	},
 };
 
+/*
+ * Reserved-memory hookup.
+ *
+ * The wayne DTS declares ramoops under /reserved-memory with
+ * compatible = "ramoops" and no-map. fdt_init_reserved_mem() dispatches such a
+ * node through __reservedmem_of_table; without an entry of our own the node
+ * matches nothing, no platform device is ever created, ramoops_probe() never
+ * runs, and /sys/fs/pstore stays empty.
+ *
+ * The callback only records the region. It cannot create the device itself:
+ * fdt_init_reserved_mem() runs out of early_init_dt_scan_nodes(), long before
+ * the platform bus exists. ramoops_init() is a postcore_initcall and runs after
+ * of_platform_default_populate(), so the device is created there.
+ *
+ * of_platform_device_create() is used rather than
+ * platform_device_register_simple() because ramoops_probe() only parses the DTS
+ * when dev_of_node(dev) is set - a plain platform device has no OF node, so
+ * console-size/pmsg-size/record-size would be silently dropped and the probe
+ * would fail on NULL platform data.
+ */
+static phys_addr_t ramoops_rmem_base;
+static phys_addr_t ramoops_rmem_size;
+
+static int __init rmem_ramoops_setup(struct reserved_mem *rmem)
+{
+	ramoops_rmem_base = rmem->base;
+	ramoops_rmem_size = rmem->size;
+
+	return 0;
+}
+
+RESERVEDMEM_OF_DECLARE(ramoops, "ramoops", rmem_ramoops_setup);
+
 static inline void ramoops_unregister_dummy(void)
 {
 	platform_device_unregister(dummy);
@@ -1005,6 +1039,22 @@ static void __init ramoops_register_dummy(void)
 static int __init ramoops_init(void)
 {
 	int ret;
+
+	if (ramoops_rmem_size) {
+		struct device_node *node;
+		struct platform_device *pdev;
+
+		for_each_compatible_node(node, NULL, "ramoops") {
+			pdev = of_platform_device_create(node, NULL, NULL);
+			if (pdev)
+				pr_info("ramoops: created device for reserved region at %pa, size %lu KiB\n",
+					&ramoops_rmem_base,
+					(unsigned long)ramoops_rmem_size / 1024);
+			else
+				pr_err("ramoops: failed to create device for reserved region\n");
+			break;
+		}
+	}
 
 	ramoops_register_dummy();
 	ret = platform_driver_register(&ramoops_driver);
