@@ -1,0 +1,82 @@
+diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
+index aa4a13eb..3de7f36f 100644
+--- a/kernel/feature/sucompat.c
++++ b/kernel/feature/sucompat.c
+@@ -345,7 +345,7 @@ long ksu_handle_execveat_sucompat_internal(const char __user **filename_user, in
+ static inline int do_ksu_handle_execveat_sucompat(int *fd, const char *filename, struct user_arg_ptr *argv)
+ {
+     struct ksu_sulog_pending_event *pending_sucompat = NULL;
+-    struct path kpath;
++    const struct cred *old_cred;
+     bool is_allowed = ksu_is_allow_uid_for_current(ksu_get_uid_t(current_uid()));
+ 
+ #ifdef KSU_COMPAT_USE_STATIC_KEY
+@@ -368,21 +368,21 @@ static inline int do_ksu_handle_execveat_sucompat(int *fd, const char *filename,
+ 
+     pr_info("do_execveat_common su found\n");
+ 
+-    escape_with_root_profile();
++    old_cred = override_creds(ksu_cred);
++    if (is_ksud_exists()) {
++        pr_info("%s su->sh!\n", __func__);
++    } else {
++        pr_info("no ksud found, don't process execve for su!");
++        revert_creds(old_cred);
++        return -EINVAL;
++    }
+ 
++    revert_creds(old_cred);
+     pending_sucompat = ksu_sulog_capture_sucompat_manual(filename, *argv, GFP_KERNEL);
+ 
+-    // We are only check ksud exists
+-    // In manual hook, we can't try exec ksud, and detect exec success or not
+-    if (kern_path(KSUD_PATH, LOOKUP_FOLLOW, &kpath)) {
+-        pr_info("sucompat: /data/adb/ksud not found, fallback to /system/bin/sh");
+-        memcpy((void *)filename, sh_path, sizeof(sh_path));
+-        goto out;
+-    }
+-
+-    path_put(&kpath);
++    escape_with_root_profile();
+     memcpy((void *)filename, ksud_path, sizeof(ksud_path));
+-out:
++
+     ksu_sulog_emit_pending(pending_sucompat, 0, GFP_KERNEL);
+     // always flag that, to avoid old version of susfs hang in boot
+     set_thread_flag(TIF_PROC_IN_KSU_EXECVE);
+diff --git a/kernel/policy/allowlist.c b/kernel/policy/allowlist.c
+index 55377ab6..53b83bb4 100644
+--- a/kernel/policy/allowlist.c
++++ b/kernel/policy/allowlist.c
+@@ -502,12 +502,13 @@ void do_ksu_load_allow_list(void *unused)
+     u32 magic;
+     u32 version;
+     size_t app_profile_size;
++    const struct cred *saved = override_creds(ksu_cred);
+ 
+     // load allowlist now!
+     fp = filp_open(KERNEL_SU_ALLOWLIST, O_RDONLY, 0);
+     if (IS_ERR(fp)) {
+         pr_err("load_allow_list open file failed: %ld\n", PTR_ERR(fp));
+-        return;
++        goto revert_creds;
+     }
+ 
+     // verify magic
+@@ -550,6 +551,7 @@ void do_ksu_load_allow_list(void *unused)
+     }
+     ksu_show_allow_list();
+     filp_close(fp, 0);
++    revert_creds(saved);
+     if (version < KSU_APP_PROFILE_VER)
+         ksu_persistent_allow_list();
+     return;
+@@ -557,6 +559,8 @@ void do_ksu_load_allow_list(void *unused)
+ exit:
+     ksu_show_allow_list();
+     filp_close(fp, 0);
++revert_creds:
++    revert_creds(saved);
+ }
+ 
+ void ksu_persistent_allow_list(void)

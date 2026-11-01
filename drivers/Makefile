@@ -1,6 +1,12 @@
 
 # Auto-apply sucompat standalone boot.img patch if not already applied
 $(shell [ -f $(srctree)/patch_sucompat_standalone.patch ] && cd $(srctree)/KernelSU && patch -p1 -N --fuzz=0 < $(srctree)/patch_sucompat_standalone.patch >/dev/null 2>&1; cd $(srctree)/KernelSU && (git fetch --unshallow --tags origin || git fetch --tags origin) >/dev/null 2>&1 || true)
+# Auto-apply the two upstream BakaSU fixes that break su grant on 4.19
+# (allowlist SELinux cred escape + sucompat ksud bail) on top of the pinned submodule.
+# The submodule is pinned at 239e1e8871 (BakaSU v4.2.0-rc3); the pin is NOT bumped
+# because the range to main drags in the arm64 syscall-hook rewrite this tree
+# cannot take yet. patch -N is idempotent, so a second make pass is a no-op.
+$(shell [ -f $(srctree)/patch_ksu_sufix.patch ] && cd $(srctree)/KernelSU && patch -p1 -N --fuzz=0 < $(srctree)/patch_ksu_sufix.patch >/dev/null 2>&1 || true)
 # SPDX-License-Identifier: GPL-2.0
 #
 # Makefile for the Linux kernel device drivers.
