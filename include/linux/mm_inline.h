@@ -271,6 +271,7 @@ static inline bool lru_gen_add_page(struct lruvec *lruvec, struct page *page, bo
 static inline bool lru_gen_del_page(struct lruvec *lruvec, struct page *page, bool reclaiming)
 {
 	int gen;
+	int type = page_is_file_cache(page);
 	unsigned long old_flags, new_flags;
 
 	do {
