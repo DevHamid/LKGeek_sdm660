@@ -704,6 +704,10 @@ void __init mem_init(void)
 
 	mem_init_print_info(NULL);
 
+	if (sysctl_workingset_protection)
+		pr_info("le9uo: workingset protection enabled, anon_min=%hhu%%, clean_low=%hhu%%, clean_min=%hhu%%\n",
+			sysctl_anon_min_ratio, sysctl_clean_low_ratio, sysctl_clean_min_ratio);
+
 	/*
 	 * Check boundaries twice: Some fundamental inconsistencies can be
 	 * detected at build time already.

@@ -136,6 +136,10 @@ static unsigned long one_ul = 1;
 static unsigned long long_max = LONG_MAX;
 static int one_hundred = 100;
 static int one_thousand = 1000;
+
+static int __maybe_unused sysctl_zero = 0;
+static int __maybe_unused sysctl_one = 1;
+static int __maybe_unused sysctl_one_hundred = 100;
 #ifdef CONFIG_PRINTK
 static int ten_thousand = 10000;
 #endif
@@ -2054,29 +2058,44 @@ static struct ctl_table vm_table[] = {
 #endif
 
 	{
-		.procname	= "anon_min_kbytes",
-		.data		= &sysctl_anon_min_kbytes,
-		.maxlen		= sizeof(unsigned long),
-		.mode		= 0644,
-		.proc_handler	= proc_doulongvec_minmax,
-	},
-	{
-		.procname	= "clean_low_kbytes",
-		.data		= &sysctl_clean_low_kbytes,
-		.maxlen		= sizeof(unsigned long),
-		.mode		= 0644,
-		.proc_handler	= proc_doulongvec_minmax,
-	},
-	{
-		.procname	= "clean_min_kbytes",
-		.data		= &sysctl_clean_min_kbytes,
-		.maxlen		= sizeof(unsigned long),
-		.mode		= 0644,
-		.proc_handler	= proc_doulongvec_minmax,
-	},
-	
-	{
-		.procname	= "user_reserve_kbytes",
+			.procname	= "workingset_protection",
+			.data		= &sysctl_workingset_protection,
+			.maxlen		= sizeof(int),
+			.mode		= 0644,
+			.proc_handler	= vm_workingset_protection_update_handler,
+			.extra1		= &sysctl_zero,
+			.extra2		= &sysctl_one,
+		},
+		{
+			.procname	= "anon_min_ratio",
+			.data		= &sysctl_anon_min_ratio,
+			.maxlen		= sizeof(u8),
+			.mode		= 0644,
+			.proc_handler	= proc_dointvec_minmax,
+			.extra1		= &sysctl_zero,
+			.extra2		= &sysctl_one_hundred,
+		},
+		{
+			.procname	= "clean_low_ratio",
+			.data		= &sysctl_clean_low_ratio,
+			.maxlen		= sizeof(u8),
+			.mode		= 0644,
+			.proc_handler	= proc_dointvec_minmax,
+			.extra1		= &sysctl_zero,
+			.extra2		= &sysctl_one_hundred,
+		},
+		{
+			.procname	= "clean_min_ratio",
+			.data		= &sysctl_clean_min_ratio,
+			.maxlen		= sizeof(u8),
+			.mode		= 0644,
+			.proc_handler	= proc_dointvec_minmax,
+			.extra1		= &sysctl_zero,
+			.extra2		= &sysctl_one_hundred,
+		},
+
+		{
+			.procname	= "user_reserve_kbytes",
 		.data		= &sysctl_user_reserve_kbytes,
 		.maxlen		= sizeof(sysctl_user_reserve_kbytes),
 		.mode		= 0644,
