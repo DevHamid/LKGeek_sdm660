@@ -5473,15 +5473,18 @@ void lru_gen_init_lruvec(struct lruvec *lruvec)
 	for (type = 0; type < ANON_AND_FILE; type++) {
 		lrugen->max_seq[type] = MIN_NR_GENS + 1;
 		for (i = 0; i <= MIN_NR_GENS + 1; i++)
-			lrugen->timestamps[type][i] = jiffies;
+			lrugen->timestamps[i] = jiffies;
 	}
 	lrugen->enabled = lru_gen_enabled();
 
 	for_each_gen_type_zone(gen, type, zone)
 		INIT_LIST_HEAD(&lrugen->lists[gen][type][zone]);
 
-	lruvec->mm_state.seq[LRU_GEN_ANON] = MIN_NR_GENS;
-	lruvec->mm_state.seq[LRU_GEN_FILE] = MIN_NR_GENS;
+	for (type = 0; type < ANON_AND_FILE; type++) {
+		lruvec->mm_state.seq[type] = MIN_NR_GENS;
+		lruvec->mm_state.head[type] = NULL;
+		lruvec->mm_state.tail[type] = NULL;
+	}
 	init_waitqueue_head(&lruvec->mm_state.wait);
 }
 

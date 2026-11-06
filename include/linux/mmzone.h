@@ -345,7 +345,7 @@ enum {
  */
 struct lru_gen_struct {
 	/* the aging increments the youngest generation number */
-	unsigned long max_seq;
+	unsigned long max_seq[ANON_AND_FILE];
 	/* the eviction increments the oldest generation numbers */
 	unsigned long min_seq[ANON_AND_FILE];
 	/* the birth time of each generation in jiffies */
@@ -385,11 +385,11 @@ enum {
 
 struct lru_gen_mm_state {
 	/* set to max_seq after each iteration */
-	unsigned long seq;
+	unsigned long seq[ANON_AND_FILE];
 	/* where the current iteration starts (inclusive) */
-	struct list_head *head;
+	struct list_head *head[ANON_AND_FILE];
 	/* where the last iteration ends (exclusive) */
-	struct list_head *tail;
+	struct list_head *tail[ANON_AND_FILE];
 	/* to wait for the last page table walker to finish */
 	struct wait_queue_head wait;
 	/* Bloom filters flip after each iteration */
@@ -405,6 +405,10 @@ struct lru_gen_mm_walk {
 	struct lruvec *lruvec;
 	/* unstable max_seq from lru_gen_struct */
 	unsigned long max_seq;
+	/* per-type seq for tracking walk progress */
+	unsigned long seq[ANON_AND_FILE];
+	/* the aging type (LRU_GEN_ANON or LRU_GEN_FILE) */
+	int aging_type;
 	/* the next address within an mm to scan */
 	unsigned long next_addr;
 	/* to batch page table entries */
