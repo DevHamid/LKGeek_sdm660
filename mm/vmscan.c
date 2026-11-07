@@ -2424,6 +2424,54 @@ static unsigned long shrink_list(enum lru_list lru, unsigned long nr_to_scan,
 	return shrink_inactive_list(nr_to_scan, lruvec, sc, lru);
 }
 
+int vm_workingset_protection_update_handler(struct ctl_table *table, int write,
+					 void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (ret || !write)
+		return ret;
+
+	/* Normalize to 0/1 since sysctl allows any int but we only use boolean */
+	if (sysctl_workingset_protection)
+		sysctl_workingset_protection = 1;
+	else
+		sysctl_workingset_protection = 0;
+
+	workingset_protection_prev_totalram = 0;
+
+	return 0;
+}
+
+/*
+ * Ratio sysctl handlers: proc_dointvec_minmax writes sizeof(int) but
+ * our variables are u8 (1 byte). Use int temp to avoid corruption.
+ */
+int vm_ratio_update_handler(struct ctl_table *table, int write,
+				   void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	u8 *val = table->data;
+	int tmp = *val;
+	int ret;
+
+	table->data = &tmp;
+	table->maxlen = sizeof(int);
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	table->data = val;
+	table->maxlen = sizeof(u8);
+
+	if (ret || !write)
+		return ret;
+
+	if (tmp < 0)
+		*val = 0;
+	else if (tmp > 100)
+		*val = 100;
+	else
+		*val = tmp;
+
+	return 0;
+}
+
 static void prepare_workingset_protection(pg_data_t *pgdat, struct scan_control *sc)
 {
 	/*
@@ -4161,6 +4209,7 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	struct mem_cgroup *memcg = page_memcg(pvmw->page);
 	struct pglist_data *pgdat = page_pgdat(pvmw->page);
 	struct lruvec *lruvec = mem_cgroup_lruvec(pgdat, memcg);
+	int ftype = page_is_file_cache(pvmw->page);
 	DEFINE_MAX_SEQ(lruvec);
 	int old_gen, new_gen = lru_gen_from_seq(max_seq);
 
