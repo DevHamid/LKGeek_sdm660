@@ -932,6 +932,12 @@ CONFIG_CGROUP_FREEZER=y
 CONFIG_CGROUP_NET_PRIO=y
 CONFIG_CGROUP_PIDS=y
 CONFIG_MEMCG=y
+# MEMCG_KMEM is a hidden 'bool' with 'default y' that depends on MEMCG, so
+# enabling MEMCG above auto-enables it. The MGLRU backport on this 4.19 tree
+# uses the 5.x shrinker_rwsem in the CONFIG_MEMCG_KMEM paths, but 4.19 only
+# declares shrinker_rwlock -> mm/vmscan.c fails to build. Not required by
+# Droidspaces (it needs MEMCG for --memory, not kernel-mem accounting).
+# CONFIG_MEMCG_KMEM is not set
 CONFIG_MEMCG_SWAP=y
 CONFIG_CFS_BANDWIDTH=y
 CONFIG_DEVTMPFS=y
