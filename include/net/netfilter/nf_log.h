@@ -105,20 +105,30 @@ static inline void nf_log_packet(struct net *net,
 		   		const char *fmt, ...) {}
 
 static inline void nf_log_trace(struct net *net,
-		   		u_int8_t pf,
-		   		unsigned int hooknum,
-		   		const struct sk_buff *skb,
-		   		const struct net_device *in,
-		   		const struct net_device *out,
-		   		const struct nf_loginfo *li,
-		   		const char *fmt, ...) {}
+				u_int8_t pf,
+				unsigned int hooknum,
+				const struct sk_buff *skb,
+				const struct net_device *in,
+				const struct net_device *out,
+				const struct nf_loginfo *li,
+				const char *fmt, ...) {}
 #endif
 
 struct nf_log_buf;
 
+#ifdef CONFIG_DEBUG_KERNEL
 struct nf_log_buf *nf_log_buf_open(void);
 __printf(2, 3) int nf_log_buf_add(struct nf_log_buf *m, const char *f, ...);
 void nf_log_buf_close(struct nf_log_buf *m);
+#else
+static inline struct nf_log_buf *nf_log_buf_open(void) { return NULL; }
+static inline __printf(2, 3) int nf_log_buf_add(struct nf_log_buf *m,
+						const char *f, ...)
+{
+	return 0;
+}
+static inline void nf_log_buf_close(struct nf_log_buf *m) {}
+#endif
 
 /* common logging functions */
 int nf_log_dump_udp_header(struct nf_log_buf *m, const struct sk_buff *skb,
