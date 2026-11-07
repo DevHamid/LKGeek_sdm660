@@ -1229,29 +1229,18 @@ config SCHED_AUTOGROUP
 	  desktop applications.  Task group autogeneration is currently based
 	  upon task session.
 
-config SCHED_TUNE
-	bool "Boosting for CFS tasks (EXPERIMENTAL)"
-	depends on !UCLAMP_TASK
+config SCHED_POC_SELECTOR
+	bool "Piece-Of-Cake Fast Idle CPU Selector"
 	depends on SMP
+	default y
 	help
-	  This option enables support for task classification using a new
-	  cgroup controller, schedtune. Schedtune allows tasks to be given
-	  a boost value and marked as latency-sensitive or not. This option
-	  provides the "schedtune" controller.
+	  Idle CPU selector using cached bitmaps inspired by the scx_cake BPF
+	  scheduler. Reduces select_idle_cpu overhead by using bitmap scanning.
 
-	  This new controller:
-	  1. allows only a two layers hierarchy, where the root defines the
-	     system-wide boost value and its direct childrens define each one a
-	     different "class of tasks" to be boosted with a different value
-	  2. supports up to 16 different task classes, each one which could be
-	     configured with a different boost value
+	  This optimization does not affect scheduler fairness - it only
+	  speeds up the process of finding an idle CPU for task wakeup.
 
-	  Latency-sensitive tasks are not subject to energy-aware wakeup
-	  task placement. The boost value assigned to tasks is used to
-	  influence task placement and CPU frequency selection (if
-	  utilization-driven frequency selection is in use).
-
-	  If unsure, say N.
+	  If unsure, say Y.
 
 config SYSFS_DEPRECATED
 	bool "Enable deprecated sysfs features to support old userspace tools"
