@@ -5331,7 +5331,7 @@ void lru_gen_init_lruvec(struct lruvec *lruvec)
 	for (type = 0; type < ANON_AND_FILE; type++) {
 		lrugen->max_seq[type] = MIN_NR_GENS + 1;
 		for (i = 0; i <= MIN_NR_GENS + 1; i++)
-			lrugen->timestamps[i] = jiffies;
+			lrugen->timestamps[i][type] = jiffies;
 	}
 	lrugen->enabled = lru_gen_enabled();
 
