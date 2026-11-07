@@ -324,16 +324,19 @@ struct net_bridge {
 	struct net_bridge_vlan_group	__rcu *vlgrp;
 #endif
 
-	struct rhashtable		fdb_hash_tbl;
+	struct rhashtable fdb_hash_tbl;
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 	union {
-		struct rtable		fake_rtable;
-		struct rt6_info		fake_rt6_info;
+		struct rtable fake_rtable;
+		struct rt6_info fake_rt6_info;
 	};
-	u32				metrics[RTAX_MAX];
+	u32 metrics[RTAX_MAX];
+	bool nf_call_iptables;
+	bool nf_call_ip6tables;
+	bool nf_call_arptables;
 #endif
-	u16				group_fwd_mask;
-	u16				group_fwd_mask_required;
+	u16 group_fwd_mask;
+	u16 group_fwd_mask_required;
 
 	/* STP */
 	bridge_id			designated_root;
