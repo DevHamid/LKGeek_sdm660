@@ -2455,7 +2455,7 @@ int vm_workingset_protection_update_handler(struct ctl_table *table, int write,
  * Ratio sysctl handlers: proc_dointvec_minmax writes sizeof(int) but
  * our variables are u8 (1 byte). Use int temp to avoid corruption.
  */
-static int vm_ratio_update_handler(struct ctl_table *table, int write,
+int vm_ratio_update_handler(struct ctl_table *table, int write,
 				   void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	u8 *val = table->data;
@@ -4289,7 +4289,7 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	struct mem_cgroup *memcg = page_memcg(pvmw->page);
 	struct pglist_data *pgdat = page_pgdat(pvmw->page);
 	struct lruvec *lruvec = mem_cgroup_lruvec(pgdat, memcg);
-	int ftype = page_is_file_lru(pvmw->page);
+	int ftype = page_is_file_cache(pvmw->page);
 	DEFINE_MAX_SEQ(lruvec);
 	int old_gen, new_gen = lru_gen_from_seq(max_seq[ftype]);
 
