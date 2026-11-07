@@ -199,7 +199,7 @@ unsigned long vm_total_pages;
 
 static LIST_HEAD(shrinker_list);
 static DEFINE_SPINLOCK(shrinker_lock);
-static DEFINE_RWLOCK(shrinker_rwlock);
+static DECLARE_RWSEM(shrinker_rwsem);
 
 #ifdef CONFIG_MEMCG_KMEM
 
@@ -473,13 +473,13 @@ void unregister_shrinker(struct shrinker *shrinker)
 	/*
 	 * Wait until the shrinker is no longer in use (shrinker->del_rwsem)
 	 * Wait until shrinkers are no longer being added (shrinker_lock)
-	 * Wait until the shrinker list is no longer in use (shrinker_rwlock)
+	 * Wait until the shrinker list is no longer in use (shrinker_rwsem)
 	 */
 	down_write(&shrinker->del_rwsem);
 	spin_lock(&shrinker_lock);
-	write_lock(&shrinker_rwlock);
+	down_write(&shrinker_rwsem);
 	list_del(&shrinker->list);
-	write_unlock(&shrinker_rwlock);
+	up_write(&shrinker_rwsem);
 	spin_unlock(&shrinker_lock);
 	up_write(&shrinker->del_rwsem);
 
@@ -726,7 +726,7 @@ static unsigned long shrink_slab(gfp_t gfp_mask, int nid,
 	if (!mem_cgroup_disabled() && !mem_cgroup_is_root(memcg))
 		return shrink_slab_memcg(gfp_mask, nid, memcg, priority);
 
-	read_lock(&shrinker_rwlock);
+	down_read(&shrinker_rwsem);
 	/* Use the RCU list iteration primitive to allow concurrent additions */
 	list_for_each_entry_rcu(shrinker, &shrinker_list, list) {
 		struct shrink_control sc = {
@@ -737,17 +737,17 @@ static unsigned long shrink_slab(gfp_t gfp_mask, int nid,
 
 		if (!down_read_trylock(&shrinker->del_rwsem))
 			continue;
-		read_unlock(&shrinker_rwlock);
+		up_read(&shrinker_rwsem);
 
 		ret = do_shrink_slab(&sc, shrinker, priority);
 		if (ret == SHRINK_EMPTY)
 			ret = 0;
 		freed += ret;
 
-		read_lock(&shrinker_rwlock);
+		down_read(&shrinker_rwsem);
 		up_read(&shrinker->del_rwsem);
 	}
-	read_unlock(&shrinker_rwlock);
+	up_read(&shrinker_rwsem);
 
 	cond_resched();
 	return freed;
