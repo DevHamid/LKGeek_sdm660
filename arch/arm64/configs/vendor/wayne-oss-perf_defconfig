@@ -936,7 +936,10 @@ CONFIG_FAIR_GROUP_SCHED=y
 CONFIG_CGROUP_FREEZER=y
 CONFIG_CGROUP_NET_PRIO=y
 # MEMCG_KMEM is a hidden 'bool' with 'default y' that depends on MEMCG, so
-# CONFIG_MEMCG_KMEM is not set
+# enabling MEMCG above auto-enables it. Kept on: the MGLRU backport's
+# CONFIG_MEMCG_KMEM paths use the 5.x shrinker_rwsem, which mm/vmscan.c now
+# declares and uses consistently (see commit fixing shrinker_rwsem).
+>>>>>>> fc9f1e3a22d1 (mm: fix shrinker_rwsem undeclared in MGLRU backport)
 CONFIG_MEMCG_SWAP=y
 CONFIG_CFS_BANDWIDTH=y
 CONFIG_DEVTMPFS=y
