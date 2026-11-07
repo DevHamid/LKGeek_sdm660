@@ -954,7 +954,8 @@ CONFIG_IPV6=y
 CONFIG_IP6_NF_NAT=y
 CONFIG_IP6_NF_TARGET_MASQUERADE=y
 CONFIG_NETFILTER_XT_TARGET_LOG=y
-CONFIG_NETFILTER_XT_TARGET_NFLOG=y
+# NFLOG target selects NETFILTER_NETLINK_LOG, which this tree cannot build
+# (nf_log stubbed behind CONFIG_DEBUG_KERNEL). Dropped for that reason.
 CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
 CONFIG_NETFILTER_XT_MATCH_HL=y
 CONFIG_NETFILTER_XT_MATCH_RECENT=y
@@ -963,7 +964,11 @@ CONFIG_IP_SET_HASH_IP=y
 CONFIG_IP_SET_HASH_NET=y
 CONFIG_NETFILTER_XT_SET=y
 CONFIG_NETFILTER_NETLINK_QUEUE=y
-CONFIG_NETFILTER_NETLINK_LOG=y
+# This tree deliberately stubs the whole nf_log subsystem behind
+# CONFIG_DEBUG_KERNEL (Makefile + nf_internals.h + nf_log.h all gate it).
+# NETFILTER_NETLINK_LOG pulls in nf_log_* users, so it must stay off or the
+# link fails. UFW/Fail2ban in-container logging is the only thing lost.
+# CONFIG_NETFILTER_NETLINK_LOG is not set
 CONFIG_FW_LOADER=y
 CONFIG_SYSCTL=y
 CONFIG_SYSVIPC=y
