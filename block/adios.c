@@ -21,7 +21,6 @@
 #include <linux/list_sort.h>
 #include <linux/rcupdate.h>
 
-#include "elevator.h"
 #include "blk.h"
 #include "blk-mq.h"
 #include "blk-mq-sched.h"
