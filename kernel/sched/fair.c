@@ -9348,6 +9348,18 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 	lockdep_assert_held(&env->src_rq->lock);
 
 	/*
+	 * Never migrate a task that is not actually queued on the source rq.
+	 * cfs_tasks can still hold its group_node when it was the last task
+	 * dequeued, because account_entity_dequeue() only list_del_init()s
+	 * when nr_running > 1.  detach_task() would then dequeue_entity() it
+	 * a second time and __dequeue_entity() has no on_rq guard on 4.19, so
+	 * rb_erase_cached() runs on a node that is already gone and corrupts
+	 * the cfs_rq rbtree.
+	 */
+	if (!p->se.on_rq)
+		return 0;
+
+	/*
 	 * We do not migrate tasks that are:
 	 * 1) throttled_lb_pair, or
 	 * 2) cannot be migrated to this CPU due to cpus_allowed, or
