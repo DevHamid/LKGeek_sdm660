@@ -7,8 +7,16 @@
 		compatible = "removed-dma-pool", "ramoops";
 		no-map;
 		reg = <0x0 0xA0000000 0x0 0x00400000>;
+		/*
+		 * record-size must be non-zero or ramoops_init_przs() sets
+		 * max_dump_cnt = 0 and never allocates a dmesg zone, so
+		 * PSTORE_FLAGS_DMESG is never set and /sys/fs/pstore keeps
+		 * no dmesg-ramoops at all.  2M dump + 2M console + 2M pmsg
+		 * fits in the 4M reservation below.
+		 */
+		record-size = <0x80000>;
 		console-size = <0x200000>;
-		pmsg-size = <0x200000>;
+		pmsg-size = <0x80000>;
 		max-reason = <0x4>;
 	};
 };
