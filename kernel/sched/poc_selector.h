@@ -29,6 +29,37 @@ extern struct static_key_true sched_poc_rr_improved;
 extern struct static_key_true sched_poc_count_enabled;
 extern void __set_cpu_idle_state_poc(int cpu, int state);
 extern struct static_key_true sched_poc_waker_yield;
+/*
+ * Selection levels, for the per-level hit counters (sysctl kernel.sched_poc_count).
+ * Guarded by static key — zero overhead when disabled (default).
+ */
+enum poc_level {
+	POC_LV0W = 0,		/* waker-yield: the sync waker's own CPU */
+	POC_LV1S,		/* target CPU sticky (L1/TLB affinity) */
+	POC_LV1T,		/* target core idle */
+	POC_LV1P,		/* prev core idle */
+	POC_LV1R,		/* recent core idle */
+	POC_LV2,		/* idle core in L2 cluster */
+	POC_LV3,		/* idle core across LLC (RR) */
+	POC_LV4P,		/* prev's SMT sibling (cache locality) */
+	POC_LV4R,		/* recent's SMT sibling (warm cache) */
+	POC_LV4T,		/* target's SMT sibling */
+	POC_LV5,		/* idle CPU in L2 cluster */
+	POC_LV6,		/* idle CPU across LLC (RR) */
+	POC_FALLBACK,		/* POC returned -1, CFS fallback */
+	POC_NR_LEVELS
+};
+
+#define POC_SMT_LEVEL_OFFSET (POC_LV5 - POC_LV2)
+
+DECLARE_PER_CPU(unsigned long[POC_NR_LEVELS], poc_debug_cnt);
+
+static __always_inline void poc_count(enum poc_level lv)
+{
+	if (static_branch_unlikely(&sched_poc_count_enabled))
+		__this_cpu_inc(poc_debug_cnt[lv]);
+}
+
 void poc_aggregate(struct sched_domain_shared *sd_share);
 void poc_commit_cpu(int cpu);
 extern unsigned int poc_pull_budget;
