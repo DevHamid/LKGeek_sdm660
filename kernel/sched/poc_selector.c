@@ -244,8 +244,12 @@ DEFINE_STATIC_KEY_TRUE(sched_poc_waker_yield);
  * Guarded by static key — zero overhead when disabled (default).
  * Aggregated across all CPUs and exposed via sysfs.
  */
+/*
+ * Selection levels, for the per-level hit counters (sysctl kernel.sched_poc_count).
+ * Guarded by static key — zero overhead when disabled (default).
+ */
 enum poc_level {
-	POC_LV0W = 0,	/* waker-yield: the sync waker's own CPU */
+	POC_LV0W = 0,		/* waker-yield: the sync waker's own CPU */
 	POC_LV1S,		/* target CPU sticky (L1/TLB affinity) */
 	POC_LV1T,		/* target core idle */
 	POC_LV1P,		/* prev core idle */
@@ -257,7 +261,7 @@ enum poc_level {
 	POC_LV4T,		/* target's SMT sibling */
 	POC_LV5,		/* idle CPU in L2 cluster */
 	POC_LV6,		/* idle CPU across LLC (RR) */
-	POC_FALLBACK,	/* POC returned -1, CFS fallback */
+	POC_FALLBACK,		/* POC returned -1, CFS fallback */
 	POC_NR_LEVELS
 };
 
@@ -267,10 +271,6 @@ DEFINE_STATIC_KEY_TRUE(sched_poc_count_enabled);
 
 static DEFINE_PER_CPU(unsigned long[POC_NR_LEVELS], poc_debug_cnt);
 
-static __always_inline void poc_count(enum poc_level lv)
-{
-	if (static_branch_unlikely(&sched_poc_count_enabled))
-		__this_cpu_inc(poc_debug_cnt[lv]);
 }
 
 /**************************************************************
