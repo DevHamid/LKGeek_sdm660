@@ -21,14 +21,22 @@ static inline void poc_check_skip_fallback(void) {}
 extern struct static_key_true sched_poc_aligned;
 extern struct static_key_true sched_poc_smt_consecutive;
 extern struct static_key_true sched_poc_smt_uniform;
+extern struct static_key_true sched_poc_smt_fallback;
 extern struct static_key_true sched_poc_target_sticky;
 extern struct static_key_true sched_poc_packed;
+extern struct static_key_true sched_poc_greedy_search;
+extern struct static_key_true sched_poc_rr_improved;
+extern struct static_key_true sched_poc_count_enabled;
 extern void __set_cpu_idle_state_poc(int cpu, int state);
 extern struct static_key_true sched_poc_waker_yield;
 void poc_aggregate(struct sched_domain_shared *sd_share);
 void poc_commit_cpu(int cpu);
 extern unsigned int poc_pull_budget;
 extern void poc_sd_shared_init(struct sched_domain *sd, int sd_id);
+extern int select_idle_cpu_poc(int target, int prev, int recent,
+			       struct sched_domain_shared *sd_share,
+			       struct task_struct *p,
+			       const struct cpumask *allowed);
 
 /* 4.19 shim: sched_asym_cpucap_active() was a later helper; use the static key. */
 static __always_inline bool sched_asym_cpucap_active(void)
@@ -130,6 +138,7 @@ static __always_inline u64 poc_cpumask_to_u64(const struct cpumask *mask,
 		return (lo >> shift) | (hi << (64 - shift));
 	}
 }
+
 #endif /* CONFIG_SCHED_POC_SELECTOR */
 
 #endif /* _KERNEL_SCHED_POC_SELECTOR_H */

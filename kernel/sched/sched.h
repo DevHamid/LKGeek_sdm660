@@ -1002,6 +1002,16 @@ struct rq {
 
 	unsigned int		clock_update_flags;
 	u64			clock;
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	/*
+	 * POC per-CPU idle state.  poc_busy_bit is read by other CPUs without
+	 * the rq lock, so it must stay in its own cache line away from the
+	 * hot scheduler fields; poc_idle_committed records that the last idle
+	 * entry published its state to the LLC bitmap.
+	 */
+	unsigned int		poc_idle_committed;
+	unsigned int		poc_busy_bit ____cacheline_aligned;
+#endif
 	/* Ensure that all clocks are in the same cache line */
 	u64			clock_task ____cacheline_aligned;
 	u64			clock_pelt;
@@ -1176,6 +1186,7 @@ static inline void update_idle_core(struct rq *rq) { }
 #endif
 
 DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
+
 
 #define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))
 #define this_rq()		this_cpu_ptr(&runqueues)
@@ -3249,3 +3260,8 @@ struct sched_avg_stats {
 	int nr_scaled;
 };
 extern void sched_get_nr_running_avg(struct sched_avg_stats *stats);
+
+#ifdef CONFIG_SCHED_POC_SELECTOR
+#include "poc_sync.h"
+#include "poc_selector.h"
+#endif
