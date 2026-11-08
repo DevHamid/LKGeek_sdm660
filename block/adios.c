@@ -1328,6 +1328,9 @@ static struct request *dispatch_from_bq(struct adios_data *ad) {
 	return NULL;
 	}
 	end_scoped_guard
+
+	/* unreachable: the guard body above always returns */
+	return NULL;
 }
 
 // Dispatch a request from the priority queue
@@ -1350,8 +1353,10 @@ static struct request *dispatch_from_pq(struct adios_data *ad) {
 	return rq;
 }
 	end_scoped_guard
-}
 
+	/* unreachable: the guard body above always returns */
+	return NULL;
+}
 
 // Dispatch a request to the hardware queue
 static struct request *adios_dispatch_request(struct blk_mq_hw_ctx *hctx) {
@@ -1858,6 +1863,9 @@ static ssize_t adios_read_priority_store(
 	return count;
 	}
 	end_scoped_guard
+
+	/* unreachable: the guard body above always returns */
+	return count;
 }
 
 // Reset batch queue statistics
