@@ -3262,6 +3262,6 @@ struct sched_avg_stats {
 extern void sched_get_nr_running_avg(struct sched_avg_stats *stats);
 
 #ifdef CONFIG_SCHED_POC_SELECTOR
-#include "poc_sync.h"
-#include "poc_selector.h"
+#include "poc_selector.h"	/* extern static keys first */
+#include "poc_sync.h"		/* reads poc_selector_active */
 #endif
