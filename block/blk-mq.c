@@ -517,6 +517,17 @@ void blk_mq_free_request(struct request *rq)
 }
 EXPORT_SYMBOL_GPL(blk_mq_free_request);
 
+void blk_mq_free_requests(struct list_head *list)
+{
+	struct request *rq, *next;
+
+	list_for_each_entry_safe(rq, next, list, queuelist)
+		blk_mq_free_request(rq);
+
+	INIT_LIST_HEAD(list);
+}
+EXPORT_SYMBOL_GPL(blk_mq_free_requests);
+
 inline void __blk_mq_end_request(struct request *rq, blk_status_t error)
 {
 	u64 now = ktime_get_ns();
