@@ -5848,6 +5848,13 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 DEFINE_PER_CPU(u8, poc_sync_verdict);
 DEFINE_PER_CPU(struct task_struct *, poc_sync_noted);
 
+/*
+ * 4.19 predates Idle_Sched's is_idle_core().  POC's wake hooks sit above
+ * test_idle_cores() and must not move, so give it a forward declaration here
+ * and resolve the call through a helper defined after test_idle_cores().
+ */
+static __always_inline bool is_idle_core(int cpu);
+
 /* current's own CPU time now, without the rq lock */
 static inline u64 poc_curr_exec(struct rq *rq)
 {
@@ -6992,15 +6999,11 @@ unlock:
 	rcu_read_unlock();
 }
 
-/*
- * 4.19 predates Idle_Sched's is_idle_core(); test_idle_cores() reads
- * sd_llc_shared->has_idle_cores, which select_idle_core() consults below.
- */
+
 static __always_inline bool is_idle_core(int cpu)
 {
 	return test_idle_cores(cpu, false);
 }
-
 
 /*
  * Scan the entire LLC domain for idle cores; this dynamically switches off if
