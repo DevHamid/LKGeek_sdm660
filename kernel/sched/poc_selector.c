@@ -87,6 +87,15 @@
  */
 DEFINE_STATIC_KEY_TRUE(poc_selector_active);
 
+/*
+ * Backing store for the debug counters.  poc_selector.h declares these and
+ * poc_count() bumps them, but the upstream tree relied on a translation unit
+ * the 4.19 port does not build, so they linked as undefined.  Keep them here,
+ * next to the sysctl that switches the counting on.
+ */
+DEFINE_STATIC_KEY_TRUE(sched_poc_count_enabled);
+DEFINE_PER_CPU(unsigned long[POC_NR_LEVELS], poc_debug_cnt);
+
 static bool poc_selector_skip;	/* set while sched_ext owns the CPU */
 bool sched_poc_selector __read_mostly = true;	/* sysctl: user master switch */
 

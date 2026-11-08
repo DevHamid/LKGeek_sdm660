@@ -5849,11 +5849,28 @@ DEFINE_PER_CPU(u8, poc_sync_verdict);
 DEFINE_PER_CPU(struct task_struct *, poc_sync_noted);
 
 /*
- * 4.19 predates Idle_Sched's is_idle_core().  POC's wake hooks sit above
- * test_idle_cores() and must not move, so give it a forward declaration here
- * and resolve the call through a helper defined after test_idle_cores().
+ * POC's wake hooks in select_task_rq_fair() call is_idle_core(), but both it
+ * and test_idle_cores() used to live inside the CONFIG_SCHED_SMT block further
+ * down.  sdm660 is a big.LITTLE part with no SMT, so that config is off and the
+ * call had no definition to resolve against.  Neither helper actually depends
+ * on SMT - both just read sd_llc_shared->has_idle_cores - so define them here,
+ * before first use, unconditionally.
  */
-static __always_inline bool is_idle_core(int cpu);
+static inline bool test_idle_cores(int cpu, bool def)
+{
+	struct sched_domain_shared *sds;
+
+	sds = rcu_dereference(per_cpu(sd_llc_shared, cpu));
+	if (sds)
+		return READ_ONCE(sds->has_idle_cores);
+
+	return def;
+}
+
+static __always_inline bool is_idle_core(int cpu)
+{
+	return test_idle_cores(cpu, false);
+}
 
 /* current's own CPU time now, without the rq lock */
 static inline u64 poc_curr_exec(struct rq *rq)
@@ -6959,17 +6976,6 @@ static inline void set_idle_cores(int cpu, int val)
 		WRITE_ONCE(sds->has_idle_cores, val);
 }
 
-static inline bool test_idle_cores(int cpu, bool def)
-{
-	struct sched_domain_shared *sds;
-
-	sds = rcu_dereference(per_cpu(sd_llc_shared, cpu));
-	if (sds)
-		return READ_ONCE(sds->has_idle_cores);
-
-	return def;
-}
-
 /*
  * Scans the local SMT mask to see if the entire core is idle, and records this
  * information in sd_llc_shared->has_idle_cores.
@@ -6999,11 +7005,6 @@ unlock:
 	rcu_read_unlock();
 }
 
-
-static __always_inline bool is_idle_core(int cpu)
-{
-	return test_idle_cores(cpu, false);
-}
 
 /*
  * Scan the entire LLC domain for idle cores; this dynamically switches off if
