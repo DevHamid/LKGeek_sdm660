@@ -896,15 +896,28 @@ int elevator_init_mq(struct request_queue *q)
 	struct elevator_type *e;
 	int err = 0;
 
+	/*
+	 * Upstream only initialises a scheduler for single-hwq queues, leaving
+	 * the multi-queue ones on blk-mq's internal dispatch until userspace
+	 * picks one.  ADIOS is an mq scheduler that maps its own per-hctx
+	 * requests, so it is perfectly usable on multi-hwq queues - and being
+	 * the configured default it has to be installed there too, or sdm660
+	 * (all-mq) never sees it.  Keep the old behaviour for the other
+	 * schedulers.
+	 */
+#if !defined(CONFIG_ADIOS_DEFAULT)
 	if (q->nr_hw_queues != 1)
 		return 0;
+#endif
 
 	WARN_ON_ONCE(test_bit(QUEUE_FLAG_REGISTERED, &q->queue_flags));
 
 	if (unlikely(q->elevator))
 		goto out;
 
-#if defined(CONFIG_BFQ_DEFAULT)
+#if defined(CONFIG_ADIOS_DEFAULT)
+		e = elevator_get(q, "adios", false);
+#elif defined(CONFIG_BFQ_DEFAULT)
 		e = elevator_get(q, "bfq", false);
 #elif defined(CONFIG_MQ_KYBER_DEFAULT)
 		e = elevator_get(q, "kyber", false);
