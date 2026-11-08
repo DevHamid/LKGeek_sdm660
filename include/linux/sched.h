@@ -24,6 +24,7 @@
 #include <linux/resource.h>
 #include <linux/latencytop.h>
 #include <linux/sched/prio.h>
+#include <linux/sched/poc_sync.h>
 #include <linux/signal_types.h>
 #include <linux/mm_types_task.h>
 #include <linux/mm_event.h>
@@ -878,6 +879,9 @@ struct task_struct {
 	const struct sched_class	*sched_class;
 	struct sched_entity		se;
 	struct sched_rt_entity		rt;
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	struct poc_sync			poc_sync;
+#endif
 	u64				 last_sleep_ts;
 
 	int				boost;

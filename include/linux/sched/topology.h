@@ -70,6 +70,32 @@ struct sched_domain_shared {
 	int		has_idle_cores;
 
 	bool            overutilized;
+
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	/*
+	 * Piece-Of-Cake idle bitmap state, one instance per LLC.  All CPUs
+	 * of the LLC read poc_busy_mask and OR in their own idle state via
+	 * poc_pending; poc_aggregate() folds the pending bits in.  Bit N of
+	 * the masks is CPU (poc_cpu_base + N), so an LLC of more than 64
+	 * CPUs sets poc_fast_eligible = false and POC bails out to CFS.
+	 */
+	atomic64_t	poc_busy_mask;
+	atomic_t	poc_pending[8];		/* 64 CPUs, 1 bit each */
+	u64		poc_llc_members;	/* CPUs present in this LLC */
+	int		poc_cpu_base;		/* lowest CPU of the LLC */
+	int		poc_affinity_shift;	/* poc_cpu_base & 63 */
+	bool		poc_fast_eligible;
+#ifdef CONFIG_SCHED_SMT
+	u64		poc_smt_mask[64];	/* per-bit SMT sibling masks */
+	u64		poc_primary_mask;	/* lowest sibling of each core */
+	int		poc_smt_shift;		/* sibling stride, consecutive layout */
+	bool		poc_smt_uniform;	/* all cores 2-way */
+#endif
+#ifdef CONFIG_SCHED_CLUSTER
+	u64		poc_cluster_mask[64];	/* per-bit L2 cluster masks */
+	bool		poc_cluster_valid;
+#endif
+#endif /* CONFIG_SCHED_POC_SELECTOR */
 };
 
 struct sched_domain {

@@ -55,10 +55,15 @@
 
 enum { POC_SYNC_NO, POC_SYNC_YES };
 
-/* verdict of the wake being placed from this CPU, valid within select_task_rq_fair() */
-static DEFINE_PER_CPU(u8, poc_sync_verdict);
-/* wakee whose sync wake poc_select_wake_cpu() already noted, for wakeup_preempt */
-static DEFINE_PER_CPU(struct task_struct *, poc_sync_noted);
+/*
+ * verdict of the wake being placed from this CPU, valid within
+ * select_task_rq_fair(); written in fair.c, read in poc_selector.c.
+ * wakee whose sync wake poc_select_wake_cpu() already noted, for
+ * wakeup_preempt.  Both are owned by fair.c and declared here as extern so
+ * every including translation unit shares the same storage.
+ */
+DECLARE_PER_CPU(u8, poc_sync_verdict);
+DECLARE_PER_CPU(struct task_struct *, poc_sync_noted);
 
 /*
  * May select_idle_sibling() take its early recent_used_cpu shortcut?  Not
