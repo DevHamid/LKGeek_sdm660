@@ -43,6 +43,15 @@ struct adios_irqsave_guard {
 	bool			armed;
 };
 
+static inline int adios_irqsave_guard_acquire(struct adios_irqsave_guard *g,
+		spinlock_t *lock)
+{
+	g->lock = lock;
+	g->armed = true;
+	spin_lock_irqsave(g->lock, g->flags);
+	return 1;
+}
+
 static inline void adios_irqsave_guard_release(struct adios_irqsave_guard *g)
 {
 	if (g->armed) {
@@ -53,16 +62,21 @@ static inline void adios_irqsave_guard_release(struct adios_irqsave_guard *g)
 
 /*
  * 4.19 has no include/linux/cleanup.h (came with 6.5), so scoped_guard() and
- * guard() do not exist.  Both are emulated with a for-loop whose condition is
- * the lock acquisition: the loop body runs exactly once, with the lock held,
- * and the increment releases it.  `break`/`continue` inside the body behave
- * as they do inside a plain block, which is all this scheduler relies on.
+ * guard() do not exist.  Both are emulated here: an enclosing block declares
+ * the guard, the for-loop condition takes the lock (running the body exactly
+ * once, with the lock held) and the increment releases it.  The state has to
+ * live outside the for-init clause because this tree is built -std=gnu89,
+ * which rejects declarations there.  The enclosing block keeps repeated uses
+ * in one function from colliding on _g, and `break`/`continue` in the body
+ * behave as they do in a plain block, which is all this scheduler uses.
  */
 #define scoped_guard(cls, lock)						\
-	for (struct adios_irqsave_guard _g =				\
-			{ .lock = (lock), .armed = 1 };			\
-	     _g.armed && (spin_lock_irqsave(_g.lock, _g.flags), 1);	\
-	     adios_irqsave_guard_release(&_g))
+	{								\
+		struct adios_irqsave_guard _g = { .lock = NULL, .armed = 0 }; \
+		for (adios_irqsave_guard_acquire(&_g, (lock));		\
+		     _g.armed;						\
+		     adios_irqsave_guard_release(&_g))
+#define end_scoped_guard	}
 
 /* Request Types:
  *
@@ -957,6 +971,7 @@ static void insert_to_prio_queue(struct adios_data *ad,
 		if (was_empty)
 			set_adios_state(ad, ADIOS_STATE_PQ, pq_idx, true);
 	}
+	end_scoped_guard
 }
 
 // Insert a request into the scheduler (after Read & Write models stabilized)
@@ -1037,6 +1052,7 @@ static void adios_insert_requests(struct blk_mq_hw_ctx *hctx,
 			insert_request_pre_stability(hctx, rq, insert_flags, &free);
 			}
 		}
+		end_scoped_guard
 	} while (!stop);
 
 	blk_mq_free_requests(&free);
@@ -1187,6 +1203,7 @@ static bool fill_batch_queues(struct adios_data *ad, u64 tpl) {
 		count++;
 			}
 		}
+		end_scoped_guard
 	} while (!stop);
 
 	if (bq_batch_order == ADIOS_BO_ELEVATOR && ad->batch_count[page][1] > 1)
@@ -1309,7 +1326,8 @@ static struct request *dispatch_from_bq(struct adios_data *ad) {
 	}
 
 	return NULL;
-}
+	}
+	end_scoped_guard
 }
 
 // Dispatch a request from the priority queue
@@ -1331,6 +1349,7 @@ static struct request *dispatch_from_pq(struct adios_data *ad) {
 	}
 	return rq;
 }
+	end_scoped_guard
 }
 
 
@@ -1582,7 +1601,9 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 	timer_setup(&ad->update_timer, update_timer_callback, 0);
 
 	/* We dispatch from request queue wide instead of hw queue */
+#ifdef QUEUE_FLAG_SQ_SCHED
 	blk_queue_flag_set(QUEUE_FLAG_SQ_SCHED, q);
+#endif
 
 	ad->queue = q;
 	blk_stat_enable_accounting(q);
@@ -1618,12 +1639,12 @@ put_eq:
 static void adios_exit_sched(struct elevator_queue *e) {
 	struct adios_data *ad = e->elevator_data;
 
-	timer_shutdown_sync(&ad->update_timer);
+	del_timer_sync(&ad->update_timer);	/* 4.19: no timer_shutdown_sync */
 
-	for (int i = 0; i < 2; i++)
+	for (u8 i = 0; i < 2; i++)
 		WARN_ON_ONCE(!list_empty(&ad->prio_queue[i]));
 
-	for (u8 i = 0; i < ADIOS_OPTYPES; i++) {
+	for (i = 0; i < ADIOS_OPTYPES; i++) {
 		struct latency_model *model = &ad->latency_model[i];
 		struct latency_model_params *params = rcu_access_pointer(model->params);
 
@@ -1835,7 +1856,8 @@ static ssize_t adios_read_priority_store(
 	ad->dl_bias = 0;
 
 	return count;
-}
+	}
+	end_scoped_guard
 }
 
 // Reset batch queue statistics
@@ -1990,7 +2012,8 @@ static struct elv_fs_entry adios_sched_attrs[] = {
 
 // Define the ADIOS scheduler type
 static struct elevator_type mq_adios = {
-	.ops = {
+	.uses_mq = true,
+	.ops.mq = {
 		.next_request		= elv_rb_latter_request,
 		.former_request		= elv_rb_former_request,
 		.limit_depth		= adios_limit_depth,
