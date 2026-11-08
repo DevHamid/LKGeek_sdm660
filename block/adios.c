@@ -37,6 +37,20 @@
 typedef bool blk_insert_t;
 #define BLK_MQ_INSERT_AT_HEAD	true
 
+struct adios_irqsave_guard {
+	spinlock_t		*lock;
+	unsigned long		flags;
+	bool			armed;
+};
+
+static inline void adios_irqsave_guard_release(struct adios_irqsave_guard *g)
+{
+	if (g->armed) {
+		g->armed = false;
+		spin_unlock_irqrestore(g->lock, g->flags);
+	}
+}
+
 /*
  * 4.19 has no include/linux/cleanup.h (came with 6.5), so scoped_guard() and
  * guard() do not exist.  Both are emulated with a for-loop whose condition is
@@ -1296,6 +1310,7 @@ static struct request *dispatch_from_bq(struct adios_data *ad) {
 
 	return NULL;
 }
+}
 
 // Dispatch a request from the priority queue
 static struct request *dispatch_from_pq(struct adios_data *ad) {
@@ -1315,6 +1330,7 @@ static struct request *dispatch_from_pq(struct adios_data *ad) {
 		update_elv_direction(ad);
 	}
 	return rq;
+}
 }
 
 
@@ -1819,6 +1835,7 @@ static ssize_t adios_read_priority_store(
 	ad->dl_bias = 0;
 
 	return count;
+}
 }
 
 // Reset batch queue statistics
