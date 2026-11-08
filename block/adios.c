@@ -38,25 +38,25 @@ typedef bool blk_insert_t;
 #define BLK_MQ_INSERT_AT_HEAD	true
 
 struct adios_irqsave_guard {
-	spinlock_t		*lock;
-	unsigned long		flags;
-	bool			armed;
+	spinlock_t		*guard_lock;
+	unsigned long		guard_flags;
+	bool			guard_armed;
 };
 
 static inline int adios_irqsave_guard_acquire(struct adios_irqsave_guard *g,
-		spinlock_t *lock)
+		spinlock_t *guard_lock)
 {
-	g->lock = lock;
-	g->armed = true;
-	spin_lock_irqsave(g->lock, g->flags);
+	g->guard_lock = guard_lock;
+	g->guard_armed = true;
+	spin_lock_irqsave(g->guard_lock, g->guard_flags);
 	return 1;
 }
 
 static inline void adios_irqsave_guard_release(struct adios_irqsave_guard *g)
 {
-	if (g->armed) {
-		g->armed = false;
-		spin_unlock_irqrestore(g->lock, g->flags);
+	if (g->guard_armed) {
+		g->guard_armed = false;
+		spin_unlock_irqrestore(g->guard_lock, g->guard_flags);
 	}
 }
 
@@ -70,11 +70,11 @@ static inline void adios_irqsave_guard_release(struct adios_irqsave_guard *g)
  * in one function from colliding on _g, and `break`/`continue` in the body
  * behave as they do in a plain block, which is all this scheduler uses.
  */
-#define scoped_guard(cls, lock)						\
+#define scoped_guard(guard_cls, guard_lock)				\
 	{								\
-		struct adios_irqsave_guard _g = { .lock = NULL, .armed = 0 }; \
-		for (adios_irqsave_guard_acquire(&_g, (lock));		\
-		     _g.armed;						\
+		struct adios_irqsave_guard _g = { .guard_armed = 0 };		\
+		for (adios_irqsave_guard_acquire(&_g, (guard_lock));	\
+		     _g.guard_armed;					\
 		     adios_irqsave_guard_release(&_g))
 #define end_scoped_guard	}
 
@@ -395,7 +395,7 @@ static bool lm_update_small_buckets(struct latency_model *model,
 	threshold_weight = (total_weight * outlier_percentile) / 100;
 
 	// Identify the bucket that corresponds to the outlier threshold
-	for (u8 i = 0; i < LM_LAT_BUCKET_COUNT; i++) {
+	for (i = 0; i < LM_LAT_BUCKET_COUNT; i++) {
 		cumulative_weight += buckets[i].sum_of_weights;
 		if (cumulative_weight >= threshold_weight) {
 			outlier_threshold_bucket = i;
@@ -469,7 +469,7 @@ static bool lm_update_large_buckets(struct latency_model *model,
 	threshold_weight = (total_weight * outlier_percentile) / 100;
 
 	// Identify the bucket that corresponds to the outlier threshold
-	for (u8 i = 0; i < LM_LAT_BUCKET_COUNT; i++) {
+	for (i = 0; i < LM_LAT_BUCKET_COUNT; i++) {
 		cumulative_weight += buckets[i].sum_of_weights;
 		if (cumulative_weight >= threshold_weight) {
 			outlier_threshold_bucket = i;
@@ -916,8 +916,8 @@ static void adios_merged_requests(struct request_queue *q, struct request *req,
 }
 
 // Try to merge a bio into an existing rq before associating it with an rq
-static bool adios_bio_merge(struct request_queue *q, struct bio *bio,
-		unsigned int nr_segs) {
+static bool adios_bio_merge(struct blk_mq_hw_ctx *hctx, struct bio *bio) {
+	struct request_queue *q = hctx->queue;
 	unsigned long flags;
 	struct adios_data *ad = q->elevator->elevator_data;
 	struct request *free = NULL;
@@ -1059,7 +1059,7 @@ static void adios_insert_requests(struct blk_mq_hw_ctx *hctx,
 }
 
 // Prepare a request before it is inserted into the scheduler
-static void adios_prepare_request(struct request *rq) {
+static void adios_prepare_request(struct request *rq, struct bio *bio) {
 	struct adios_data *ad = rq->q->elevator->elevator_data;
 	struct adios_rq_data *rd;
 
