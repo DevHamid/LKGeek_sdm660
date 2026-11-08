@@ -91,10 +91,14 @@ struct sched_domain_shared {
 	int		poc_smt_shift;		/* sibling stride, consecutive layout */
 	bool		poc_smt_uniform;	/* all cores 2-way */
 #endif
-#ifdef CONFIG_SCHED_CLUSTER
+	/*
+	 * L2 cluster table: 4.19 has no CONFIG_SCHED_CLUSTER, so it is filled
+	 * in but poc_cluster_valid is left false and the cluster paths stay
+	 * dead at runtime.  Kept out of the SMT #ifdef so poc_cluster_search()
+	 * compiles on this tree.
+	 */
 	u64		poc_cluster_mask[64];	/* per-bit L2 cluster masks */
 	bool		poc_cluster_valid;
-#endif
 #endif /* CONFIG_SCHED_POC_SELECTOR */
 };
 
