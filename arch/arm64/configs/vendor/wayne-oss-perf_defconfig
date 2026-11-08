@@ -976,5 +976,11 @@ CONFIG_POSIX_MQUEUE=y
 # ADIOS I/O scheduler.
 CONFIG_SCHED_POC_SELECTOR=y
 CONFIG_SCHED_BORE=y
-CONFIG_MQ_IOSCHED_ADIOS=y
-CONFIG_ADIOS_DEFAULT=y
+# ADIOS is disabled: selecting it at runtime freezes the device and
+# puts it in a reboot loop (reproduced by
+#   echo adios > /sys/block/mmcblk0/queue/scheduler
+# which froze, rebooted, then froze at home screen on every boot).
+# Leaving it built only leaves the trap armed, so drop the code entirely.
+# CONFIG_MQ_IOSCHED_ADIOS is not set
+# CONFIG_ADIOS_DEFAULT is not set
+# CONFIG_MQ_IOSCHED_DEFAULT_ADIOS is not set
