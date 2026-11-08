@@ -28,25 +28,27 @@
 #define ADIOS_VERSION "3.3.0"
 
 /*
- * Minimal scoped_guard() shim: 4.19 has no include/linux/cleanup.h.
- * Only the spinlock_irqsave form is needed by this scheduler.
+ * 4.19 API shims.
+ *
+ * blk_insert_t arrived with the 6.9 mq insert rework, where insert_requests()
+ * gained a flags word instead of a plain at_head bool.  Only the "insert at
+ * head" bit exists in this tree, so map it onto the bool argument.
  */
-struct adios_irqsave_guard {
-	spinlock_t		*lock;
-	unsigned long		flags;
-};
+typedef bool blk_insert_t;
+#define BLK_MQ_INSERT_AT_HEAD	true
 
-static inline void adios_irqsave_guard_release(struct adios_irqsave_guard *g)
-{
-	spin_unlock_irqrestore(g->lock, g->flags);
-}
-
-#define scoped_guard(cls, lock) \
-	struct adios_irqsave_guard _adios_guard \
-		__attribute__((__cleanup__(adios_irqsave_guard_release))) = \
-		{ (lock), 0 }; \
-	spin_lock_irqsave((lock), _adios_guard.flags)
-
+/*
+ * 4.19 has no include/linux/cleanup.h (came with 6.5), so scoped_guard() and
+ * guard() do not exist.  Both are emulated with a for-loop whose condition is
+ * the lock acquisition: the loop body runs exactly once, with the lock held,
+ * and the increment releases it.  `break`/`continue` inside the body behave
+ * as they do inside a plain block, which is all this scheduler relies on.
+ */
+#define scoped_guard(cls, lock)						\
+	for (struct adios_irqsave_guard _g =				\
+			{ .lock = (lock), .armed = 1 };			\
+	     _g.armed && (spin_lock_irqsave(_g.lock, _g.flags), 1);	\
+	     adios_irqsave_guard_release(&_g))
 
 /* Request Types:
  *
@@ -356,6 +358,7 @@ static bool lm_update_small_buckets(struct latency_model *model,
 	u8  outlier_threshold_bucket = 0;
 	u8  outlier_percentile = LM_OUTLIER_PERCENTILE;
 	u8  reduction;
+	u8  i;
 
 	if (count_all)
 		outlier_percentile = 100;
@@ -373,7 +376,7 @@ static bool lm_update_small_buckets(struct latency_model *model,
 	}
 
 	// Calculate the average latency, excluding outliers
-	for (u8 i = 0; i <= outlier_threshold_bucket; i++) {
+	for (i = 0; i <= outlier_threshold_bucket; i++) {
 		struct latency_bucket_small *bucket = &buckets[i];
 		if (i < outlier_threshold_bucket) {
 			sum_latency += bucket->weighted_sum_latency;
@@ -429,6 +432,7 @@ static bool lm_update_large_buckets(struct latency_model *model,
 	u8  outlier_threshold_bucket = 0;
 	u8  outlier_percentile = LM_OUTLIER_PERCENTILE;
 	u8  reduction;
+	u8  i;
 
 	if (count_all)
 		outlier_percentile = 100;
@@ -446,7 +450,7 @@ static bool lm_update_large_buckets(struct latency_model *model,
 	}
 
 	// Calculate the average latency and block size, excluding outliers
-	for (u8 i = 0; i <= outlier_threshold_bucket; i++) {
+	for (i = 0; i <= outlier_threshold_bucket; i++) {
 		struct latency_bucket_large *bucket = &buckets[i];
 		if (i < outlier_threshold_bucket) {
 			sum_latency += bucket->weighted_sum_latency;
@@ -635,7 +639,7 @@ static void latency_model_input(struct adios_data *ad,
 	struct latency_model_params *params;
 
 	local_irq_save(flags);
-	buckets = per_cpu_ptr(model->pcpu_buckets, __smp_processor_id());
+	buckets = per_cpu_ptr(model->pcpu_buckets, raw_smp_processor_id());
 
 	rcu_read_lock();
 	params = rcu_dereference(model->params);
@@ -894,7 +898,7 @@ static bool adios_bio_merge(struct request_queue *q, struct bio *bio,
 	if (!spin_trylock_irqsave(&ad->lock, flags))
 		return false;
 
-	ret = blk_mq_sched_try_merge(q, bio, nr_segs, &free);
+	ret = blk_mq_sched_try_merge(q, bio, &free);
 	spin_unlock_irqrestore(&ad->lock, flags);
 
 	if (free)
@@ -1005,8 +1009,8 @@ static void adios_insert_requests(struct blk_mq_hw_ctx *hctx,
 	LIST_HEAD(free);
 
 	do {
-	scoped_guard(spinlock_irqsave, &ad->lock)
-	for (int i = 0; i < ADIOS_MAX_INSERTS_PER_LOCK; i++) {
+		scoped_guard(spinlock_irqsave, &ad->lock) {
+			for (int i = 0; i < ADIOS_MAX_INSERTS_PER_LOCK; i++) {
 		if (list_empty(list)) {
 			stop = true;
 			break;
@@ -1017,7 +1021,9 @@ static void adios_insert_requests(struct blk_mq_hw_ctx *hctx,
 			insert_request_post_stability(hctx, rq, insert_flags, &free);
 		else
 			insert_request_pre_stability(hctx, rq, insert_flags, &free);
-	}} while (!stop);
+			}
+		}
+	} while (!stop);
 
 	blk_mq_free_requests(&free);
 }
@@ -1042,10 +1048,9 @@ static struct adios_rq_data *get_dl_first_rd(struct adios_data *ad, bool idx) {
 }
 
 // Comparison function for sorting requests by block address
-static int cmp_rq_pos(void *priv,
-		const struct list_head *a, const struct list_head *b) {
-	struct request *rq_a = list_entry(a, struct request, queuelist);
-	struct request *rq_b = list_entry(b, struct request, queuelist);
+static int cmp_rq_pos(void *priv, struct list_head *a, struct list_head *b) {
+	const struct request *rq_a = list_entry(a, struct request, queuelist);
+	const struct request *rq_b = list_entry(b, struct request, queuelist);
 	u64 pos_a = blk_rq_pos(rq_a);
 	u64 pos_b = blk_rq_pos(rq_b);
 
@@ -1101,8 +1106,8 @@ static bool fill_batch_queues(struct adios_data *ad, u64 tpl) {
 		bq_batch_order = ad->batch_order;
 
 	do {
-	scoped_guard(spinlock_irqsave, &ad->lock)
-	for (int i = 0; i < ADIOS_MAX_DELETES_PER_LOCK; i++) {
+		scoped_guard(spinlock_irqsave, &ad->lock) {
+			for (int i = 0; i < ADIOS_MAX_DELETES_PER_LOCK; i++) {
 		bool has_base = false;
 
 		dl_queued = eval_adios_state(ad, ADIOS_STATE_DL);
@@ -1166,7 +1171,9 @@ static bool fill_batch_queues(struct adios_data *ad, u64 tpl) {
 		optype_count[optype]++;
 		added_lat += rd->pred_lat;
 		count++;
-	}} while (!stop);
+			}
+		}
+	} while (!stop);
 
 	if (bq_batch_order == ADIOS_BO_ELEVATOR && ad->batch_count[page][1] > 1)
 			list_sort(NULL, &ad->batch_queue[page][1], cmp_rq_pos);
@@ -1252,7 +1259,7 @@ static inline bool bq_page_has_rq(u32 bq_state, bool page) {
 static struct request *dispatch_from_bq(struct adios_data *ad) {
 	struct request *rq;
 
-	guard(spinlock_irqsave)(&ad->bq_lock);
+	scoped_guard(spinlock_irqsave, &ad->bq_lock) {
 
 	u32 state = get_adios_state(ad);
 	u32 bq_state = eval_this_adios_state(state, ADIOS_STATE_BQ);
@@ -1294,7 +1301,7 @@ static struct request *dispatch_from_bq(struct adios_data *ad) {
 static struct request *dispatch_from_pq(struct adios_data *ad) {
 	struct request *rq = NULL;
 
-	guard(spinlock_irqsave)(&ad->pq_lock);
+	scoped_guard(spinlock_irqsave, &ad->pq_lock) {
 	u32 pq_state = eval_adios_state(ad, ADIOS_STATE_PQ);
 	u8  pq_idx = pq_state >> 1;
 	struct list_head *q = &ad->prio_queue[pq_idx];
@@ -1474,10 +1481,10 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 		goto destroy_rq_data_pool;
 	}
 
-	for (int i = 0; i < ADIOS_PQ_LEVELS; i++)
+	for (u8 i = 0; i < ADIOS_PQ_LEVELS; i++)
 		INIT_LIST_HEAD(&ad->prio_queue[i]);
 
-	for (u8 i = 0; i < ADIOS_DL_TYPES; i++) {
+	for (i = 0; i < ADIOS_DL_TYPES; i++) {
 		ad->dl_tree[i] = RB_ROOT_CACHED;
 		ad->dl_prio[i] = default_dl_prio[i];
 	}
@@ -1539,7 +1546,7 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 
 	eq->elevator_data = ad;
 
-	ad->is_rotational = !!(q->limits.features & BLK_FEAT_ROTATIONAL);
+	ad->is_rotational = !blk_queue_nonrot(q);	/* 4.19: no limits.features */
 	ad->global_latency_window = (ad->is_rotational)?
 		default_global_latency_window_rotational:
 		default_global_latency_window;
@@ -1807,7 +1814,7 @@ static ssize_t adios_read_priority_store(
 	if (ret || prio < -20 || prio > 19)
 		return -EINVAL;
 
-	guard(spinlock_irqsave)(&ad->lock);
+	scoped_guard(spinlock_irqsave, &ad->lock) {
 	ad->dl_prio[0] = prio;
 	ad->dl_bias = 0;
 
