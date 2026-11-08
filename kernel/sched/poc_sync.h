@@ -139,7 +139,7 @@ static inline void poc_sync_note_sleep(struct rq *rq, struct task_struct *p)
 	if (!p->poc_sync.mark)
 		return;
 	/* read-only: leave update_curr() to whoever else needs it */
-	if (cfs_rq_of(se)->curr == se) {
+	if (se->cfs_rq && se->cfs_rq->curr == se) {
 		s64 delta = (s64)(rq_clock_task(rq) - se->exec_start);
 
 		exec += delta > 0 ? delta : 0;
