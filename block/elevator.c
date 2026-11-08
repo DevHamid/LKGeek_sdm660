@@ -226,8 +226,13 @@ int elevator_init(struct request_queue *q)
 		e = elevator_get(q, chosen_elevator, false);
 		if (!e)
 			printk(KERN_ERR "I/O scheduler %s not found\n",
-							chosen_elevator);
+					chosen_elevator);
 	}
+
+#ifdef CONFIG_MQ_IOSCHED_DEFAULT_ADIOS
+	if (!e && !*chosen_elevator)
+		e = elevator_get(q, "adios", false);
+#endif
 
 	if (!e) {
 		printk(KERN_ERR

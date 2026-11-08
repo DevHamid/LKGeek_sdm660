@@ -392,6 +392,9 @@ enum stat_group {
 #define req_op(req) \
 	((req)->cmd_flags & REQ_OP_MASK)
 
+/* opaque type used for bio/request operation codes and flags */
+typedef unsigned int blk_opf_t;
+
 /* obsolete, don't use in new code */
 static inline void bio_set_op_attrs(struct bio *bio, unsigned op,
 		unsigned op_flags)

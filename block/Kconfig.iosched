@@ -3,6 +3,14 @@ if BLOCK
 
 menu "IO Schedulers"
 
+config MQ_IOSCHED_ADIOS
+	tristate "ADIOS I/O scheduler"
+	default n
+	---help---
+	  Adaptive Deadline I/O Scheduler by Masahito Suzuki.
+	  Batch-oriented, aimed at achieving low latency process
+	  performance while retaining high throughput on fast media.
+
 config MQ_IOSCHED_DEADLINE
 	tristate "MQ deadline I/O scheduler"
 	default y
@@ -38,6 +46,14 @@ config BFQ_GROUP_IOSCHED
        Enable hierarchical scheduling in BFQ, using the blkio
        (cgroups-v1) or io (cgroups-v2) controller.
 
+config MQ_IOSCHED_DEFAULT_ADIOS
+	bool "Enable ADIOS I/O scheduler as default MQ I/O scheduler"
+	depends on MQ_IOSCHED_ADIOS=y
+	default n
+	help
+	  Enable the ADIOS I/O scheduler as the default scheduler for MQ.
+	  Overridable at boot with the elevator= kernel parameter.
+
 
 choice
 	prompt "Default mq I/O scheduler"
@@ -56,6 +72,10 @@ choice
 	config BFQ_DEFAULT
 		bool "BFQ"
 		depends on IOSCHED_BFQ
+
+	config ADIOS_DEFAULT
+		bool "ADIOS"
+		depends on MQ_IOSCHED_ADIOS
 
 endchoice
 
