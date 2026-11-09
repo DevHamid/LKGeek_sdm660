@@ -674,6 +674,10 @@ static int ramoops_init_prz(const char *name,
 
 	*paddr += sz;
 
+	pr_info("zone %s: 0x%zx@0x%llx buffer_size=%zu old_log=%zu\n",
+		name, sz, (unsigned long long)(*paddr - sz),
+		(*prz)->buffer_size, (*prz)->old_log_size);
+
 	return 0;
 }
 
@@ -907,6 +911,27 @@ static int ramoops_probe(struct platform_device *pdev)
 	pr_info("attached 0x%lx@0x%llx, ecc: %d/%d\n",
 		cxt->size, (unsigned long long)cxt->phys_addr,
 		cxt->ecc_info.ecc_size, cxt->ecc_info.block_size);
+
+	/*
+	 * Diagnostic: report what each zone actually holds at probe time.
+	 *
+	 * console-ramoops / pmsg-ramoops only appear in /sys/fs/pstore when
+	 * persistent_ram_save_old() found a valid previous-boot buffer and
+	 * copied it into old_log.  Without this print the only evidence is
+	 * the absence of a file, which cannot distinguish "no valid buffer"
+	 * from "record written but not exported".  pr_info so it survives
+	 * with DEBUG_KERNEL/DEBUG_FS off.
+	 */
+	pr_info("zones: dmesg cnt=%u old=%zu/%zu | console old=%zu/%zu | pmsg old=%zu/%zu\n",
+		cxt->max_dump_cnt,
+		cxt->dprzs && cxt->dprzs[0] ?
+			persistent_ram_old_size(cxt->dprzs[0]) : (size_t)0,
+		cxt->dprzs && cxt->dprzs[0] ?
+			cxt->dprzs[0]->buffer_size : (size_t)0,
+		cxt->cprz ? persistent_ram_old_size(cxt->cprz) : (size_t)0,
+		cxt->cprz ? cxt->cprz->buffer_size : (size_t)0,
+		cxt->mprz ? persistent_ram_old_size(cxt->mprz) : (size_t)0,
+		cxt->mprz ? cxt->mprz->buffer_size : (size_t)0);
 
 	return 0;
 
