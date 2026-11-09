@@ -34,6 +34,7 @@
 #include <linux/debugfs.h>
 #include <linux/cpuhotplug.h>
 #include <linux/moduleparam.h>
+#include <linux/sysctl.h>
 
 #include "zram_drv.h"
 
@@ -60,6 +61,36 @@ static void zram_free_page(struct zram *zram, size_t index);
 static int zram_bvec_read(struct zram *zram, struct bio_vec *bvec,
 			  u32 index, int offset, struct bio *bio, bool access);
 
+
+#ifdef CONFIG_ZRAM_MULTI_COMP
+/*
+ * ZRAM immediate recompression: how many active compressors a write may
+ * try before falling back to storing the page uncompressed.
+ *   0 = primary only (upstream behaviour)
+ *   1 = primary + secondary
+ *   2 = primary + secondary + tertiary
+ *   3 = all active compressors
+ */
+static unsigned int sysctl_zram_recomp_immediate = 1;
+
+/* 4.19 has no SYSCTL_ZERO/SYSCTL_THREE helpers; proc_douintvec_minmax wants ints */
+static int zram_sysctl_zero;
+static int zram_sysctl_three = 3;
+
+static struct ctl_table zram_sysctl_table[] = {
+	{
+		.procname	= "zram_recomp_immediate",
+		.data		= &sysctl_zram_recomp_immediate,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= &zram_sysctl_zero,
+		.extra2		= &zram_sysctl_three,
+	},
+	{}
+};
+static struct ctl_table_header *zram_sysctl_table_header;
+#endif /* CONFIG_ZRAM_MULTI_COMP */
 
 static int zram_slot_trylock(struct zram *zram, u32 index)
 {
@@ -326,9 +357,11 @@ static void mark_idle(struct zram *zram, ktime_t cutoff)
 		zram_slot_lock(zram, index);
 		if (zram_allocated(zram, index) &&
 				!zram_test_flag(zram, index, ZRAM_UNDER_WB)) {
-#ifdef CONFIG_ZRAM_MEMORY_TRACKING
+			/*
+			 * ac_time is stamped unconditionally by zram_accessed(),
+			 * so this works without CONFIG_ZRAM_MEMORY_TRACKING.
+			 */
 			is_idle = !cutoff || ktime_after(cutoff, zram->table[index].ac_time);
-#endif
 			if (is_idle)
 				zram_set_flag(zram, index, ZRAM_IDLE);
 		}
@@ -350,7 +383,7 @@ static ssize_t idle_store(struct device *dev,
 		 */
 		u64 age_sec;
 
-		if (IS_ENABLED(CONFIG_ZRAM_MEMORY_TRACKING) && !kstrtoull(buf, 0, &age_sec))
+		if (IS_ENABLED(CONFIG_ZRAM_MULTI_COMP) && !kstrtoull(buf, 0, &age_sec))
 			cutoff_time = ktime_sub(ktime_get_boottime(),
 					ns_to_ktime(age_sec * NSEC_PER_SEC));
 		else
@@ -919,6 +952,12 @@ static void zram_debugfs_destroy(void)
 	debugfs_remove_recursive(zram_debugfs_root);
 }
 
+/*
+ * Access-time tracking is needed by idle recompression even when
+ * CONFIG_ZRAM_MEMORY_TRACKING is off (it depends on DEBUG_FS, which
+ * Android vendor configs routinely disable). Keep the real subscriber
+ * here; the !MEMORY_TRACKING variant below is the same function.
+ */
 static void zram_accessed(struct zram *zram, u32 index)
 {
 	zram_clear_flag(zram, index, ZRAM_IDLE);
@@ -1007,9 +1046,15 @@ static void zram_debugfs_unregister(struct zram *zram)
 #else
 static void zram_debugfs_create(void) {};
 static void zram_debugfs_destroy(void) {};
+/*
+ * ac_time must still be stamped without CONFIG_ZRAM_MEMORY_TRACKING,
+ * otherwise mark_idle() cannot tell a cold page from a hot one and
+ * "echo all > .../idle" would recompress every resident page.
+ */
 static void zram_accessed(struct zram *zram, u32 index)
 {
 	zram_clear_flag(zram, index, ZRAM_IDLE);
+	zram->table[index].ac_time = ktime_get_boottime();
 };
 static void zram_debugfs_register(struct zram *zram) {};
 static void zram_debugfs_unregister(struct zram *zram) {};
@@ -1337,6 +1382,9 @@ static void zram_free_page(struct zram *zram, size_t index)
 	if (zram_test_flag(zram, index, ZRAM_INCOMPRESSIBLE))
 		zram_clear_flag(zram, index, ZRAM_INCOMPRESSIBLE);
 
+	if (zram_test_flag(zram, index, ZRAM_HUGE))
+		zram_clear_flag(zram, index, ZRAM_HUGE);
+
 	zram_set_priority(zram, index, 0);
 
 	if (zram_test_flag(zram, index, ZRAM_WB)) {
@@ -1509,10 +1557,26 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 	unsigned long handle = -ENOMEM;
 	unsigned int comp_len = 0;
 	void *src, *dst, *mem;
-	struct zcomp_strm *zstrm;
+	struct zcomp_strm *zstrm = NULL;
 	struct page *page = bvec->bv_page;
 	unsigned long element = 0;
 	enum zram_pageflags flags = 0;
+	u8 prio, prio_max, last_prio = ZRAM_PRIMARY_COMP;
+#ifdef CONFIG_ZRAM_MULTI_COMP
+	prio_max = min_t(u8, (u8)max_t(s8, zram->num_active_comps, 0),
+			 (u8)(sysctl_zram_recomp_immediate + 1));
+#else
+	prio_max = (u8)max_t(s8, zram->num_active_comps, 0);
+#endif
+
+	/*
+	 * No active compressor: nothing can be stored, so fail instead of
+	 * dereferencing a NULL zram->comps[prio] further down.
+	 */
+	if (!prio_max) {
+		pr_err("No active compression algorithm\n");
+		return -ENOMEM;
+	}
 
 	mem = kmap_atomic(page);
 	if (page_same_filled(mem, &element)) {
@@ -1525,20 +1589,43 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 	kunmap_atomic(mem);
 
 compress_again:
-	zstrm = zcomp_stream_get(zram->comps[ZRAM_PRIMARY_COMP]);
-	src = kmap_atomic(page);
-	ret = zcomp_compress(zstrm, src, &comp_len);
-	kunmap_atomic(src);
+	for (prio = ZRAM_PRIMARY_COMP; prio < prio_max; prio++) {
+		if (!zram->comps[prio])
+			continue;
+		last_prio = prio;
 
-	if (unlikely(ret)) {
-		zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
-		pr_err("Compression failed! err=%d\n", ret);
-		zs_free(zram->mem_pool, handle);
-		return ret;
+		zstrm = zcomp_stream_get(zram->comps[prio]);
+		src = kmap_atomic(page);
+		ret = zcomp_compress(zstrm, src, &comp_len);
+		kunmap_atomic(src);
+
+		if (unlikely(ret)) {
+			zcomp_stream_put(zram->comps[prio]);
+			pr_err("Compression failed! err=%d\n", ret);
+			zs_free(zram->mem_pool, handle);
+			return ret;
+		}
+
+		if (comp_len < huge_class_size)
+			break;
+
+		zcomp_stream_put(zram->comps[prio]);
+		zstrm = NULL;
 	}
 
-	if (comp_len >= huge_class_size)
+	if (!zstrm) {
+		/*
+		 * None of the (attempted) compressors could shrink this page
+		 * below huge_class_size. Store it uncompressed, tagging it
+		 * ZRAM_INCOMPRESSIBLE only if every active compressor (not
+		 * just the "immediate" subset) was actually tried.
+		 */
+		if (prio >= zram->num_active_comps)
+			flags = ZRAM_INCOMPRESSIBLE;
+		prio = last_prio;
 		comp_len = PAGE_SIZE;
+		zstrm = zcomp_stream_get(zram->comps[prio]);
+	}
 	/*
 	 * handle allocation has 2 paths:
 	 * a) fast path is executed with preemption disabled (for
@@ -1560,7 +1647,7 @@ compress_again:
 				__GFP_MOVABLE |
 				__GFP_CMA);
 	if (IS_ERR_VALUE(handle)) {
-		zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
+		zcomp_stream_put(zram->comps[prio]);
 		atomic64_inc(&zram->stats.writestall);
 		handle = zs_malloc(zram->mem_pool, comp_len,
 				GFP_NOIO | __GFP_HIGHMEM |
@@ -1577,14 +1664,14 @@ compress_again:
 		 * It is necessary that the dereferencing of the zstrm variable below
 		 * occurs correctly.
 		 */
-		zstrm = zcomp_stream_get(zram->comps[ZRAM_PRIMARY_COMP]);
+		zstrm = zcomp_stream_get(zram->comps[prio]);
 	}
 
 	alloced_pages = zs_get_total_pages(zram->mem_pool);
 	update_used_max(zram, alloced_pages);
 
 	if (zram->limit_pages && alloced_pages > zram->limit_pages) {
-		zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
+		zcomp_stream_put(zram->comps[prio]);
 		zs_free(zram->mem_pool, handle);
 		return -ENOMEM;
 	}
@@ -1598,7 +1685,7 @@ compress_again:
 	if (comp_len == PAGE_SIZE)
 		kunmap_atomic(src);
 
-	zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
+	zcomp_stream_put(zram->comps[prio]);
 	zs_unmap_object(zram->mem_pool, handle);
 	atomic64_add(comp_len, &zram->stats.compr_data_size);
 out:
@@ -1609,12 +1696,20 @@ out:
 	zram_slot_lock(zram, index);
 	zram_free_page(zram, index);
 
-	if (flags) {
-		zram_set_flag(zram, index, flags);
+	if (flags == ZRAM_SAME) {
+		zram_set_flag(zram, index, ZRAM_SAME);
 		zram_set_element(zram, index, element);
-	}  else {
+	} else {
+		if (comp_len == PAGE_SIZE) {
+			zram_set_flag(zram, index, ZRAM_HUGE);
+		}
+
+		if (flags == ZRAM_INCOMPRESSIBLE)
+			zram_set_flag(zram, index, ZRAM_INCOMPRESSIBLE);
+
 		zram_set_handle(zram, index, handle);
 		zram_set_obj_size(zram, index, comp_len);
+		zram_set_priority(zram, index, prio);
 	}
 	zram_slot_unlock(zram, index);
 
@@ -2150,8 +2245,13 @@ static void zram_destroy_comps(struct zram *zram)
 		if (!comp)
 			continue;
 		zcomp_destroy(comp);
-		zram->num_active_comps--;
 	}
+	/*
+	 * Reset rather than decrement: the previous code decremented once per
+	 * slot instead of once per live compressor, so the counter drifted
+	 * negative across reset/re-init cycles and broke prio_max.
+	 */
+	zram->num_active_comps = 0;
 }
 
 static void zram_reset_device(struct zram *zram)
@@ -2203,17 +2303,23 @@ static ssize_t disksize_store(struct device *dev,
     }
 
     // 初始化压缩算法
-    for (u32 prio = 0; prio < ZRAM_MAX_COMPS; prio++) {
-        if (!zram->comp_algs[prio])
-            continue;
+    zram->num_active_comps = 0;
+    {
+        u32 prio;
+        for (prio = 0; prio < ZRAM_MAX_COMPS; prio++) {
+            struct zcomp *comp;
 
-        struct zcomp *comp = zcomp_create(zram->comp_algs[prio]);
-        if (IS_ERR(comp)) {
-            err = PTR_ERR(comp);
-            goto out_free_comps;
+            if (!zram->comp_algs[prio])
+                continue;
+
+            comp = zcomp_create(zram->comp_algs[prio]);
+            if (IS_ERR(comp)) {
+                err = PTR_ERR(comp);
+                goto out_free_comps;
+            }
+            zram->comps[prio] = comp;
+            zram->num_active_comps++;
         }
-        zram->comps[prio] = comp;
-        zram->num_active_comps++;
     }
 
     zram->disksize = disksize; // 设置 zram 的大小
@@ -2621,6 +2727,11 @@ static int __init zram_init(void)
 		num_devices--;
 	}
 
+#ifdef CONFIG_ZRAM_MULTI_COMP
+	pr_info("ZRAM Immediate Recompression (ZRAM-IR) 1.3 by Masahito Suzuki\n");
+	zram_sysctl_table_header = register_sysctl("vm", zram_sysctl_table);
+#endif
+
 	return 0;
 
 out_error:
@@ -2630,6 +2741,10 @@ out_error:
 
 static void __exit zram_exit(void)
 {
+#ifdef CONFIG_ZRAM_MULTI_COMP
+	unregister_sysctl_table(zram_sysctl_table_header);
+#endif
+
 	destroy_devices();
 }
 
