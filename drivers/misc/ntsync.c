@@ -21,6 +21,41 @@
 #include <linux/spinlock.h>
 #include <uapi/linux/ntsync.h>
 
+/*
+ * 4.19 compat shims.
+ *
+ * The driver is written against the lockdep_assert() API introduced in 5.9,
+ * which takes an arbitrary condition and names the lock states.  4.19 has
+ * only lockdep_assert_held(), and only defines lockdep_is_held() when
+ * CONFIG_LOCKDEP is set -- without it the lockdep_map is an empty struct and
+ * only lockdep_is_held_type() exists, as a constant (1).
+ *
+ * This tree builds without CONFIG_LOCKDEP, so both symbols are provided
+ * here.  lockdep_is_held_type() is then the constant (1) and can never equal
+ * LOCK_STATE_NOT_HELD, so every predicate below is correctly always-true:
+ * with no lock tracking there is nothing to assert.  Keeping the condition
+ * type-checked via sizeof matches 4.19's own lockdep_assert_held(), which
+ * compiles to a bare (void)(l); unlike that, it does not evaluate the
+ * expression.
+ */
+#ifndef LOCK_STATE_NOT_HELD
+#define LOCK_STATE_NOT_HELD	-1
+#endif
+
+#ifndef lockdep_is_held
+#define lockdep_is_held(lock)	lockdep_is_held_type(lock, -1)
+#endif
+
+#ifdef CONFIG_LOCKDEP
+#define lockdep_assert(cond)						\
+	do {								\
+		if (debug_locks)					\
+			WARN_ON(!(cond));				\
+	} while (0)
+#else
+#define lockdep_assert(cond)		do { (void)sizeof(cond); } while (0)
+#endif
+
 #define NTSYNC_NAME	"ntsync"
 
 enum ntsync_type {
