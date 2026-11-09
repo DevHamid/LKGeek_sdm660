@@ -974,10 +974,19 @@ CONFIG_SYSCTL=y
 CONFIG_SYSVIPC=y
 CONFIG_POSIX_MQUEUE=y
 
-# Piece-Of-Cake fast idle CPU selector, BORE burst-oriented scheduling and
-# ADIOS I/O scheduler.
-CONFIG_SCHED_POC_SELECTOR=y
+# BORE burst-oriented scheduling.
 CONFIG_SCHED_BORE=y
+# POC is disabled: it cannot select anything on this SoC.
+# POC gates every selection site on !sched_asym_cpucap_active(), and sdm660
+# declares asymmetric capacities (capacity-dmips-mhz 636 on CPU0-3, 1024 on
+# CPU4-7), so sched_asym_cpucapacity is enabled at boot and POC stays inert
+# no matter what the sysctls say.  Removing the gate would let POC pick idle
+# CPUs by bitmap position instead of capacity, i.e. hand heavy work to little
+# cores while big cores idle.  poc_sd_shared_init() is wired into
+# attach_sched_domain() so the eligibility bit is computed correctly; the
+# code stays in the tree, just uncompiled, in case this moves to a SoC with
+# uniform core capacities.
+# CONFIG_SCHED_POC_SELECTOR is not set
 # ADIOS is disabled: selecting it at runtime freezes the device and
 # puts it in a reboot loop (reproduced by
 #   echo adios > /sys/block/mmcblk0/queue/scheduler
