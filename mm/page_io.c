@@ -26,6 +26,7 @@
 #include <linux/uio.h>
 #include <linux/kthread.h>
 #include <linux/kfifo.h>
+#include <linux/freezer.h>
 #include <linux/sched/task.h>
 #include <asm/pgtable.h>
 
