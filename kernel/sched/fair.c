@@ -9204,6 +9204,12 @@ enum group_type {
 #define LBF_NOHZ_AGAIN	0x20
 #define LBF_IGNORE_BIG_TASKS 0x100
 #define LBF_IGNORE_PREFERRED_CLUSTER_TASKS 0x200
+/*
+ * Set once this balance operation has moved a task off the source rq.
+ * LB_STRICT_BUDGET's concession only fires while nothing has moved, so this
+ * caps it at one concession per detach_tasks() call.
+ */
+#define LBF_MOVED 0x40
 
 struct lb_env {
 	struct sched_domain	*sd;
@@ -9540,6 +9546,62 @@ static struct task_struct *detach_one_task(struct lb_env *env)
 static const unsigned int sched_nr_migrate_break = 32;
 
 /*
+ * Cambyses v0.6.0 (partial: LB_STRICT_BUDGET only).
+ *
+ * The scan below may legitimately find that every task on the source rq costs
+ * more than the remaining imbalance budget.  Upstream copes by relaxing the
+ * comparison: shr_bound(cost, sd->nr_balance_failed) <= imbalance.  That is a
+ * single forced migration per unbalanced_active_balance() escalation.
+ *
+ * LB_STRICT_BUDGET compares directly instead, and remembers the smallest
+ * overshoot the scan saw.  If the scan ends up taking nothing at all,
+ * detach_tasks() concedes to this one so the balance still makes progress.
+ *
+ * Scoped to a single detach_tasks() call on purpose: the rq lock is dropped
+ * between the caller's more_balance retries, so a task remembered across them
+ * could be gone by the time it is used.
+ */
+struct lb_concession {
+	struct task_struct	*p;
+	unsigned long		cost;
+};
+
+/*
+ * 4.19 does not have the 6.x shr_bound() helper; provide the small inline
+ * used by lb_cost_fits() to relax the imbalance comparison.  It is a strict
+ * right shift guarded against shifts wider than the word.
+ */
+static inline unsigned long shr_bound(unsigned long val, unsigned long shift)
+{
+	if (shift >= BITS_PER_LONG)
+		return 0;
+	return val >> shift;
+}
+
+/*
+ * Does moving @p, costing @cost, fit the remaining imbalance budget?
+ *
+ * LB_STRICT_BUDGET compares directly and notes the smallest overshoot seen so
+ * far.  Upstream instead relaxes the comparison by sd->nr_balance_failed.
+ */
+static bool lb_cost_fits(struct lb_env *env, struct lb_concession *concession,
+			 struct task_struct *p, unsigned long cost)
+{
+	if (!sched_feat(LB_STRICT_BUDGET))
+		return shr_bound(cost, env->sd->nr_balance_failed) <= env->imbalance;
+
+	if (cost <= env->imbalance)
+		return true;
+
+	if (!concession->p || cost < concession->cost) {
+		concession->p = p;
+		concession->cost = cost;
+	}
+
+	return false;
+}
+
+/*
  * detach_tasks() -- tries to detach up to imbalance weighted load from
  * busiest_rq, as part of a balancing operation within domain "sd".
  *
@@ -9548,6 +9610,7 @@ static const unsigned int sched_nr_migrate_break = 32;
 static int detach_tasks(struct lb_env *env)
 {
 	struct list_head *tasks = &env->src_rq->cfs_tasks;
+	struct lb_concession concession = { NULL, 0 };
 	struct task_struct *p;
 	unsigned long load = 0;
 	int detached = 0;
@@ -9648,9 +9711,14 @@ redo:
 #ifdef CONFIG_SONY_SCHED
 		}
 #endif
+		/* Make sure that we don't migrate too much load. */
+		if (!lb_cost_fits(env, &concession, p, load))
+			goto next;
+
 		detach_task(p, env);
 		list_add(&p->se.group_node, &env->tasks);
 
+		env->flags |= LBF_MOVED;
 		detached++;
 		env->imbalance -= load;
 
@@ -9687,7 +9755,28 @@ next:
 		env->flags &= ~(LBF_IGNORE_BIG_TASKS |
 				LBF_IGNORE_PREFERRED_CLUSTER_TASKS);
 		env->loop = orig_loop;
+		concession.p = NULL;
+		concession.cost = 0;
 		goto redo;
+	}
+
+	/*
+	 * Nothing fit the budget and nothing has moved yet, so concede to the
+	 * smallest overshoot the scan found rather than leave the imbalance
+	 * standing.  migrate_load has no other way out: imbalanced_active_balance()
+	 * escalates for migrate_task only, so a task larger than the imbalance
+	 * would otherwise never move.
+	 *
+	 * This is the whole reason LB_STRICT_BUDGET can drop the upstream
+	 * relaxation.  LBF_MOVED makes it fire at most once per balance operation.
+	 */
+	if (concession.p && !(env->flags & LBF_MOVED)) {
+		detach_task(concession.p, env);
+		list_add(&concession.p->se.group_node, &env->tasks);
+
+		env->imbalance -= concession.cost;
+		env->flags |= LBF_MOVED;
+		detached++;
 	}
 
 	/*
