@@ -123,3 +123,29 @@
  * RT class.
  */
 #define SCHED_FEAT_SCHEDTUNE_BOOST_HOLD_ALL 0
+
+/*
+ * Cambyses LB_STRICT_BUDGET: compare a migration candidate's cost against the
+ * remaining imbalance budget directly, instead of relaxing the comparison by
+ * sd->nr_balance_failed.
+ *
+ * The upstream relaxation halves the candidate's apparent cost once per
+ * recorded balance failure, so a task larger than the budget is eventually
+ * let through.  nr_balance_failed is reset on *any* successful migration at
+ * that domain, so a steady supply of cheap-to-move tasks keeps resetting it
+ * and the relaxation never reaches the expensive ones: they are considered
+ * only once nothing cheaper is left.
+ *
+ * That relaxation is also the only way an over-budget task ever moves under
+ * migrate_load, since imbalanced_active_balance() escalates for migrate_task
+ * only.  So dropping it alone would leave a task larger than the imbalance
+ * permanently unmovable; detach_tasks() replaces the guarantee with an
+ * explicit one -- a scan that admits nothing concedes to the smallest
+ * overshoot it saw.  That asks the candidates actually present instead of a
+ * domain counter, so no other task's success can defer it, and it acts on the
+ * first scan that admits nothing rather than once enough failures have been
+ * recorded.
+ *
+ * Turn off to get the upstream shr_bound() relaxation.
+ */
+#define SCHED_FEAT_LB_STRICT_BUDGET 1
