@@ -4,6 +4,10 @@
  */
 #include "sched.h"
 
+#ifdef CONFIG_SCHED_POC_SELECTOR
+#include "poc_selector.h"
+#endif
+
 DEFINE_MUTEX(sched_domains_mutex);
 
 /* Protected by sched_domains_mutex: */
@@ -1429,6 +1433,21 @@ sd_init(struct sched_domain_topology_level *tl,
 
 	sd->shared = *per_cpu_ptr(sdd->sds, sd_id);
 	atomic_inc(&sd->shared->ref);
+
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	/*
+	 * The POC idle bitmaps live in sched_domain_shared and are only
+	 * ever populated here.  Without this call every LLC keeps the
+	 * kzalloc-zero poc_fast_eligible, poc_check_all_llc_eligible()
+	 * returns false for every CPU, and poc_selector_active stays 0 no
+	 * matter what the sysctls say - POC silently never selects.
+	 *
+	 * One call per domain: sd->shared is shared across the domain, and
+	 * build_sched_domains() runs this once per level, not per CPU.
+	 */
+	if (sd->flags & SD_SHARE_PKG_RESOURCES)
+		poc_sd_shared_init(sd, sd_id);
+#endif
 
 	if (sd->flags & SD_SHARE_PKG_RESOURCES)
 		atomic_set(&sd->shared->nr_busy_cpus, sd_weight);
