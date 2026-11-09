@@ -8,15 +8,24 @@
 		no-map;
 		reg = <0x0 0xA0000000 0x0 0x00400000>;
 		/*
-		 * record-size must be non-zero or ramoops_init_przs() sets
-		 * max_dump_cnt = 0 and never allocates a dmesg zone, so
-		 * PSTORE_FLAGS_DMESG is never set and /sys/fs/pstore keeps
-		 * no dmesg-ramoops at all.  2M dump + 2M console + 2M pmsg
-		 * fits in the 4M reservation below.
+		 * The reservation is 4 MiB and ramoops packs the zones in
+		 * order: dmesg (max_dump_cnt records of record-size), then
+		 * console, then pmsg.  max_dump_cnt is
+		 * (size - 2*record_size) / record_size, so record-size drives
+		 * how much is left for everything else.
+		 *
+		 * With record-size 512K: max_dump_cnt = 6, dmesg takes
+		 * 0x300000, leaving 0x100000.  Console therefore cannot be
+		 * 0x200000 -- ramoops_init_prz() would reject it with
+		 * -ENOMEM and probe_ramoops() would bail out at
+		 * fail_init_cprz, leaving console-ramoops absent entirely.
+		 *
+		 * 0x300000 dmesg + 0x80000 console + 0x40000 pmsg = 0x3c0000,
+		 * which leaves 0x40000 of the 4 MiB unused.
 		 */
 		record-size = <0x80000>;
-		console-size = <0x200000>;
-		pmsg-size = <0x80000>;
+		console-size = <0x80000>;
+		pmsg-size = <0x40000>;
 		max-reason = <0x4>;
 	};
 };
