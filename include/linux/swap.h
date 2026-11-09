@@ -699,5 +699,10 @@ static inline bool mem_cgroup_swap_full(struct page *page)
 }
 #endif
 
+extern int sysctl_kcompress_fifo_size;
+extern int vm_kcompressd;
+int kcompressd_run(int nid);
+void kcompressd_stop(int nid);
+
 #endif /* __KERNEL__*/
 #endif /* _LINUX_SWAP_H */

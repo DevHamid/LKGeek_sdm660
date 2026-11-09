@@ -19,6 +19,7 @@
 #include <linux/page-flags-layout.h>
 #include <linux/atomic.h>
 #include <linux/android_kabi.h>
+#include <linux/kfifo.h>
 #include <asm/page.h>
 
 /* Free memory management - zoned buddy allocator.  */
@@ -28,6 +29,9 @@
 #define MAX_ORDER CONFIG_FORCE_MAX_ZONEORDER
 #endif
 #define MAX_ORDER_NR_PAGES (1 << (MAX_ORDER - 1))
+
+#define KCOMPRESS_FIFO_SIZE	256
+extern int sysctl_kcompress_fifo_size;
 
 /*
  * PAGE_ALLOC_COSTLY_ORDER is the order at which allocations are deemed
@@ -912,6 +916,12 @@ typedef struct pglist_data {
 	enum zone_type kswapd_classzone_idx;
 
 	int kswapd_failures;		/* Number of 'reclaimed == 0' runs */
+
+	wait_queue_head_t kcompressd_wait;
+	struct task_struct *kcompressd;	/* async swapout thread, or NULL */
+	struct kfifo kcompress_fifo;
+	spinlock_t kcompress_fifo_lock;
+	int kcompressd_fifo_ok;		/* fifo alloc succeeded */
 
 	wait_queue_head_t kshrinkd_wait;
 	struct task_struct *kshrinkd;

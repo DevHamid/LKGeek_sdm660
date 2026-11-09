@@ -137,6 +137,9 @@ static unsigned long long_max = LONG_MAX;
 static int one_hundred = 100;
 static int one_thousand = 1000;
 
+int vm_kcompressd = 1;
+int sysctl_kcompress_fifo_size = KCOMPRESS_FIFO_SIZE;
+
 static int __maybe_unused sysctl_zero = 0;
 static int __maybe_unused sysctl_one = 1;
 static int __maybe_unused sysctl_one_hundred = 100;
@@ -1782,6 +1785,15 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= &zero,
+	},
+	{
+		.procname	= "kcompressd",
+		.data		= &vm_kcompressd,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &zero,
+		.extra2		= &sysctl_kcompress_fifo_size,
 	},
 	{
 		.procname	= "dirty_background_ratio_nosys",

@@ -24,6 +24,8 @@
 #include <linux/blkdev.h>
 #include <linux/psi.h>
 #include <linux/uio.h>
+#include <linux/kthread.h>
+#include <linux/kfifo.h>
 #include <linux/sched/task.h>
 #include <asm/pgtable.h>
 
@@ -200,11 +202,26 @@ bad_bmap:
 int swap_writepage(struct page *page, struct writeback_control *wbc)
 {
 	int ret = 0;
+	struct pglist_data *pgdat = page_pgdat(page);
 
 	if (try_to_free_swap(page)) {
 		unlock_page(page);
 		goto out;
 	}
+
+	if (vm_kcompressd && pgdat->kcompressd_fifo_ok) {
+		struct page *tmp = page;
+
+		spin_lock_irq(&pgdat->kcompress_fifo_lock);
+		if (kfifo_in_locked(&pgdat->kcompress_fifo, &tmp, sizeof(tmp),
+				    &pgdat->kcompress_fifo_lock) == sizeof(tmp)) {
+			spin_unlock_irq(&pgdat->kcompress_fifo_lock);
+			wake_up_interruptible(&pgdat->kcompressd_wait);
+			goto out;
+		}
+		spin_unlock_irq(&pgdat->kcompress_fifo_lock);
+	}
+
 	if (frontswap_store(page) == 0) {
 		set_page_writeback(page);
 		unlock_page(page);
@@ -216,6 +233,115 @@ out:
 	return ret;
 }
 
+static int kcompressd_sync(struct page *page)
+{
+	int ret;
+
+	ret = frontswap_store(page);
+	if (ret)
+		return ret;
+
+	set_page_writeback(page);
+	unlock_page(page);
+	end_page_writeback(page);
+	return 0;
+}
+
+static int kcompressd_func(void *data)
+{
+	int nid = (int)(unsigned long)data;
+	struct pglist_data *pgdat = NODE_DATA(nid);
+
+	set_freezable();
+
+	for (;;) {
+		struct page *list[64];
+		int nr_pages = 0;
+		int i;
+
+		spin_lock_irq(&pgdat->kcompress_fifo_lock);
+		while (nr_pages < ARRAY_SIZE(list) &&
+		       !kfifo_is_empty(&pgdat->kcompress_fifo)) {
+			struct page *p;
+
+			if (!kfifo_out_locked(&pgdat->kcompress_fifo, &p,
+					      sizeof(p),
+					      &pgdat->kcompress_fifo_lock)) {
+				pr_warn_once("kcompressd: short kfifo_out_locked read\n");
+				break;
+			}
+			list[nr_pages++] = p;
+		}
+		spin_unlock_irq(&pgdat->kcompress_fifo_lock);
+
+		for (i = 0; i < nr_pages; i++) {
+			if (kthread_should_stop()) {
+				unlock_page(list[i]);
+				continue;
+			}
+			kcompressd_sync(list[i]);
+		}
+
+		if (kthread_should_stop())
+			break;
+
+		if (nr_pages < ARRAY_SIZE(list)) {
+			wait_event_interruptible(pgdat->kcompressd_wait,
+						 !kfifo_is_empty(&pgdat->kcompress_fifo) ||
+						 kthread_should_stop());
+		}
+	}
+
+	return 0;
+}
+
+int kcompressd_run(int nid)
+{
+	struct pglist_data *pgdat = NODE_DATA(nid);
+	struct task_struct *k;
+	int ret;
+
+	if (pgdat->kcompressd)
+		return 0;
+
+	ret = kfifo_alloc(&pgdat->kcompress_fifo,
+			  sizeof(struct page *) * sysctl_kcompress_fifo_size,
+			  GFP_KERNEL);
+	if (ret) {
+		pr_warn_once("kcompressd: kfifo_alloc failed on node %d\n", nid);
+		return -ENOMEM;
+	}
+	pgdat->kcompressd_fifo_ok = 1;
+
+	k = kthread_create(kcompressd_func, (void *)(unsigned long)nid,
+			   "kcompressd%d", nid);
+	if (IS_ERR(k)) {
+		pr_warn_once("kcompressd: kthread_create failed on node %d\n", nid);
+		kfifo_free(&pgdat->kcompress_fifo);
+		pgdat->kcompressd_fifo_ok = 0;
+		return PTR_ERR(k);
+	}
+
+	pgdat->kcompressd = k;
+	wake_up_process(k);
+	return 0;
+}
+
+void kcompressd_stop(int nid)
+{
+	struct pglist_data *pgdat = NODE_DATA(nid);
+	struct task_struct *kcompressd = pgdat->kcompressd;
+
+	pgdat->kcompressd = NULL;
+
+	if (kcompressd)
+		kthread_stop(kcompressd);
+
+	if (pgdat->kcompressd_fifo_ok) {
+		kfifo_free(&pgdat->kcompress_fifo);
+		pgdat->kcompressd_fifo_ok = 0;
+	}
+}
 static inline void count_swpout_vm_event(struct page *page)
 {
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE

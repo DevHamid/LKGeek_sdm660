@@ -7131,7 +7131,10 @@ int kswapd_run(int nid)
 		pgdat->kswapd = NULL;
 		kthread_stop(pgdat->kshrinkd);
 		pgdat->kshrinkd = NULL;
+		return ret;
 	}
+
+	kcompressd_run(nid);
 	return ret;
 }
 
@@ -7152,6 +7155,8 @@ void kswapd_stop(int nid)
 		kthread_stop(kshrinkd);
 		NODE_DATA(nid)->kshrinkd = NULL;
 	}
+
+	kcompressd_stop(nid);
 }
 
 static int __init kswapd_init(void)
