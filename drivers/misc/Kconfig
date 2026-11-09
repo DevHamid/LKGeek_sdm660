@@ -653,6 +653,19 @@ source "drivers/misc/ocxl/Kconfig"
 source "drivers/misc/cardreader/Kconfig"
 source "drivers/misc/fpr_FingerprintCard/Kconfig"
 source "drivers/misc/qrc/Kconfig"
+
+config NTSYNC
+	bool "NT synchronization primitive emulation"
+	default n
+	help
+	  This driver provides kernel support for emulating NT synchronization
+	  primitives: semaphores, mutexes and events. Userspace (Wine, Proton)
+	  creates objects through ioctls on /dev/ntsync and waits on them with
+	  a single kernel-side blocking call, which is considerably cheaper
+	  than the futex-based wine server loop.
+
+	  Say Y here if you want to run Windows applications through Wine or
+	  Proton on this kernel. If unsure, say N.
 endmenu
 
 config OKL4_USER_VIPC
