@@ -19,7 +19,6 @@
 #include <linux/page-flags-layout.h>
 #include <linux/atomic.h>
 #include <linux/android_kabi.h>
-#include <linux/kfifo.h>
 #include <asm/page.h>
 
 /* Free memory management - zoned buddy allocator.  */
@@ -919,7 +918,7 @@ typedef struct pglist_data {
 
 	wait_queue_head_t kcompressd_wait;
 	struct task_struct *kcompressd;	/* async swapout thread, or NULL */
-	struct kfifo kcompress_fifo;
+	struct kfifo *kcompress_fifo;	/* opaque here: kfifo.h cycles via gfp.h */
 	spinlock_t kcompress_fifo_lock;
 	int kcompressd_fifo_ok;		/* fifo alloc succeeded */
 

@@ -209,11 +209,12 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
 		goto out;
 	}
 
-	if (vm_kcompressd && pgdat->kcompressd_fifo_ok) {
+	if (vm_kcompressd && pgdat->kcompressd_fifo_ok &&
+	    pgdat->kcompress_fifo) {
 		struct page *tmp = page;
 
 		spin_lock_irq(&pgdat->kcompress_fifo_lock);
-		if (kfifo_in_locked(&pgdat->kcompress_fifo, &tmp, sizeof(tmp),
+		if (kfifo_in_locked(pgdat->kcompress_fifo, &tmp, sizeof(tmp),
 				    &pgdat->kcompress_fifo_lock) == sizeof(tmp)) {
 			spin_unlock_irq(&pgdat->kcompress_fifo_lock);
 			wake_up_interruptible(&pgdat->kcompressd_wait);
@@ -261,10 +262,10 @@ static int kcompressd_func(void *data)
 
 		spin_lock_irq(&pgdat->kcompress_fifo_lock);
 		while (nr_pages < ARRAY_SIZE(list) &&
-		       !kfifo_is_empty(&pgdat->kcompress_fifo)) {
+		       !kfifo_is_empty(pgdat->kcompress_fifo)) {
 			struct page *p;
 
-			if (!kfifo_out_locked(&pgdat->kcompress_fifo, &p,
+			if (!kfifo_out_locked(pgdat->kcompress_fifo, &p,
 					      sizeof(p),
 					      &pgdat->kcompress_fifo_lock)) {
 				pr_warn_once("kcompressd: short kfifo_out_locked read\n");
@@ -285,9 +286,9 @@ static int kcompressd_func(void *data)
 		if (kthread_should_stop())
 			break;
 
-		if (nr_pages < ARRAY_SIZE(list)) {
+		if (nr_pages < ARRAY_SIZE(list) && pgdat->kcompress_fifo) {
 			wait_event_interruptible(pgdat->kcompressd_wait,
-						 !kfifo_is_empty(&pgdat->kcompress_fifo) ||
+						 !kfifo_is_empty(pgdat->kcompress_fifo) ||
 						 kthread_should_stop());
 		}
 	}
@@ -304,11 +305,18 @@ int kcompressd_run(int nid)
 	if (pgdat->kcompressd)
 		return 0;
 
-	ret = kfifo_alloc(&pgdat->kcompress_fifo,
+	pgdat->kcompress_fifo = kzalloc(sizeof(*pgdat->kcompress_fifo),
+					GFP_KERNEL);
+	if (!pgdat->kcompress_fifo)
+		return -ENOMEM;
+
+	ret = kfifo_alloc(pgdat->kcompress_fifo,
 			  sizeof(struct page *) * sysctl_kcompress_fifo_size,
 			  GFP_KERNEL);
 	if (ret) {
 		pr_warn_once("kcompressd: kfifo_alloc failed on node %d\n", nid);
+		kfree(pgdat->kcompress_fifo);
+		pgdat->kcompress_fifo = NULL;
 		return -ENOMEM;
 	}
 	pgdat->kcompressd_fifo_ok = 1;
@@ -317,7 +325,9 @@ int kcompressd_run(int nid)
 			   "kcompressd%d", nid);
 	if (IS_ERR(k)) {
 		pr_warn_once("kcompressd: kthread_create failed on node %d\n", nid);
-		kfifo_free(&pgdat->kcompress_fifo);
+		kfifo_free(pgdat->kcompress_fifo);
+		kfree(pgdat->kcompress_fifo);
+		pgdat->kcompress_fifo = NULL;
 		pgdat->kcompressd_fifo_ok = 0;
 		return PTR_ERR(k);
 	}
@@ -338,7 +348,9 @@ void kcompressd_stop(int nid)
 		kthread_stop(kcompressd);
 
 	if (pgdat->kcompressd_fifo_ok) {
-		kfifo_free(&pgdat->kcompress_fifo);
+		kfifo_free(pgdat->kcompress_fifo);
+		kfree(pgdat->kcompress_fifo);
+		pgdat->kcompress_fifo = NULL;
 		pgdat->kcompressd_fifo_ok = 0;
 	}
 }
