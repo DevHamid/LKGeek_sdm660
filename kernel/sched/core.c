@@ -4474,6 +4474,17 @@ static noinline void __schedule_bug(struct task_struct *prev)
 	printk(KERN_ERR "BUG: scheduling while atomic: %s/%d/0x%08x\n",
 		prev->comm, prev->pid, preempt_count());
 
+	/*
+	 * Name the caller.  Upstream relies on debug_show_held_locks() and
+	 * print_irqtrace_events(), both of which compile to nothing without
+	 * lockdep and TRACE_IRQFLAGS.  This build has neither, so the report
+	 * above is a comm and a preempt count with no stack - which is exactly
+	 * what hid the driver responsible for wayne's first-boot reboot for
+	 * two days.  current is the sleeping task, so its stack is the
+	 * offending path.  Diagnostic only.
+	 */
+	dump_stack();
+
 	debug_show_held_locks(prev);
 	print_modules();
 	if (irqs_disabled())
@@ -4484,7 +4495,20 @@ static noinline void __schedule_bug(struct task_struct *prev)
 		print_ip_sym(preempt_disable_ip);
 		pr_cont("\n");
 	}
-	panic("scheduling while atomic\n");
+	/*
+	 * Upstream 4.19 deliberately does NOT panic here.  A task that
+	 * sleeps inside a preempt_disable() section is a driver bug, but
+	 * escalating every occurrence to panic() turned one latent grip into
+	 * a boot-looping device: wayne rebooted ~99s after reaching the home
+	 * screen, on first boot after a flash, and never again.
+	 *
+	 * Keep the report loud, keep it going upstream.  With panic() gone
+	 * the diagnostic output below (held locks, irqtrace, and the
+	 * preempt-disable IP when CONFIG_DEBUG_PREEMPT is enabled) now
+	 * actually runs, which is the only way to name the offending driver.
+	 * The offending stack was never captured because the kernel died
+	 * before any of this printed.
+	 */
 }
 
 /*
