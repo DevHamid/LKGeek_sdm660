@@ -656,7 +656,21 @@ static int ramoops_init_prz(const char *name,
 		return err;
 	}
 
-	persistent_ram_zap(*prz);
+	/*
+	 * Do not zap here.
+	 *
+	 * persistent_ram_post_init() has already decided whether this region
+	 * holds a valid previous-boot buffer.  When the signature matches and
+	 * the bounds are sane it calls persistent_ram_save_old(), which copies
+	 * the data into prz->old_log so pstore can read it back as this boot's
+	 * console-ramoops record; when the signature does not match, or the
+	 * bounds are broken, it zaps the region itself.
+	 *
+	 * The unconditional persistent_ram_zap() that used to live here threw
+	 * that saved copy away, so console-ramoops and pmsg-ramoops could
+	 * never survive a reboot: the contents were preserved by post_init and
+	 * destroyed one line later.
+	 */
 
 	*paddr += sz;
 
