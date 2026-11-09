@@ -1,0 +1,1047 @@
+make[1]: Entering directory '/home/runner/work/Kernel_Action/Kernel_Action/kernel_workspace/android-kernel/out'
+  GEN     ./Makefile
+scripts/kconfig/conf  --syncconfig Kconfig
+drivers/kernelsu/Kconfig:89:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:89:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:89:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:97:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:97:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:97:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:105:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:105:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:105:warning: choice value used outside its choice group
+drivers/kernelsu/Kconfig:83:warning: choice default symbol 'KSU_TRACEPOINT_HOOK' is not contained in the choice
+drivers/kernelsu/Kconfig:83:warning: choice default symbol 'KSU_TRACEPOINT_HOOK' is not contained in the choice
+drivers/kernelsu/Kconfig:83:warning: choice default symbol 'KSU_TRACEPOINT_HOOK' is not contained in the choice
+  GEN     ./Makefile
+  UPD     include/config/kernel.release
+  WRAP    arch/arm64/include/generated/uapi/asm/errno.h
+  WRAP    arch/arm64/include/generated/uapi/asm/ioctl.h
+  WRAP    arch/arm64/include/generated/uapi/asm/ioctls.h
+  WRAP    arch/arm64/include/generated/uapi/asm/ipcbuf.h
+  WRAP    arch/arm64/include/generated/uapi/asm/kvm_para.h
+  WRAP    arch/arm64/include/generated/uapi/asm/mman.h
+  WRAP    arch/arm64/include/generated/uapi/asm/msgbuf.h
+  WRAP    arch/arm64/include/generated/uapi/asm/poll.h
+  WRAP    arch/arm64/include/generated/uapi/asm/resource.h
+  WRAP    arch/arm64/include/generated/uapi/asm/sembuf.h
+  WRAP    arch/arm64/include/generated/uapi/asm/shmbuf.h
+  WRAP    arch/arm64/include/generated/uapi/asm/socket.h
+  UPD     include/generated/uapi/linux/version.h
+  WRAP    arch/arm64/include/generated/uapi/asm/sockios.h
+  WRAP    arch/arm64/include/generated/uapi/asm/swab.h
+  WRAP    arch/arm64/include/generated/uapi/asm/termbits.h
+  WRAP    arch/arm64/include/generated/uapi/asm/termios.h
+  WRAP    arch/arm64/include/generated/uapi/asm/types.h
+  UPD     include/generated/utsrelease.h
+  Using .. as source for kernel
+  WRAP    arch/arm64/include/generated/asm/bugs.h
+  WRAP    arch/arm64/include/generated/asm/delay.h
+  WRAP    arch/arm64/include/generated/asm/div64.h
+  WRAP    arch/arm64/include/generated/asm/dma.h
+  WRAP    arch/arm64/include/generated/asm/dma-contiguous.h
+  WRAP    arch/arm64/include/generated/asm/early_ioremap.h
+  WRAP    arch/arm64/include/generated/asm/emergency-restart.h
+  WRAP    arch/arm64/include/generated/asm/hw_irq.h
+  WRAP    arch/arm64/include/generated/asm/irq_regs.h
+  WRAP    arch/arm64/include/generated/asm/kdebug.h
+  WRAP    arch/arm64/include/generated/asm/kmap_types.h
+  WRAP    arch/arm64/include/generated/asm/local.h
+  WRAP    arch/arm64/include/generated/asm/local64.h
+  WRAP    arch/arm64/include/generated/asm/mcs_spinlock.h
+  WRAP    arch/arm64/include/generated/asm/mm-arch-hooks.h
+  WRAP    arch/arm64/include/generated/asm/msi.h
+  WRAP    arch/arm64/include/generated/asm/preempt.h
+  WRAP    arch/arm64/include/generated/asm/qrwlock.h
+  WRAP    arch/arm64/include/generated/asm/qspinlock.h
+  WRAP    arch/arm64/include/generated/asm/segment.h
+  WRAP    arch/arm64/include/generated/asm/serial.h
+  WRAP    arch/arm64/include/generated/asm/set_memory.h
+  WRAP    arch/arm64/include/generated/asm/sizes.h
+  WRAP    arch/arm64/include/generated/asm/switch_to.h
+  WRAP    arch/arm64/include/generated/asm/trace_clock.h
+  WRAP    arch/arm64/include/generated/asm/unaligned.h
+  WRAP    arch/arm64/include/generated/asm/user.h
+  WRAP    arch/arm64/include/generated/asm/vga.h
+  HOSTCC  scripts/bin2c
+  HOSTCC  scripts/dtc/dtc.o
+  CC      scripts/mod/empty.o
+  HOSTCC  scripts/selinux/genheaders/genheaders
+  HOSTCC  scripts/mod/mk_elfconfig
+  HOSTCC  scripts/selinux/mdp/mdp
+  HOSTCC  scripts/dtc/flattree.o
+  CC      scripts/mod/devicetable-offsets.s
+  HOSTCC  scripts/dtc/fstree.o
+  MKELF   scripts/mod/elfconfig.h
+  HOSTCC  scripts/mod/modpost.o
+  HOSTCC  scripts/kallsyms
+  UPD     scripts/mod/devicetable-offsets.h
+  HOSTCC  scripts/mod/sumversion.o
+  HOSTCC  scripts/mod/file2alias.o
+  HOSTCC  scripts/dtc/data.o
+  HOSTCC  scripts/dtc/livetree.o
+  HOSTCC  scripts/sortextable
+  HOSTCC  scripts/dtc/treesource.o
+  HOSTCC  scripts/asn1_compiler
+  HOSTCC  scripts/dtc/srcpos.o
+  HOSTLD  scripts/mod/modpost
+  HOSTCC  scripts/extract-cert
+  HOSTCC  scripts/dtc/checks.o
+  HOSTCC  scripts/dtc/util.o
+  LEX     scripts/dtc/dtc-lexer.lex.c
+  YACC    scripts/dtc/dtc-parser.tab.h
+  YACC    scripts/dtc/dtc-parser.tab.c
+  HOSTCC  scripts/dtc/yamltree.o
+../scripts/dtc/yamltree.c: In function ‘yaml_propval_int’:
+../scripts/dtc/yamltree.c:50:17: warning: passing argument 3 of ‘yaml_sequence_start_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+   50 |                 (const yaml_char_t *)tag, width == 4, YAML_FLOW_SEQUENCE_STYLE);
+      |                 ^~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:604:43: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  604 |         yaml_char_t *anchor, yaml_char_t *tag, int implicit,
+      |                              ~~~~~~~~~~~~~^~~
+../scripts/dtc/yamltree.c:83:33: warning: passing argument 3 of ‘yaml_scalar_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+   83 |                                 (const yaml_char_t*)"!phandle", (const yaml_char_t *)buf,
+      |                                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:581:43: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  581 |         yaml_char_t *anchor, yaml_char_t *tag,
+      |                              ~~~~~~~~~~~~~^~~
+../scripts/dtc/yamltree.c:83:65: warning: passing argument 4 of ‘yaml_scalar_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+   83 |                                 (const yaml_char_t*)"!phandle", (const yaml_char_t *)buf,
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:582:22: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  582 |         yaml_char_t *value, int length,
+      |         ~~~~~~~~~~~~~^~~~~
+../scripts/dtc/yamltree.c:87:33: warning: passing argument 3 of ‘yaml_scalar_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+   87 |                                 (const yaml_char_t*)YAML_INT_TAG, (const yaml_char_t *)buf,
+      |                                 ^
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:581:43: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  581 |         yaml_char_t *anchor, yaml_char_t *tag,
+      |                              ~~~~~~~~~~~~~^~~
+../scripts/dtc/yamltree.c:87:67: warning: passing argument 4 of ‘yaml_scalar_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+   87 |                                 (const yaml_char_t*)YAML_INT_TAG, (const yaml_char_t *)buf,
+      |                                                                   ^~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:582:22: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  582 |         yaml_char_t *value, int length,
+      |         ~~~~~~~~~~~~~^~~~~
+../scripts/dtc/yamltree.c: In function ‘yaml_propval_string’:
+../scripts/dtc/yamltree.c:108:17: warning: passing argument 3 of ‘yaml_scalar_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  108 |                 (const yaml_char_t *)YAML_STR_TAG, (const yaml_char_t*)str,
+      |                 ^
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:581:43: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  581 |         yaml_char_t *anchor, yaml_char_t *tag,
+      |                              ~~~~~~~~~~~~~^~~
+../scripts/dtc/yamltree.c:108:52: warning: passing argument 4 of ‘yaml_scalar_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  108 |                 (const yaml_char_t *)YAML_STR_TAG, (const yaml_char_t*)str,
+      |                                                    ^~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:582:22: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  582 |         yaml_char_t *value, int length,
+      |         ~~~~~~~~~~~~~^~~~~
+../scripts/dtc/yamltree.c: In function ‘yaml_propval’:
+../scripts/dtc/yamltree.c:122:17: warning: passing argument 3 of ‘yaml_scalar_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  122 |                 (const yaml_char_t *)YAML_STR_TAG, (const yaml_char_t*)prop->name,
+      |                 ^
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:581:43: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  581 |         yaml_char_t *anchor, yaml_char_t *tag,
+      |                              ~~~~~~~~~~~~~^~~
+../scripts/dtc/yamltree.c:122:52: warning: passing argument 4 of ‘yaml_scalar_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  122 |                 (const yaml_char_t *)YAML_STR_TAG, (const yaml_char_t*)prop->name,
+      |                                                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:582:22: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  582 |         yaml_char_t *value, int length,
+      |         ~~~~~~~~~~~~~^~~~~
+../scripts/dtc/yamltree.c:129:25: warning: passing argument 3 of ‘yaml_scalar_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  129 |                         (const yaml_char_t *)YAML_BOOL_TAG,
+      |                         ^
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:581:43: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  581 |         yaml_char_t *anchor, yaml_char_t *tag,
+      |                              ~~~~~~~~~~~~~^~~
+../scripts/dtc/yamltree.c:130:25: warning: passing argument 4 of ‘yaml_scalar_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  130 |                         (const yaml_char_t*)"true",
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:582:22: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  582 |         yaml_char_t *value, int length,
+      |         ~~~~~~~~~~~~~^~~~~
+../scripts/dtc/yamltree.c:140:17: warning: passing argument 3 of ‘yaml_sequence_start_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  140 |                 (const yaml_char_t *)YAML_SEQ_TAG, 1, YAML_FLOW_SEQUENCE_STYLE);
+      |                 ^
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:604:43: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  604 |         yaml_char_t *anchor, yaml_char_t *tag, int implicit,
+      |                              ~~~~~~~~~~~~~^~~
+../scripts/dtc/yamltree.c: In function ‘yaml_tree’:
+../scripts/dtc/yamltree.c:188:17: warning: passing argument 3 of ‘yaml_mapping_start_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  188 |                 (const yaml_char_t *)YAML_MAP_TAG, 1, YAML_ANY_MAPPING_STYLE);
+      |                 ^
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:636:43: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  636 |         yaml_char_t *anchor, yaml_char_t *tag, int implicit,
+      |                              ~~~~~~~~~~~~~^~~
+../scripts/dtc/yamltree.c:197:25: warning: passing argument 3 of ‘yaml_scalar_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  197 |                         (const yaml_char_t *)YAML_STR_TAG, (const yaml_char_t*)child->name,
+      |                         ^
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:581:43: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  581 |         yaml_char_t *anchor, yaml_char_t *tag,
+      |                              ~~~~~~~~~~~~~^~~
+../scripts/dtc/yamltree.c:197:60: warning: passing argument 4 of ‘yaml_scalar_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  197 |                         (const yaml_char_t *)YAML_STR_TAG, (const yaml_char_t*)child->name,
+      |                                                            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:582:22: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  582 |         yaml_char_t *value, int length,
+      |         ~~~~~~~~~~~~~^~~~~
+../scripts/dtc/yamltree.c: In function ‘dt_to_yaml’:
+../scripts/dtc/yamltree.c:220:60: warning: passing argument 3 of ‘yaml_sequence_start_event_initialize’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  220 |         yaml_sequence_start_event_initialize(&event, NULL, (const yaml_char_t *)YAML_SEQ_TAG, 1, YAML_ANY_SEQUENCE_STYLE);
+      |                                                            ^
+In file included from ../scripts/dtc/yamltree.c:9:
+/usr/include/yaml.h:604:43: note: expected ‘yaml_char_t *’ {aka ‘unsigned char *’} but argument is of type ‘const yaml_char_t *’ {aka ‘const unsigned char *’}
+  604 |         yaml_char_t *anchor, yaml_char_t *tag, int implicit,
+      |                              ~~~~~~~~~~~~~^~~
+  HOSTCC  scripts/dtc/dtc-lexer.lex.o
+  HOSTCC  scripts/dtc/dtc-parser.tab.o
+  HOSTLD  scripts/dtc/dtc
+  CC      kernel/bounds.s
+  UPD     include/generated/timeconst.h
+  UPD     include/generated/bounds.h
+  CC      arch/arm64/kernel/asm-offsets.s
+  UPD     include/generated/asm-offsets.h
+  CALL    ../scripts/checksyscalls.sh
+  LDS     arch/arm64/kernel/vdso/vdso.lds
+  CC      arch/arm64/kernel/vdso/vgettimeofday.o
+  AS      arch/arm64/kernel/vdso/note.o
+  AS      arch/arm64/kernel/vdso/sigreturn.o
+  LD      arch/arm64/kernel/vdso/vdso.so.dbg
+  VDSOSYM include/generated/vdso-offsets.h
+  LDS     arch/arm64/kernel/vdso32/vdso.lds
+  CC32    arch/arm64/kernel/vdso32/note.o
+  CC32    arch/arm64/kernel/vdso32/vgettimeofday.o
+  AS32    arch/arm64/kernel/vdso32/sigreturn.o
+  HOSTCC  arch/arm64/kernel/vdso32/../../../arm/vdso/vdsomunge
+  LD32    arch/arm64/kernel/vdso32/vdso.so.raw
+  MUNGE   arch/arm64/kernel/vdso32/vdso.so.dbg
+  VDSOSYM include/generated/vdso32-offsets.h
+  CHK     include/generated/compile.h
+  CC      init/main.o
+  HOSTCC  usr/gen_init_cpio
+  AR      arch/arm64/kernel/probes/built-in.a
+  OBJCOPY arch/arm64/kernel/vdso/vdso.so
+  UPD     include/generated/compile.h
+  AS      arch/arm64/kernel/vdso/vdso.o
+  CC      init/do_mounts.o
+  CC      init/do_mounts_initrd.o
+  AR      arch/arm64/kernel/vdso/built-in.a
+  CC      init/do_mounts_md.o
+  CC      init/do_mounts_dm.o
+  CC      init/noinitramfs.o
+  CC      arch/arm64/mm/dma-mapping.o
+  GEN     usr/initramfs_data.cpio
+  CC      arch/arm64/mm/extable.o
+  CC      init/initramfs.o
+  AS      usr/initramfs_data.o
+  CC      arch/arm64/mm/fault.o
+  CC      init/calibrate.o
+  CC      init/init_task.o
+  CC      arch/arm64/mm/init.o
+  AR      usr/built-in.a
+  AS      arch/arm64/mm/cache.o
+  CC      init/version.o
+  CC      arch/arm64/kernel/debug-monitors.o
+  OBJCOPY arch/arm64/kernel/vdso32/vdso.so
+  CC      arch/arm64/mm/copypage.o
+  AS      arch/arm64/kernel/vdso32/vdso.o
+  AS      arch/arm64/kernel/entry.o
+  CC      arch/arm64/mm/flush.o
+  CC      arch/arm64/mm/ioremap.o
+  CC      arch/arm64/mm/mmap.o
+  CC      arch/arm64/mm/pgd.o
+  AR      arch/arm64/kernel/vdso32/built-in.a
+  CC      arch/arm64/kernel/irq.o
+  CC      arch/arm64/net/bpf_jit_comp.o
+  CC      arch/arm64/mm/mmu.o
+  CC      arch/arm64/kernel/fpsimd.o
+  CC      arch/arm64/mm/context.o
+  AR      arch/arm64/net/built-in.a
+  AS      arch/arm64/kernel/entry-fpsimd.o
+  CC      arch/arm64/kernel/process.o
+  AR      init/built-in.a
+  AS      arch/arm64/mm/proc.o
+  CC      arch/arm64/crypto/sha1-ce-glue.o
+  AS      arch/arm64/crypto/sha1-ce-core.o
+  CC      arch/arm64/mm/pageattr.o
+  CC      arch/arm64/crypto/sha2-ce-glue.o
+  CC      arch/arm64/kernel/ptrace.o
+  CC      arch/arm64/kernel/setup.o
+  AS      arch/arm64/crypto/sha2-ce-core.o
+  AR      arch/arm64/mm/built-in.a
+  CC      arch/arm64/kernel/signal.o
+  AS      arch/arm64/crypto/crc32-ce-core.o
+  CC      arch/arm64/kernel/sys.o
+  CC      certs/system_keyring.o
+  CC      arch/arm64/crypto/crc32-ce-glue.o
+  EXTRACT_CERTS   ../certs/"verity.x509.pem"
+  AS      certs/system_certificates.o
+  CC      arch/arm64/kernel/stacktrace.o
+  CC      kernel/bpf/core.o
+  AS      arch/arm64/crypto/aes-ce-core.o
+  CC      arch/arm64/crypto/aes-ce-glue.o
+  CC      arch/arm64/kernel/time.o
+  CC      kernel/bpf/syscall.o
+  CC      arch/arm64/crypto/aes-ce-ccm-glue.o
+  CC      arch/arm64/kernel/traps.o
+  CC      kernel/bpf/verifier.o
+  AR      certs/built-in.a
+  CC      arch/arm64/kernel/io.o
+In file included from ../kernel/bpf/verifier.c:38:
+../include/linux/bpf_verifier.h:227:28: warning: address of array 'log->kbuf' will always evaluate to 'true' [-Wpointer-bool-conversion]
+        return log->level && log->kbuf && log->ubuf && !bpf_verifier_log_full(log);
+                          ~~ ~~~~~^~~~
+1 warning generated.
+  AS      arch/arm64/crypto/aes-ce-ccm-core.o
+  CC      arch/arm64/kernel/vdso.o
+  CC      kernel/bpf/inode.o
+  CC      mm/filemap.o
+  CC      arch/arm64/crypto/aes-glue-ce.o
+  AS      arch/arm64/kernel/hyp-stub.o
+  CC      kernel/bpf/helpers.o
+  CC      mm/mempool.o
+  CC      arch/arm64/kernel/psci.o
+  AS      arch/arm64/crypto/aes-ce.o
+  CC      kernel/bpf/tnum.o
+  CC      arch/arm64/crypto/aes-glue-neon.o
+  CC      mm/oom_kill.o
+  CC      arch/arm64/kernel/cpu_ops.o
+  CC      kernel/bpf/hashtab.o
+  AS      arch/arm64/crypto/aes-neon.o
+  CC      mm/fadvise.o
+  CC      kernel/bpf/arraymap.o
+  CC      arch/arm64/crypto/sha256-glue.o
+  CC      arch/arm64/kernel/insn.o
+  CC      mm/maccess.o
+  CC      arch/arm64/kernel/return_address.o
+  PERLASM arch/arm64/crypto/sha256-core.S
+  CC      kernel/bpf/percpu_freelist.o
+  AS      arch/arm64/crypto/chacha-neon-core.o
+  CC      mm/page_alloc.o
+  CC      arch/arm64/kernel/cpuinfo.o
+  CC      kernel/bpf/bpf_lru_list.o
+  CC      arch/arm64/crypto/chacha-neon-glue.o
+  CC      arch/arm64/kernel/cpu_errata.o
+  CC      mm/page-writeback.o
+  CC      kernel/bpf/lpm_trie.o
+  CC      arch/arm64/kernel/cpufeature.o
+  PERLASM arch/arm64/crypto/poly1305-core.S
+  CC      arch/arm64/crypto/poly1305-glue.o
+  CC      mm/readahead.o
+  CC      kernel/bpf/map_in_map.o
+  CC      arch/arm64/kernel/alternative.o
+  AS      arch/arm64/crypto/aes-cipher-core.o
+  CC      mm/swap.o
+  CC      kernel/bpf/local_storage.o
+  CC      arch/arm64/kernel/cacheinfo.o
+  CC      arch/arm64/crypto/aes-cipher-glue.o
+../mm/swap.c:591:7: warning: unused variable 'lru' [-Wunused-variable]
+                int lru = page_lru_base_type(page);
+                    ^
+1 warning generated.
+  CC      kernel/bpf/ringbuf.o
+  CC      mm/truncate.o
+  CC      arch/arm64/kernel/smp.o
+  AS      arch/arm64/crypto/sha256-core.o
+  AS      arch/arm64/crypto/poly1305-core.o
+  CC      mm/vmscan.o
+  CC      kernel/bpf/disasm.o
+  CC      arch/arm64/kernel/smp_spin_table.o
+  AR      arch/arm64/crypto/built-in.a
+  CC      kernel/bpf/btf.o
+  CC      arch/arm64/kernel/topology.o
+In file included from ../kernel/bpf/btf.c:17:
+../include/linux/bpf_verifier.h:227:28: warning: address of array 'log->kbuf' will always evaluate to 'true' [-Wpointer-bool-conversion]
+        return log->level && log->kbuf && log->ubuf && !bpf_verifier_log_full(log);
+                          ~~ ~~~~~^~~~
+1 warning generated.
+  CC      fs/configfs/inode.o
+  CC      kernel/bpf/devmap.o
+  AS      arch/arm64/kernel/smccc-call.o
+  CC      fs/configfs/file.o
+  CC      kernel/bpf/cpumap.o
+  CC      arch/arm64/kernel/syscall.o
+  CC      fs/configfs/dir.o
+  CC      arch/arm64/kernel/sys32.o
+  CC      kernel/bpf/offload.o
+In file included from ../kernel/bpf/offload.c:17:
+../include/linux/bpf_verifier.h:227:28: warning: address of array 'log->kbuf' will always evaluate to 'true' [-Wpointer-bool-conversion]
+        return log->level && log->kbuf && log->ubuf && !bpf_verifier_log_full(log);
+                          ~~ ~~~~~^~~~
+1 warning generated.
+  CC      arch/arm64/kernel/signal32.o
+  CC      fs/configfs/symlink.o
+  CC      kernel/bpf/stackmap.o
+  CC      arch/arm64/kernel/sys_compat.o
+  CC      fs/configfs/mount.o
+  CC      kernel/bpf/cgroup.o
+  CC      fs/configfs/item.o
+  CC      kernel/bpf/reuseport_array.o
+  AS      arch/arm64/kernel/kuser32.o
+  AR      fs/configfs/built-in.a
+  CC      arch/arm64/kernel/perf_regs.o
+  CC      fs/crypto/crypto.o
+  AR      kernel/bpf/built-in.a
+  CC      kernel/cgroup/cgroup.o
+  CC      fs/crypto/fname.o
+  CC      arch/arm64/kernel/perf_callchain.o
+  CC      arch/arm64/kernel/perf_event.o
+  CC      fs/crypto/hkdf.o
+  CC      kernel/cgroup/rstat.o
+  CC      fs/crypto/hooks.o
+  CC      arch/arm64/kernel/hw_breakpoint.o
+  CC      kernel/cgroup/namespace.o
+  AS      arch/arm64/kernel/sleep.o
+  CC      kernel/cgroup/cgroup-v1.o
+  CC      fs/crypto/keyring.o
+  CC      arch/arm64/kernel/suspend.o
+  CC      kernel/cgroup/freezer.o
+  CC      fs/crypto/keysetup.o
+  CC      arch/arm64/kernel/cpuidle.o
+  CC      kernel/cgroup/cpuset.o
+  CC      fs/crypto/keysetup_v1.o
+../mm/vmscan.c:2458:12: error: static declaration of 'vm_ratio_update_handler' follows non-static declaration
+static int vm_ratio_update_handler(struct ctl_table *table, int write,
+           ^
+../include/linux/mm.h:176:5: note: previous declaration is here
+int vm_ratio_update_handler(
+    ^
+../mm/vmscan.c:4027:37: error: subscripted value is not an array, pointer, or vector
+        WRITE_ONCE(lrugen->timestamps[type][next], jiffies);
+                   ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+../include/linux/compiler.h:352:17: note: expanded from macro 'WRITE_ONCE'
+        union { typeof(x) __val; char __c[1]; } __u =   \
+                       ^
+../mm/vmscan.c:4027:37: error: subscripted value is not an array, pointer, or vector
+        WRITE_ONCE(lrugen->timestamps[type][next], jiffies);
+                   ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+../include/linux/compiler.h:353:30: note: expanded from macro 'WRITE_ONCE'
+                { .__val = (__force typeof(x)) (val) }; \
+                                           ^
+../mm/vmscan.c:4027:37: error: subscripted value is not an array, pointer, or vector
+        WRITE_ONCE(lrugen->timestamps[type][next], jiffies);
+                   ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+../include/linux/compiler.h:354:22: note: expanded from macro 'WRITE_ONCE'
+        __write_once_size(&(x), __u.__c, sizeof(x));    \
+                            ^
+../mm/vmscan.c:4027:37: error: subscripted value is not an array, pointer, or vector
+        WRITE_ONCE(lrugen->timestamps[type][next], jiffies);
+                   ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+../include/linux/compiler.h:354:42: note: expanded from macro 'WRITE_ONCE'
+        __write_once_size(&(x), __u.__c, sizeof(x));    \
+                                                ^
+../mm/vmscan.c:4180:47: error: subscripted value is not an array, pointer, or vector
+                        ts = READ_ONCE(lruvec->lrugen.timestamps[t][gen]);
+                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~
+../include/linux/compiler.h:335:34: note: expanded from macro 'READ_ONCE'
+#define READ_ONCE(x) __READ_ONCE(x, 1)
+                                 ^
+../include/linux/compiler.h:327:17: note: expanded from macro '__READ_ONCE'
+        union { typeof(x) __val; char __c[1]; } __u;                    \
+                       ^
+../mm/vmscan.c:4180:47: error: subscripted value is not an array, pointer, or vector
+                        ts = READ_ONCE(lruvec->lrugen.timestamps[t][gen]);
+                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~
+../include/linux/compiler.h:335:34: note: expanded from macro 'READ_ONCE'
+#define READ_ONCE(x) __READ_ONCE(x, 1)
+                                 ^
+../include/linux/compiler.h:329:22: note: expanded from macro '__READ_ONCE'
+                __read_once_size(&(x), __u.__c, sizeof(x));             \
+                                   ^
+../mm/vmscan.c:4180:47: error: subscripted value is not an array, pointer, or vector
+                        ts = READ_ONCE(lruvec->lrugen.timestamps[t][gen]);
+                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~
+../include/linux/compiler.h:335:34: note: expanded from macro 'READ_ONCE'
+#define READ_ONCE(x) __READ_ONCE(x, 1)
+                                 ^
+../include/linux/compiler.h:329:42: note: expanded from macro '__READ_ONCE'
+                __read_once_size(&(x), __u.__c, sizeof(x));             \
+                                                       ^
+../mm/vmscan.c:4180:47: error: subscripted value is not an array, pointer, or vector
+                        ts = READ_ONCE(lruvec->lrugen.timestamps[t][gen]);
+                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~
+../include/linux/compiler.h:335:34: note: expanded from macro 'READ_ONCE'
+#define READ_ONCE(x) __READ_ONCE(x, 1)
+                                 ^
+../include/linux/compiler.h:331:30: note: expanded from macro '__READ_ONCE'
+                __read_once_size_nocheck(&(x), __u.__c, sizeof(x));     \
+                                           ^
+../mm/vmscan.c:4180:47: error: subscripted value is not an array, pointer, or vector
+                        ts = READ_ONCE(lruvec->lrugen.timestamps[t][gen]);
+                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~
+../include/linux/compiler.h:335:34: note: expanded from macro 'READ_ONCE'
+#define READ_ONCE(x) __READ_ONCE(x, 1)
+                                 ^
+../include/linux/compiler.h:331:50: note: expanded from macro '__READ_ONCE'
+                __read_once_size_nocheck(&(x), __u.__c, sizeof(x));     \
+                                                               ^
+../mm/vmscan.c:4292:14: error: implicit declaration of function 'page_is_file_lru' [-Werror,-Wimplicit-function-declaration]
+        int ftype = page_is_file_lru(pvmw->page);
+                    ^
+../mm/vmscan.c:5263:63: error: subscripted value is not an array, pointer, or vector
+                                        unsigned long ts = READ_ONCE(lruvec->lrugen.timestamps[t][gen]);
+                                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~
+../include/linux/compiler.h:335:34: note: expanded from macro 'READ_ONCE'
+#define READ_ONCE(x) __READ_ONCE(x, 1)
+                                 ^
+../include/linux/compiler.h:327:17: note: expanded from macro '__READ_ONCE'
+        union { typeof(x) __val; char __c[1]; } __u;                    \
+                       ^
+../mm/vmscan.c:5263:63: error: subscripted value is not an array, pointer, or vector
+                                        unsigned long ts = READ_ONCE(lruvec->lrugen.timestamps[t][gen]);
+                                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~
+../include/linux/compiler.h:335:34: note: expanded from macro 'READ_ONCE'
+#define READ_ONCE(x) __READ_ONCE(x, 1)
+                                 ^
+../include/linux/compiler.h:329:22: note: expanded from macro '__READ_ONCE'
+                __read_once_size(&(x), __u.__c, sizeof(x));             \
+                                   ^
+../mm/vmscan.c:5263:63: error: subscripted value is not an array, pointer, or vector
+                                        unsigned long ts = READ_ONCE(lruvec->lrugen.timestamps[t][gen]);
+                                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~
+../include/linux/compiler.h:335:34: note: expanded from macro 'READ_ONCE'
+#define READ_ONCE(x) __READ_ONCE(x, 1)
+                                 ^
+../include/linux/compiler.h:329:42: note: expanded from macro '__READ_ONCE'
+                __read_once_size(&(x), __u.__c, sizeof(x));             \
+                                                       ^
+../mm/vmscan.c:5263:63: error: subscripted value is not an array, pointer, or vector
+                                        unsigned long ts = READ_ONCE(lruvec->lrugen.timestamps[t][gen]);
+                                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~
+../include/linux/compiler.h:335:34: note: expanded from macro 'READ_ONCE'
+#define READ_ONCE(x) __READ_ONCE(x, 1)
+                                 ^
+../include/linux/compiler.h:331:30: note: expanded from macro '__READ_ONCE'
+                __read_once_size_nocheck(&(x), __u.__c, sizeof(x));     \
+                                           ^
+../mm/vmscan.c:5263:63: error: subscripted value is not an array, pointer, or vector
+                                        unsigned long ts = READ_ONCE(lruvec->lrugen.timestamps[t][gen]);
+                                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~
+../include/linux/compiler.h:335:34: note: expanded from macro 'READ_ONCE'
+#define READ_ONCE(x) __READ_ONCE(x, 1)
+                                 ^
+../include/linux/compiler.h:331:50: note: expanded from macro '__READ_ONCE'
+                __read_once_size_nocheck(&(x), __u.__c, sizeof(x));     \
+                                                               ^
+16 errors generated.
+make[2]: *** [../scripts/Makefile.build:309: mm/vmscan.o] Error 1
+  CC      arch/arm64/kernel/jump_label.o
+make[1]: *** [/home/runner/work/Kernel_Action/Kernel_Action/kernel_workspace/android-kernel/Makefile:1227: mm] Error 2
+make[1]: *** Waiting for unfinished jobs....
+  CC      fs/crypto/policy.o
+  CC      arch/arm64/kernel/pci.o
+  CC      fs/crypto/bio.o
+  AR      kernel/cgroup/built-in.a
+  CC      fs/devpts/inode.o
+  CC      kernel/dma/mapping.o
+  CC      arch/arm64/kernel/armv8_deprecated.o
+  CC      fs/crypto/inline_crypt.o
+  AR      fs/devpts/built-in.a
+  CC      arch/arm64/kernel/kaslr.o
+  CC      kernel/dma/contiguous.o
+  AS      arch/arm64/kernel/head.o
+  AR      fs/crypto/built-in.a
+  CC      kernel/dma/coherent.o
+  LDS     arch/arm64/kernel/vmlinux.lds
+  CC      kernel/dma/removed.o
+  CC      fs/ecryptfs/dentry.o
+  CC      kernel/events/core.o
+  AR      arch/arm64/kernel/built-in.a
+  CC      kernel/irq/irqdesc.o
+  CC      kernel/dma/direct.o
+  CC      fs/ecryptfs/file.o
+  CC      kernel/events/ring_buffer.o
+  CC      kernel/dma/swiotlb.o
+  CC      kernel/irq/handle.o
+  CC      fs/ecryptfs/inode.o
+  AR      kernel/dma/built-in.a
+  CC      kernel/events/callchain.o
+  AR      kernel/livepatch/built-in.a
+  CC      kernel/irq/manage.o
+  CC      fs/ecryptfs/main.o
+  CC      kernel/events/hw_breakpoint.o
+  CC      fs/erofs/super.o
+  CC      kernel/irq/spurious.o
+  AR      kernel/events/built-in.a
+  CC      fs/ecryptfs/super.o
+  CC      fs/erofs/inode.o
+  CC      fs/exfat/inode.o
+  CC      fs/ecryptfs/mmap.o
+  CC      kernel/irq/resend.o
+  CC      fs/exfat/namei.o
+  CC      fs/erofs/data.o
+  CC      fs/erofs/namei.o
+  CC      fs/ecryptfs/read_write.o
+  CC      kernel/irq/chip.o
+  CC      fs/exfat/dir.o
+  CC      kernel/irq/dummychip.o
+  CC      fs/ecryptfs/crypto.o
+  CC      fs/exfat/super.o
+  CC      fs/erofs/dir.o
+  CC      fs/ecryptfs/keystore.o
+  CC      kernel/irq/devres.o
+  CC      fs/erofs/utils.o
+  CC      fs/exfat/fatent.o
+  CC      kernel/irq/autoprobe.o
+  CC      fs/erofs/pcpubuf.o
+  CC      fs/ecryptfs/kthread.o
+  CC      fs/exfat/cache.o
+  CC      fs/exfat/nls.o
+  CC      kernel/irq/irqdomain.o
+  CC      fs/ecryptfs/messaging.o
+  CC      fs/erofs/xattr.o
+  CC      fs/exfat/misc.o
+  CC      fs/ecryptfs/miscdev.o
+  CC      kernel/irq/proc.o
+  CC      kernel/irq/cpuhotplug.o
+  CC      fs/exfat/file.o
+  CC      fs/erofs/decompressor.o
+  CC      kernel/irq/pm.o
+  CC      fs/erofs/zmap.o
+  CC      fs/exfat/balloc.o
+  AR      fs/ecryptfs/built-in.a
+  AR      fs/exofs/built-in.a
+  CC      fs/erofs/zdata.o
+  AR      fs/exfat/built-in.a
+  CC      kernel/irq/msi.o
+  CC      kernel/irq/affinity.o
+  CC      fs/exportfs/expfs.o
+  AR      kernel/irq/built-in.a
+  AR      fs/erofs/built-in.a
+  CC      kernel/locking/mutex.o
+  CC      kernel/power/qos.o
+  CC      fs/ext4/balloc.o
+  AR      fs/exportfs/built-in.a
+  CC      kernel/locking/semaphore.o
+  CC      kernel/power/main.o
+  CC      kernel/locking/rwsem.o
+  CC      fs/ext4/bitmap.o
+  CC      kernel/locking/percpu-rwsem.o
+  CC      kernel/power/process.o
+  CC      fs/ext4/block_validity.o
+  CC      kernel/power/suspend.o
+  CC      kernel/locking/spinlock.o
+  CC      fs/ext4/dir.o
+  CC      kernel/power/wakelock.o
+  CC      kernel/printk/printk.o
+  CC      kernel/locking/osq_lock.o
+  CC      fs/ext4/ext4_jbd2.o
+  CC      kernel/locking/qspinlock.o
+  CC      kernel/printk/printk_safe.o
+  CC      kernel/power/poweroff.o
+  CC      kernel/locking/rtmutex.o
+  AR      kernel/printk/built-in.a
+  CC      kernel/power/energy_model.o
+  CC      fs/ext4/extents.o
+  CC      fs/f2fs/dir.o
+  CC      kernel/locking/qrwlock.o
+  CC      kernel/power/wakeup_reason.o
+  CC      fs/ext4/extents_status.o
+  AR      kernel/locking/built-in.a
+  CC      fs/f2fs/file.o
+  CC      fs/f2fs/inode.o
+  AR      kernel/power/built-in.a
+  CC      fs/ext4/file.o
+  CC      kernel/rcu/update.o
+  CC      kernel/rcu/sync.o
+  CC      fs/f2fs/namei.o
+  CC      fs/ext4/fsmap.o
+  CC      kernel/rcu/srcutree.o
+  CC      fs/fat/cache.o
+  CC      fs/f2fs/hash.o
+  CC      fs/ext4/fsync.o
+  CC      kernel/rcu/tree.o
+  CC      fs/f2fs/super.o
+  CC      fs/fat/dir.o
+  CC      fs/fat/fatent.o
+  CC      fs/ext4/hash.o
+  CC      fs/f2fs/inline.o
+  CC      kernel/rcu/rcu_segcblist.o
+  CC      fs/fat/file.o
+  AR      kernel/rcu/built-in.a
+  CC      fs/f2fs/checkpoint.o
+  CC      fs/ext4/ialloc.o
+  CC      kernel/sched/core.o
+  CC      fs/fat/inode.o
+  CC      fs/ext4/indirect.o
+  CC      kernel/sched/loadavg.o
+  CC      fs/f2fs/gc.o
+  CC      fs/fat/misc.o
+  CC      fs/ext4/inline.o
+  CC      fs/fat/nfs.o
+  CC      kernel/sched/clock.o
+  CC      fs/f2fs/data.o
+  CC      fs/ext4/inode.o
+  CC      fs/fat/namei_vfat.o
+  CC      fs/f2fs/node.o
+  CC      kernel/sched/cputime.o
+  CC      fs/ext4/ioctl.o
+  AR      fs/fat/built-in.a
+  CC      kernel/time/time.o
+  CC      kernel/sched/idle.o
+  CC      fs/ext4/mballoc.o
+  CC      fs/f2fs/segment.o
+  CC      kernel/time/timer.o
+  CC      fs/f2fs/recovery.o
+  CC      fs/ext4/migrate.o
+  CC      kernel/sched/fair.o
+  CC      kernel/time/hrtimer.o
+  CC      fs/ext4/mmp.o
+  CC      kernel/time/timekeeping.o
+  CC      fs/f2fs/shrinker.o
+  CC      kernel/sched/rt.o
+  CC      fs/ext4/move_extent.o
+  CC      fs/f2fs/extent_cache.o
+  CC      kernel/time/ntp.o
+  CC      kernel/sched/deadline.o
+  CC      fs/ext4/namei.o
+  CC      kernel/time/clocksource.o
+  CC      fs/f2fs/sysfs.o
+  CC      kernel/sched/wait.o
+  CC      fs/ext4/page-io.o
+  CC      fs/f2fs/debug.o
+  CC      kernel/time/jiffies.o
+  CC      kernel/sched/wait_bit.o
+  CC      fs/ext4/readpage.o
+  CC      kernel/time/timer_list.o
+  CC      fs/f2fs/xattr.o
+  CC      kernel/sched/swait.o
+  CC      fs/ext4/resize.o
+  CC      kernel/time/timeconv.o
+  CC      fs/f2fs/acl.o
+  CC      fs/ext4/super.o
+  CC      kernel/time/timecounter.o
+  CC      kernel/sched/completion.o
+  CC      fs/f2fs/verity.o
+  CC      kernel/time/alarmtimer.o
+  CC      fs/ext4/symlink.o
+  CC      kernel/sched/cpupri.o
+  CC      fs/f2fs/compress.o
+  CC      kernel/time/posix-timers.o
+  CC      fs/ext4/sysfs.o
+  CC      kernel/sched/cpudeadline.o
+  AR      fs/f2fs/built-in.a
+  CC      kernel/time/posix-cpu-timers.o
+  CC      kernel/fork.o
+  CC      fs/ext4/xattr.o
+  CC      kernel/sched/topology.o
+  CC      kernel/time/posix-clock.o
+  CC      kernel/exec_domain.o
+  CC      fs/ext4/xattr_trusted.o
+  CC      kernel/sched/stop_task.o
+  CC      kernel/time/itimer.o
+  CC      kernel/time/clockevents.o
+  CC      fs/ext4/xattr_user.o
+  CC      kernel/sched/pelt.o
+  CC      kernel/time/tick-common.o
+  CC      fs/fuse/dev.o
+  CC      fs/ext4/acl.o
+  CC      kernel/time/tick-broadcast.o
+  CC      kernel/sched/walt.o
+  CC      fs/fuse/dir.o
+  CC      fs/ext4/xattr_security.o
+  CC      kernel/time/tick-broadcast-hrtimer.o
+  CC      kernel/sched/boost.o
+  CC      fs/fuse/file.o
+  CC      fs/ext4/verity.o
+  CC      kernel/time/sched_clock.o
+  CC      fs/fuse/inode.o
+  CC      kernel/sched/sched_avg.o
+  AR      fs/ext4/built-in.a
+  CC      kernel/sched/debug.o
+  CC      kernel/time/tick-oneshot.o
+  CC      fs/fuse/control.o
+  CC      kernel/panic.o
+  CC      kernel/sched/tune.o
+  CC      kernel/time/tick-sched.o
+  CC      fs/fuse/xattr.o
+  CC      fs/incfs/data_mgmt.o
+  CC      kernel/sched/cpuacct.o
+  CC      kernel/time/vsyscall.o
+  CC      fs/fuse/acl.o
+  CC      fs/incfs/format.o
+  AR      kernel/time/built-in.a
+  CC      kernel/sched/cpufreq.o
+  CC      fs/jbd2/transaction.o
+  CC      fs/fuse/passthrough.o
+  CC      fs/incfs/integrity.o
+  CC      fs/jbd2/commit.o
+  AR      fs/fuse/built-in.a
+  CC      kernel/sched/cpufreq_schedutil.o
+  CC      fs/kernfs/mount.o
+  CC      fs/incfs/main.o
+  CC      fs/jbd2/recovery.o
+  CC      kernel/sched/cpufreq_schedhorizon.o
+  CC      fs/kernfs/inode.o
+  CC      fs/incfs/vfs.o
+  CC      fs/jbd2/checkpoint.o
+  CC      fs/kernfs/dir.o
+  CC      kernel/sched/membarrier.o
+  AR      fs/incfs/built-in.a
+  CC      fs/nls/nls_base.o
+  CC      fs/jbd2/revoke.o
+  CC      fs/kernfs/file.o
+  CC      kernel/sched/core_ctl.o
+  CC      fs/nls/nls_cp437.o
+  CC      fs/jbd2/journal.o
+  CC      fs/kernfs/symlink.o
+  CC      fs/nls/nls_iso8859-1.o
+  AR      kernel/sched/built-in.a
+  CC      kernel/cpu.o
+  AR      fs/jbd2/built-in.a
+  AR      fs/kernfs/built-in.a
+  CC      kernel/exit.o
+  AR      fs/nls/built-in.a
+  CC      kernel/softirq.o
+  CC      fs/nomount/nomount.o
+  CC      fs/notify/dnotify/dnotify.o
+  AR      fs/nomount/built-in.a
+  CC      kernel/resource.o
+  CC      fs/ntfs/aops.o
+  AR      fs/notify/fanotify/built-in.a
+  CC      kernel/sysctl.o
+  AR      fs/notify/dnotify/built-in.a
+  CC      fs/notify/inotify/inotify_fsnotify.o
+  CC      fs/ntfs/attrib.o
+  CC      fs/notify/inotify/inotify_user.o
+  CC      kernel/sysctl_binary.o
+  CC      kernel/capability.o
+  CC      fs/ntfs/collate.o
+  AR      fs/notify/inotify/built-in.a
+  CC      fs/notify/fsnotify.o
+  CC      fs/overlayfs/super.o
+  CC      kernel/ptrace.o
+  CC      fs/ntfs/compress.o
+  CC      fs/notify/notification.o
+  CC      fs/overlayfs/namei.o
+  CC      kernel/user.o
+  CC      fs/ntfs/debug.o
+  CC      fs/overlayfs/util.o
+  CC      fs/notify/group.o
+  CC      kernel/signal.o
+  CC      fs/ntfs/dir.o
+  CC      fs/overlayfs/inode.o
+  CC      fs/notify/mark.o
+  CC      fs/ntfs/file.o
+  CC      kernel/sys.o
+  CC      fs/overlayfs/file.o
+  CC      fs/notify/fdinfo.o
+  CC      fs/ntfs/index.o
+  CC      kernel/umh.o
+  CC      fs/overlayfs/dir.o
+  AR      fs/notify/built-in.a
+  CC      fs/ntfs/inode.o
+  CC      kernel/workqueue.o
+  CC      fs/overlayfs/readdir.o
+  CC      fs/proc/task_mmu.o
+  CC      fs/ntfs/mft.o
+  CC      kernel/pid.o
+  CC      fs/overlayfs/copy_up.o
+  CC      fs/proc/inode.o
+  CC      fs/ntfs/mst.o
+  CC      kernel/task_work.o
+  CC      fs/overlayfs/export.o
+  CC      fs/proc/root.o
+  CC      fs/ntfs/namei.o
+  CC      kernel/extable.o
+  AR      fs/overlayfs/built-in.a
+  CC      fs/ntfs/runlist.o
+  CC      fs/proc/base.o
+  CC      kernel/params.o
+  CC      fs/pstore/inode.o
+  CC      fs/ntfs/super.o
+  CC      kernel/kthread.o
+  CC      fs/proc/generic.o
+  CC      fs/pstore/platform.o
+  CC      fs/pstore/pmsg.o
+  CC      fs/ntfs/sysctl.o
+  CC      kernel/sys_ni.o
+  CC      fs/proc/array.o
+  CC      fs/ntfs/unistr.o
+  CC      kernel/nsproxy.o
+  CC      fs/pstore/ram.o
+  CC      fs/proc/fd.o
+  CC      fs/ntfs/upcase.o
+  CC      fs/pstore/ram_core.o
+  CC      kernel/notifier.o
+  CC      fs/proc/proc_tty.o
+  AR      fs/pstore/built-in.a
+  CC      fs/ntfs/bitmap.o
+  CC      kernel/ksysfs.o
+  CC      fs/quota/dquot.o
+  CC      fs/proc/cmdline.o
+  CC      fs/ntfs/lcnalloc.o
+  CC      kernel/cred.o
+  CC      fs/quota/quota_v2.o
+  CC      fs/proc/consoles.o
+  CC      fs/ntfs/logfile.o
+  CC      kernel/reboot.o
+  CC      fs/quota/quota_tree.o
+  CC      fs/proc/cpuinfo.o
+  CC      fs/quota/quota.o
+  CC      fs/ntfs/quota.o
+  CC      kernel/async.o
+  CC      fs/proc/devices.o
+  CC      kernel/range.o
+  CC      fs/ntfs/usnjrnl.o
+  CC      fs/quota/kqid.o
+  CC      fs/proc/interrupts.o
+  CC      kernel/smpboot.o
+  AR      fs/ntfs/built-in.a
+  AR      fs/quota/built-in.a
+  CC      fs/proc/loadavg.o
+  CC      kernel/ucount.o
+  CC      fs/ramfs/inode.o
+  CC      kernel/groups.o
+  CC      fs/proc/meminfo.o
+  CC      fs/sdcardfs/dentry.o
+  CC      fs/ramfs/file-mmu.o
+  CC      kernel/freezer.o
+  CC      fs/proc/stat.o
+  CC      fs/sdcardfs/file.o
+  AR      fs/ramfs/built-in.a
+  CC      kernel/futex.o
+  CC      fs/proc/uptime.o
+  CC      fs/sdcardfs/inode.o
+  CC      fs/sysfs/file.o
+  CC      kernel/smp.o
+  CC      fs/proc/util.o
+  CC      fs/sdcardfs/main.o
+  CC      fs/sysfs/dir.o
+  CC      kernel/kallsyms.o
+  CC      fs/proc/version.o
+  CC      fs/sdcardfs/super.o
+  CC      fs/sysfs/symlink.o
+  CC      fs/proc/softirqs.o
+  CC      fs/sdcardfs/lookup.o
+  CC      fs/sysfs/mount.o
+  CC      kernel/compat.o
+  CC      fs/sysfs/group.o
+  CC      fs/sdcardfs/mmap.o
+  CC      fs/proc/namespaces.o
+  GZIP    kernel/config_data.gz
+  CC      kernel/stop_machine.o
+  AR      fs/sysfs/built-in.a
+  CC      fs/sdcardfs/packagelist.o
+  CC      fs/proc/self.o
+  CC      fs/sdcardfs/derived_perm.o
+  CC      kernel/audit.o
+  AR      fs/sdcardfs/built-in.a
+  CC      fs/proc/thread_self.o
+  CC      kernel/auditfilter.o
+  SHIPPED fs/unicode/utf8data.h
+  CC      fs/unicode/utf8-core.o
+  CC      fs/proc/proc_sysctl.o
+  CC      fs/proc/proc_net.o
+  CC      fs/unicode/utf8-norm.o
+  CC      kernel/auditsc.o
+  CC      fs/verity/enable.o
+  CC      fs/proc/kmsg.o
+  CC      kernel/audit_watch.o
+  CC      fs/verity/hash_algs.o
+  CC      fs/proc/page.o
+  CC      kernel/audit_fsnotify.o
+  CC      fs/verity/init.o
+  CC      kernel/audit_tree.o
+  AR      fs/proc/built-in.a
+  CC      fs/verity/measure.o
+  CC      fs/open.o
+  AR      fs/unicode/built-in.a
+  CC      kernel/seccomp.o
+../fs/open.c:435:1: warning: unused label 'orig_flow' [-Wunused-label]
+orig_flow:
+^~~~~~~~~~
+1 warning generated.
+  CC      fs/read_write.o
+  CC      fs/verity/open.o
+  CC      fs/verity/read_metadata.o
+  CC      kernel/utsname_sysctl.o
+  CC      fs/verity/verify.o
+  CC      fs/file_table.o
+  CC      fs/super.o
+  CC      kernel/taskstats.o
+  CC      fs/verity/signature.o
+  CC      fs/char_dev.o
+  CC      fs/stat.o
+  CC      kernel/tsacct.o
+../fs/stat.c:236:1: warning: unused label 'orig_flow' [-Wunused-label]
+orig_flow:
+^~~~~~~~~~
+1 warning generated.
+  CC      kernel/irq_work.o
+  AR      fs/verity/built-in.a
+  CC      kernel/cpu_pm.o
+  CC      fs/exec.o
+  CC      kernel/jump_label.o
+  CC      fs/pipe.o
+  CC      kernel/iomem.o
+  CC      fs/namei.o
+  CC      fs/fcntl.o
+  CC      fs/ioctl.o
+  UPD     kernel/config_data.h
+  CC      kernel/configs.o
+  CC      fs/readdir.o
+  CC      fs/select.o
+  CC      fs/dcache.o
+  CC      fs/inode.o
+  CC      fs/attr.o
+  CC      fs/bad_inode.o
+  CC      fs/file.o
+  CC      fs/filesystems.o
+  CC      fs/namespace.o
+  CC      fs/seq_file.o
+  CC      fs/xattr.o
+  CC      fs/libfs.o
+  CC      fs/fs-writeback.o
+  AR      kernel/built-in.a
+  CC      fs/pnode.o
+  CC      fs/splice.o
+  CC      fs/sync.o
+  CC      fs/utimes.o
+  CC      fs/d_path.o
+  CC      fs/stack.o
+  CC      fs/fs_struct.o
+  CC      fs/statfs.o
+  CC      fs/fs_pin.o
+  CC      fs/nsfs.o
+  CC      fs/susfs.o
+  CC      fs/buffer.o
+  CC      fs/block_dev.o
+  CC      fs/direct-io.o
+  CC      fs/mpage.o
+  CC      fs/proc_namespace.o
+  CC      fs/eventpoll.o
+  CC      fs/anon_inodes.o
+  CC      fs/signalfd.o
+  CC      fs/timerfd.o
+  CC      fs/eventfd.o
+  CC      fs/aio.o
+  CC      fs/locks.o
+  CC      fs/compat.o
+  CC      fs/compat_ioctl.o
+  CC      fs/binfmt_script.o
+  CC      fs/binfmt_elf.o
+  CC      fs/compat_binfmt_elf.o
+  CC      fs/mbcache.o
+  CC      fs/posix_acl.o
+  CC      fs/drop_caches.o
+  CC      fs/iomap.o
+  AR      fs/built-in.a
+make[1]: Leaving directory '/home/runner/work/Kernel_Action/Kernel_Action/kernel_workspace/android-kernel/out'
+make: *** [Makefile:153: sub-make] Error 2
