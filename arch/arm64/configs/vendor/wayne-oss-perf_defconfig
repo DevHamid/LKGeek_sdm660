@@ -898,6 +898,17 @@ SECURITY_SELINUX_DISABLE=y
 # CONFIG_INTEGRITY is not set
 CONFIG_INIT_ON_ALLOC_DEFAULT_ON=y
 CONFIG_CRYPTO_GCM=y
+# AF_ALG (the userspace crypto socket interface). OpenWrt's cryptsetup/LUKS,
+# IPsec and strongswan all reach the kernel crypto API through it; without
+# these the algorithms exist but nothing in userspace can use them. GCM is
+# already =y and the ARMv8 CE backends are on, so the AEAD and skcipher
+# requests are serviced by hardware.
+CONFIG_CRYPTO_USER_API=y
+CONFIG_CRYPTO_USER_API_HASH=y
+CONFIG_CRYPTO_USER_API_SKCIPHER=y
+CONFIG_CRYPTO_USER_API_RNG=y
+CONFIG_CRYPTO_USER_API_AEAD=y
+CONFIG_CRYPTO_CCM=y
 CONFIG_CRYPTO_XCBC=y
 CONFIG_CRYPTO_BLAKE2B=y
 CONFIG_CRYPTO_TWOFISH=y
