@@ -33,10 +33,10 @@ static atomic64_t keypair_counter = ATOMIC64_INIT(0);
 
 void __init wg_noise_init(void)
 {
-	struct blake2s_ctx blake;
+	struct blake2s_state blake;
 
-	blake2s(NULL, 0, handshake_name, sizeof(handshake_name),
-		handshake_init_chaining_key, NOISE_HASH_LEN);
+	blake2s(handshake_init_chaining_key, handshake_name, NULL,
+		NOISE_HASH_LEN, sizeof(handshake_name), 0);
 	blake2s_init(&blake, NOISE_HASH_LEN);
 	blake2s_update(&blake, handshake_init_chaining_key, NOISE_HASH_LEN);
 	blake2s_update(&blake, identifier_name, sizeof(identifier_name));
@@ -97,7 +97,7 @@ void wg_noise_handshake_clear(struct noise_handshake *handshake)
 
 static struct noise_keypair *keypair_create(struct wg_peer *peer)
 {
-	struct noise_keypair *keypair = kzalloc_obj(*keypair);
+	struct noise_keypair *keypair = kzalloc(sizeof(*keypair), GFP_KERNEL);
 
 	if (unlikely(!keypair))
 		return NULL;
@@ -111,7 +111,7 @@ static struct noise_keypair *keypair_create(struct wg_peer *peer)
 
 static void keypair_free_rcu(struct rcu_head *rcu)
 {
-	kfree_sensitive(container_of(rcu, struct noise_keypair, rcu));
+	kfree(container_of(rcu, struct noise_keypair, rcu));
 }
 
 static void keypair_free_kref(struct kref *kref)
@@ -304,7 +304,7 @@ void wg_noise_set_static_identity_private_key(
 
 static void hmac(u8 *out, const u8 *in, const u8 *key, const size_t inlen, const size_t keylen)
 {
-	struct blake2s_ctx blake;
+	struct blake2s_state blake;
 	u8 x_key[BLAKE2S_BLOCK_SIZE] __aligned(__alignof__(u32)) = { 0 };
 	u8 i_hash[BLAKE2S_HASH_SIZE] __aligned(__alignof__(u32));
 	int i;
@@ -431,7 +431,7 @@ static bool __must_check mix_precomputed_dh(u8 chaining_key[NOISE_HASH_LEN],
 
 static void mix_hash(u8 hash[NOISE_HASH_LEN], const u8 *src, size_t src_len)
 {
-	struct blake2s_ctx blake;
+	struct blake2s_state blake;
 
 	blake2s_init(&blake, NOISE_HASH_LEN);
 	blake2s_update(&blake, hash, NOISE_HASH_LEN);
@@ -850,7 +850,7 @@ bool wg_noise_handshake_begin_session(struct noise_handshake *handshake,
 			handshake->entry.peer->device->index_hashtable,
 			&handshake->entry, &new_keypair->entry);
 	} else {
-		kfree_sensitive(new_keypair);
+		kfree(new_keypair);
 	}
 	rcu_read_unlock_bh();
 
