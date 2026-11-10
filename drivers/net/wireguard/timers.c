@@ -41,7 +41,7 @@ static inline void mod_peer_timer(struct wg_peer *peer,
 static void wg_expired_retransmit_handshake(struct timer_list *timer)
 {
 	struct wg_peer *peer = from_timer(peer, timer,
-					  timer_retransmit_handshake);
+		timer_retransmit_handshake);
 
 	if (peer->timer_handshake_attempts > MAX_TIMER_HANDSHAKES) {
 		pr_debug("%s: Handshake for peer %llu (%pISpfsc) did not complete after %d attempts, giving up\n",
@@ -49,6 +49,7 @@ static void wg_expired_retransmit_handshake(struct timer_list *timer)
 			 &peer->endpoint.addr, (int)MAX_TIMER_HANDSHAKES + 2);
 
 		del_timer(&peer->timer_send_keepalive);
+	del_timer(&peer->timer_send_keepalive);
 		/* We drop all packets without a keypair and don't try again,
 		 * if we try unsuccessfully for too long to make a handshake.
 		 */
@@ -78,7 +79,8 @@ static void wg_expired_retransmit_handshake(struct timer_list *timer)
 
 static void wg_expired_send_keepalive(struct timer_list *timer)
 {
-	struct wg_peer *peer = from_timer(peer, timer, timer_send_keepalive);
+	struct wg_peer *peer = timer_container_of(peer, timer,
+						  timer_send_keepalive);
 
 	wg_packet_send_keepalive(peer);
 	if (peer->timer_need_another_keepalive) {
@@ -90,7 +92,8 @@ static void wg_expired_send_keepalive(struct timer_list *timer)
 
 static void wg_expired_new_handshake(struct timer_list *timer)
 {
-	struct wg_peer *peer = from_timer(peer, timer, timer_new_handshake);
+	struct wg_peer *peer = timer_container_of(peer, timer,
+						  timer_new_handshake);
 
 	pr_debug("%s: Retrying handshake with peer %llu (%pISpfsc) because we stopped hearing back after %d seconds\n",
 		 peer->device->dev->name, peer->internal_id,
@@ -104,7 +107,8 @@ static void wg_expired_new_handshake(struct timer_list *timer)
 
 static void wg_expired_zero_key_material(struct timer_list *timer)
 {
-	struct wg_peer *peer = from_timer(peer, timer, timer_zero_key_material);
+	struct wg_peer *peer = timer_container_of(peer, timer,
+						  timer_zero_key_material);
 
 	rcu_read_lock_bh();
 	if (!READ_ONCE(peer->is_dead)) {
@@ -134,8 +138,8 @@ static void wg_queued_expired_zero_key_material(struct work_struct *work)
 
 static void wg_expired_send_persistent_keepalive(struct timer_list *timer)
 {
-	struct wg_peer *peer = from_timer(peer, timer,
-					  timer_persistent_keepalive);
+	struct wg_peer *peer = timer_container_of(peer, timer,
+						  timer_persistent_keepalive);
 
 	if (likely(peer->persistent_keepalive_interval))
 		wg_packet_send_keepalive(peer);
@@ -147,7 +151,7 @@ void wg_timers_data_sent(struct wg_peer *peer)
 	if (!timer_pending(&peer->timer_new_handshake))
 		mod_peer_timer(peer, &peer->timer_new_handshake,
 			jiffies + (KEEPALIVE_TIMEOUT + REKEY_TIMEOUT) * HZ +
-			prandom_u32_max(REKEY_TIMEOUT_JITTER_MAX_JIFFIES));
+			get_random_u32_below(REKEY_TIMEOUT_JITTER_MAX_JIFFIES));
 }
 
 /* Should be called after an authenticated data packet is received. */
@@ -168,6 +172,7 @@ void wg_timers_data_received(struct wg_peer *peer)
 void wg_timers_any_authenticated_packet_sent(struct wg_peer *peer)
 {
 	del_timer(&peer->timer_send_keepalive);
+	del_timer(&peer->timer_send_keepalive);
 }
 
 /* Should be called after any type of authenticated packet is received, whether
@@ -183,7 +188,7 @@ void wg_timers_handshake_initiated(struct wg_peer *peer)
 {
 	mod_peer_timer(peer, &peer->timer_retransmit_handshake,
 		       jiffies + REKEY_TIMEOUT * HZ +
-		       prandom_u32_max(REKEY_TIMEOUT_JITTER_MAX_JIFFIES));
+		       get_random_u32_below(REKEY_TIMEOUT_JITTER_MAX_JIFFIES));
 }
 
 /* Should be called after a handshake response message is received and processed
