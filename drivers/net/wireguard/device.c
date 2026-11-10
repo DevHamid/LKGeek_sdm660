@@ -95,24 +95,6 @@ static int wg_pm_notification(struct notifier_block *nb, unsigned long action,
 #endif
 static struct notifier_block pm_notifier = { .notifier_call = wg_pm_notification };
 
-static int wg_vm_notification(struct notifier_block *nb, unsigned long action, void *data)
-{
-	struct wg_device *wg;
-	struct wg_peer *peer;
-
-	rtnl_lock();
-	list_for_each_entry(wg, &device_list, device_list) {
-		mutex_lock(&wg->device_update_lock);
-		list_for_each_entry(peer, &wg->peer_list, peer_list)
-			wg_noise_expire_current_peer_keypairs(peer);
-		mutex_unlock(&wg->device_update_lock);
-	}
-	rtnl_unlock();
-	return 0;
-}
-
-static struct notifier_block vm_notifier = { .notifier_call = wg_vm_notification };
-
 static int wg_stop(struct net_device *dev)
 {
 	struct wg_device *wg = netdev_priv(dev);
@@ -211,7 +193,7 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 	 */
 	while (skb_queue_len(&peer->staged_packet_queue) > MAX_STAGED_PACKETS) {
 		dev_kfree_skb(__skb_dequeue(&peer->staged_packet_queue));
-		DEV_STATS_INC(dev, tx_dropped);
+		dev->stats.tx_dropped++;
 	}
 	skb_queue_splice_tail(&packets, &peer->staged_packet_queue);
 	spin_unlock_bh(&peer->staged_packet_queue.lock);
@@ -229,7 +211,7 @@ err_icmp:
 	else if (skb->protocol == htons(ETH_P_IPV6))
 		icmpv6_ndo_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_ADDR_UNREACH, 0);
 err:
-	DEV_STATS_INC(dev, tx_errors);
+	dev->stats.tx_errors++;
 	kfree_skb(skb);
 	return ret;
 }
@@ -290,29 +272,27 @@ static void wg_setup(struct net_device *dev)
 	dev->type = ARPHRD_NONE;
 	dev->flags = IFF_POINTOPOINT | IFF_NOARP;
 	dev->priv_flags |= IFF_NO_QUEUE;
-	dev->lltx = true;
 	dev->features |= WG_NETDEV_FEATURES;
 	dev->hw_features |= WG_NETDEV_FEATURES;
 	dev->hw_enc_features |= WG_NETDEV_FEATURES;
 	dev->mtu = ETH_DATA_LEN - overhead;
 	dev->max_mtu = round_down(INT_MAX, MESSAGE_PADDING_MULTIPLE) - overhead;
-	dev->pcpu_stat_type = NETDEV_PCPU_STAT_TSTATS;
 
 	SET_NETDEV_DEVTYPE(dev, &device_type);
 
 	/* We need to keep the dst around in case of icmp replies. */
 	netif_keep_dst(dev);
 
-	netif_set_tso_max_size(dev, GSO_MAX_SIZE);
+	dev->gso_max_size = GSO_MAX_SIZE;
 
 	wg->dev = dev;
 }
 
-static int wg_newlink(struct net_device *dev,
-		      struct rtnl_newlink_params *params,
+static int wg_newlink(struct net *src_net, struct net_device *dev,
+		      struct nlattr *tb[], struct nlattr *data[],
 		      struct netlink_ext_ack *extack)
 {
-	struct net *link_net = rtnl_newlink_link_net(params);
+	struct net *link_net = src_net;
 	struct wg_device *wg = netdev_priv(dev);
 	int ret = -ENOMEM;
 
@@ -334,7 +314,7 @@ static int wg_newlink(struct net_device *dev,
 		goto err_free_peer_hashtable;
 
 	wg->handshake_receive_wq = alloc_workqueue("wg-kex-%s",
-			WQ_CPU_INTENSIVE | WQ_FREEZABLE | WQ_PERCPU, 0,
+			WQ_CPU_INTENSIVE | WQ_FREEZABLE | WQ_UNBOUND, 0,
 			dev->name);
 	if (!wg->handshake_receive_wq)
 		goto err_free_index_hashtable;
@@ -345,7 +325,7 @@ static int wg_newlink(struct net_device *dev,
 		goto err_destroy_handshake_receive;
 
 	wg->packet_crypt_wq = alloc_workqueue("wg-crypt-%s",
-			WQ_CPU_INTENSIVE | WQ_MEM_RECLAIM | WQ_PERCPU, 0,
+			WQ_CPU_INTENSIVE | WQ_MEM_RECLAIM, 0,
 			dev->name);
 	if (!wg->packet_crypt_wq)
 		goto err_destroy_handshake_send;
@@ -369,7 +349,6 @@ static int wg_newlink(struct net_device *dev,
 	if (ret < 0)
 		goto err_free_handshake_queue;
 
-	netif_threaded_enable(dev);
 	ret = register_netdevice(dev);
 	if (ret < 0)
 		goto err_uninit_ratelimiter;
@@ -412,7 +391,7 @@ static struct rtnl_link_ops link_ops __read_mostly = {
 	.newlink		= wg_newlink,
 };
 
-static void __net_exit wg_netns_exit_rtnl(struct net *net, struct list_head *dev_kill_list)
+static void __net_exit wg_netns_exit_rtnl(struct net *net)
 {
 	struct wg_device *wg;
 	struct wg_peer *peer;
@@ -432,7 +411,7 @@ static void __net_exit wg_netns_exit_rtnl(struct net *net, struct list_head *dev
 }
 
 static struct pernet_operations pernet_ops __read_mostly = {
-	.exit_rtnl = wg_netns_exit_rtnl
+	.exit = wg_netns_exit_rtnl
 };
 
 int __init wg_device_init(void)
@@ -443,13 +422,9 @@ int __init wg_device_init(void)
 	if (ret)
 		return ret;
 
-	ret = register_random_vmfork_notifier(&vm_notifier);
-	if (ret)
-		goto error_pm;
-
 	ret = register_pernet_device(&pernet_ops);
 	if (ret)
-		goto error_vm;
+		goto error_pm;
 
 	ret = rtnl_link_register(&link_ops);
 	if (ret)
@@ -459,8 +434,6 @@ int __init wg_device_init(void)
 
 error_pernet:
 	unregister_pernet_device(&pernet_ops);
-error_vm:
-	unregister_random_vmfork_notifier(&vm_notifier);
 error_pm:
 	unregister_pm_notifier(&pm_notifier);
 	return ret;
@@ -470,7 +443,6 @@ void wg_device_uninit(void)
 {
 	rtnl_link_unregister(&link_ops);
 	unregister_pernet_device(&pernet_ops);
-	unregister_random_vmfork_notifier(&vm_notifier);
 	unregister_pm_notifier(&pm_notifier);
 	rcu_barrier();
 }

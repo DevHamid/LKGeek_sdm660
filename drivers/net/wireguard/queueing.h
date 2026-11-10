@@ -8,10 +8,31 @@
 
 #include "peer.h"
 #include <linux/types.h>
+#include <linux/random.h>
 #include <linux/skbuff.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 #include <net/ip_tunnels.h>
+
+/* 4.19 compat: get_random_u32_below/inclusive were added in 6.x */
+static inline u32 wg_get_random_u32_below(u32 ceil)
+{
+	u32 v, limit;
+
+	if (!ceil)
+		return 0;
+	/* Rejection sampling, matching upstream semantics (u32 arithmetic). */
+	limit = U32_MAX - (U32_MAX % ceil);
+	do {
+		v = get_random_u32();
+	} while (v >= limit);
+	return v % ceil;
+}
+
+static inline u32 wg_get_random_u32_inclusive(u32 floor, u32 ceil)
+{
+	return floor + wg_get_random_u32_below(ceil - floor + 1);
+}
 
 struct wg_device;
 struct wg_peer;
