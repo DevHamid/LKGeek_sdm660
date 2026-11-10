@@ -78,7 +78,6 @@ static inline void wg_reset_packet(struct sk_buff *skb, bool encapsulating)
 	u8 l4_hash = skb->l4_hash;
 	u8 sw_hash = skb->sw_hash;
 	u32 hash = skb->hash;
-	u8 tstamp_type = skb->tstamp_type;
 	skb_scrub_packet(skb, true);
 	memset(&skb->headers_start, 0,
 	       offsetof(struct sk_buff, headers_end) -
@@ -87,7 +86,6 @@ static inline void wg_reset_packet(struct sk_buff *skb, bool encapsulating)
 		skb->l4_hash = l4_hash;
 		skb->sw_hash = sw_hash;
 		skb->hash = hash;
-		skb->tstamp_type = tstamp_type;
 	}
 	skb->queue_mapping = 0;
 	skb->nohdr = 0;
@@ -97,21 +95,25 @@ static inline void wg_reset_packet(struct sk_buff *skb, bool encapsulating)
 #ifdef CONFIG_NET_SCHED
 	skb->tc_index = 0;
 #endif
-	skb_reset_redirect(skb);
 	skb->hdr_len = skb_headroom(skb);
 	skb_reset_mac_header(skb);
 	skb_reset_network_header(skb);
 	skb_reset_transport_header(skb);
-	skb_probe_transport_header(skb);
+	skb_probe_transport_header(skb, 0);
 	skb_reset_inner_headers(skb);
 }
 
 static inline int wg_cpumask_choose_online(int *stored_cpu, unsigned int id)
 {
 	unsigned int cpu = *stored_cpu;
+	int online_cpus = num_online_cpus();
 
-	while (unlikely(cpu >= nr_cpu_ids || !cpu_online(cpu)))
-		cpu = *stored_cpu = cpumask_nth(id % num_online_cpus(), cpu_online_mask);
+	while (unlikely(cpu >= nr_cpu_ids || !cpu_online(cpu))) {
+		int i, c = cpumask_first(cpu_online_mask);
+		for (i = 0; i < id % online_cpus; i++)
+			c = cpumask_next(c, cpu_online_mask);
+		cpu = *stored_cpu = c;
+	}
 
 	return cpu;
 }
