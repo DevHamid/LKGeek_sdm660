@@ -144,6 +144,19 @@ static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu, u64 *wall)
 	return div_u64(idle_time, NSEC_PER_USEC);
 }
 
+/*
+ * 4.19 keeps cpufreq_driver private to this file.  Governors that need to
+ * test a driver capability (the 'reflex' backport uses
+ * CPUFREQ_NO_AUTO_DYNAMIC_SWITCHING) ask for it instead of reaching into
+ * the static pointer, as later kernels allow via cpufreq_driver_test_flags().
+ */
+bool cpufreq_driver_test_flags(u32 flags)
+{
+	return !!(cpufreq_driver->flags & flags);
+}
+EXPORT_SYMBOL_GPL(cpufreq_driver_test_flags);
+
+
 u64 get_cpu_idle_time(unsigned int cpu, u64 *wall, int io_busy)
 {
 	u64 idle_time = get_cpu_idle_time_us(cpu, io_busy ? wall : NULL);

@@ -43,10 +43,18 @@ static inline bool cpufreq_driver_has_adjust_perf(void)
 	return false;
 }
 
-static inline bool cpufreq_driver_test_flags(unsigned int flags)
-{
-	return !!(cpufreq_driver->flags & flags);
-}
+/*
+ * cpufreq_driver is static to drivers/cpufreq/cpufreq.c in 4.19, so the
+ * flag test goes through a helper exported from there.
+ */
+extern bool cpufreq_driver_test_flags(u32 flags);
+
+/*
+ * 4.19 exports no cpufreq_get_effective_util(); kernel/sched provides the
+ * same FREQUENCY_UTIL aggregation as rfx_cpu_util_freq().
+ */
+extern unsigned long rfx_cpu_util_freq(int cpu, unsigned long *bw_min,
+				       unsigned long *bw_max);
 
 static inline void rfx_adjust_perf(struct cpufreq_policy *policy,
 				   unsigned long min_perf,
