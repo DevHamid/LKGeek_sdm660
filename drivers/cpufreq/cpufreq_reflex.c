@@ -185,14 +185,15 @@ static bool rfx_should_update_freq(struct rfx_policy *rfx_pol, u64 time)
 static bool rfx_update_next_freq(struct rfx_policy *rfx_pol, u64 time,
 				 unsigned int next_freq)
 {
-	if (rfx_pol->need_freq_update) {
-		rfx_pol->need_freq_update = false;
-		if (rfx_pol->next_freq == next_freq &&
-		    !cpufreq_driver_test_flags(CPUFREQ_NEED_UPDATE_LIMITS))
-			return false;
-	} else if (rfx_pol->next_freq == next_freq) {
+	/*
+	 * 4.19 has no CPUFREQ_NEED_UPDATE_LIMITS: a limits change must always
+	 * be pushed through, so a need_freq_update request re-applies the
+	 * frequency even when it is unchanged.
+	 */
+	if (!rfx_pol->need_freq_update && rfx_pol->next_freq == next_freq)
 		return false;
-	}
+
+	rfx_pol->need_freq_update = false;
 
 	rfx_pol->next_freq = next_freq;
 	rfx_pol->last_freq_update_time = time;
@@ -552,10 +553,14 @@ static unsigned long rfx_iowait_apply(struct rfx_cpu *rfx_c, u64 time,
 	return (rfx_c->iowait_boost * max_cap) >> SCHED_CAPACITY_SHIFT;
 }
 
+/*
+ * 4.19 has no cpufreq_cpu_dl_bw_exceeded(); schedutil here does not bypass
+ * the rate limit on a DEADLINE bandwidth change either.  The bandwidth
+ * requirement still reaches the frequency through rfx_get_next_freq()'s
+ * util + bw_min, just one sample later.
+ */
 static inline void rfx_ignore_dl_rate_limit(struct rfx_cpu *rfx_c)
 {
-	if (cpufreq_cpu_dl_bw_exceeded(rfx_c->cpu, rfx_c->bw_min))
-		rfx_c->rfx_policy->need_freq_update = true;
 }
 
 /************************ Core update callbacks ***********************/
@@ -606,7 +611,14 @@ static void rfx_update_single_perf(struct update_util_data *hook, u64 time,
 	struct rfx_policy *rfx_pol = rfx_c->rfx_policy;
 	unsigned long max_cap, boost, util;
 
-	if (!arch_scale_freq_invariant()) {
+	/*
+	 * arch_scale_freq_invariant() is private to kernel/sched/sched.h in
+	 * 4.19; arm64 provides frequency-invariant accounting, so the perf
+	 * path is the one that would apply.  It stays unreachable on this
+	 * tree because cpufreq_driver_has_adjust_perf() is false, but keep
+	 * the fallback explicit.
+	 */
+	if (!cpufreq_driver_has_adjust_perf()) {
 		rfx_update_single_freq(hook, time, flags);
 		return;
 	}
@@ -624,10 +636,7 @@ static void rfx_update_single_perf(struct update_util_data *hook, u64 time,
 
 	/*
 	 * Clear need_freq_update here because the perf path does not call
-	 * rfx_update_next_freq() which normally clears it.  Without this,
-	 * need_freq_update stays true forever on drivers that set
-	 * CPUFREQ_NEED_UPDATE_LIMITS (e.g. Intel HWP, AMD pstate), causing
-	 * rfx_should_update_freq() to permanently bypass rate limiting.
+	 * rfx_update_next_freq(), which normally clears it.
 	 */
 	rfx_pol->need_freq_update = false;
 
@@ -803,17 +812,17 @@ static struct attribute *rfx_attrs[] = {
 	&latency_weight.attr,
 	NULL
 };
-ATTRIBUTE_GROUPS(rfx);
 
 static void rfx_tunables_free(struct kobject *kobj)
 {
-	struct gov_attr_set *attr_set = to_gov_attr_set(kobj);
+	struct gov_attr_set *attr_set =
+		container_of(kobj, struct gov_attr_set, kobj);
 
 	kfree(to_rfx_tunables(attr_set));
 }
 
-static const struct kobj_type rfx_tunables_ktype = {
-	.default_groups = rfx_groups,
+static struct kobj_type rfx_tunables_ktype = {
+	.default_attrs = rfx_attrs,
 	.sysfs_ops = &governor_sysfs_ops,
 	.release = &rfx_tunables_free,
 };
@@ -1033,8 +1042,7 @@ static int rfx_start(struct cpufreq_policy *policy)
 	rfx_pol->limits_changed		= false;
 	rfx_pol->cached_raw_freq	= 0;
 
-	rfx_pol->need_freq_update =
-		cpufreq_driver_test_flags(CPUFREQ_NEED_UPDATE_LIMITS);
+	rfx_pol->need_freq_update = false;
 
 	if (policy_is_shared(policy))
 		uu = rfx_update_shared;
