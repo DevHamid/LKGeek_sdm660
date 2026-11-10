@@ -149,8 +149,8 @@ static int send6(struct wg_device *wg, struct sk_buff *skb,
 
 	skb->ignore_df = 1;
 	udp_tunnel6_xmit_skb(dst, sock, skb, skb->dev, &fl.saddr, &fl.daddr, ds,
-			     ip6_dst_hoplimit(dst), 0, fl.fl6_sport,
-			     fl.fl6_dport);
+		     ip6_dst_hoplimit(dst), 0, fl.fl6_sport,
+		     fl.fl6_dport, false);
 	goto out;
 
 err:
