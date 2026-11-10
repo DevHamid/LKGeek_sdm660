@@ -1,0 +1,107 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/*
+ * Reflex CPUFreq governor: the only kernel-version differences.
+ * cpufreq_reflex.c is byte-identical across versions; this file is not.
+ *
+ * Ported to Linux 4.19 (MSM-4.19 / sdm660).  Differences from 6.x:
+ *
+ *  - cpufreq_governor has no .flags field: dynamic switching is expressed
+ *    by the bool .dynamic_switching member instead of
+ *    CPUFREQ_GOV_DYNAMIC_SWITCHING.
+ *  - No cpufreq_driver_test_flags(), cpufreq_driver_has_adjust_perf(),
+ *    cpufreq_driver_adjust_perf() or cpufreq_get_capacity_ref_freq():
+ *    the adjust_perf fast path does not exist in 4.19, so the governor
+ *    always takes the freq path and derives the reference frequency
+ *    itself.
+ *  - map_util_perf() does not exist; it is 1.25 * util, as upstream.
+ *  - arch_scale_cpu_capacity() takes (sd, cpu).
+ *  - get_cpu_idle_time() returns microseconds, not nanoseconds.
+ *  - No cpufreq_pelt_decay(): PELT decay is reimplemented here with the
+ *   4.19 kernel-internal accumulator (y^32 = 1/2).
+ *  - No SCHED_FLAG_SUGOV: 4.19 cpufreq_schedutil.c uses the raw
+ *    0x10000000 bit for the same purpose, and cpufreq_reflex.c hardcodes
+ *    it.
+ *  - Energy Model is the 4.19 one: em_cap_state table inline in
+ *    em_perf_domain, em_pd_nr_cap_states() accessor, and no
+ *    em_table RCU replacement -- the table is static for our lifetime.
+ *  - No ACPI CPPC on this platform, so s*(0) is 0.
+ */
+#ifndef _CPUFREQ_REFLEX_COMPAT_H
+#define _CPUFREQ_REFLEX_COMPAT_H
+
+#include <linux/cpufreq.h>
+#include <linux/energy_model.h>
+#include <linux/kernel_stat.h>
+#include <linux/sched/cpufreq.h>
+#include <linux/sched/topology.h>
+#include <linux/sched/types.h>
+
+#include "sched-pelt.h"
+
+/* 4.19: cpufreq_driver.adjust_perf is absent, so this path is never taken. */
+static inline bool cpufreq_driver_has_adjust_perf(void)
+{
+	return false;
+}
+
+static inline bool cpufreq_driver_test_flags(unsigned int flags)
+{
+	return !!(cpufreq_driver->flags & flags);
+}
+
+static inline void rfx_adjust_perf(struct cpufreq_policy *policy,
+				   unsigned long min_perf,
+				   unsigned long target_perf,
+				   unsigned long max_perf,
+				   unsigned long capacity)
+{
+	/* Unreachable: the perf path is gated on has_adjust_perf(). */
+	__cpufreq_driver_target(policy, target_perf, CPUFREQ_RELATION_L);
+}
+
+/* 1.25x headroom, same as upstream schedutil's map_util_perf(). */
+static inline unsigned long map_util_perf(unsigned long util)
+{
+	return util + (util >> 2);
+}
+
+/*
+ * 4.19 get_next_freq() derives its reference frequency from policy->cur or
+ * cpuinfo.max_freq depending on arch_scale_freq_invariant().  Implement the
+ * upstream cpufreq_get_capacity_ref_freq() semantics: without a
+ * counter-based freq scale (this platform has none -- arm64 falls back to
+ * arch_topology's frequency-invariant scale), the reference is the policy
+ * maximum.
+ */
+static inline unsigned int
+cpufreq_get_capacity_ref_freq(struct cpufreq_policy *policy)
+{
+	return policy->cpuinfo.max_freq;
+}
+
+/*
+ * PELT decay: val * y^n with y^32 = 1/2, matching decay_load() in
+ * kernel/sched/pelt.c.  Equivalent to upstream cpufreq_pelt_decay().
+ */
+static inline unsigned long cpufreq_pelt_decay(unsigned long val, u64 delta_ns)
+{
+	u64 periods, n;
+
+	if (!val)
+		return 0;
+	if (!delta_ns)
+		return val;
+
+	/* ns -> PELT periods (1ms each), rounded down */
+	periods = div64_u64(delta_ns, 1024ULL * 1024ULL);
+	if (periods > LOAD_AVG_PERIOD * 63)
+		return 0;
+
+	n = periods;
+	val >>= n / LOAD_AVG_PERIOD;
+	n %= LOAD_AVG_PERIOD;
+
+	return mul_u64_u32_shr((u64)val, runnable_avg_yN_inv[n], 32);
+}
+
+#endif /* _CPUFREQ_REFLEX_COMPAT_H */

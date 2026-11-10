@@ -230,6 +230,23 @@ config CPU_FREQ_GOV_SCHEDUTIL
 
 	  If in doubt, say N.
 
+config CPU_FREQ_GOV_REFLEX
+	bool "'reflex' cpufreq policy governor"
+	depends on CPU_FREQ && SMP
+	select CPU_FREQ_GOV_ATTR_SET
+	select IRQ_WORK
+	help
+	  Reflex is schedutil plus a measured fast path for the rising edge.
+	  Schedutil ramps up slowly because a saturated CPU's
+	  frequency-invariant utilization only shows the current capacity: the
+	  demand above it is censored.  Reflex closes sampling intervals per CPU
+	  from kcpustat idle time, measures the demand exactly when the interval
+	  had any idle in it, and raises the frequency at once when it had none.
+	  The speed floor is the minimum of (power + p * lambda) / frequency over
+	  the Energy Model states, with p the probability that the CPU is behind.
+
+	  If in doubt, say N.
+
 config CPU_FREQ_GOV_SCHEDHORIZON
 	bool "'schedhorizon' cpufreq policy governor"
 	depends on CPU_FREQ && SMP
