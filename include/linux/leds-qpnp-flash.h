@@ -28,7 +28,15 @@ static inline int qpnp_flash_led_prepare(struct led_trigger *trig, int options,
 }
 #endif
 
-#ifdef CONFIG_BACKLIGHT_QCOM_SPMI_WLED
+/*
+ * BACKLIGHT_QCOM_SPMI_WLED is a tristate.  It must be probed with
+ * IS_ENABLED() rather than #ifdef, because when the WLED driver is built as
+ * a module Kconfig emits CONFIG_BACKLIGHT_QCOM_SPMI_WLED_MODULE and leaves
+ * CONFIG_BACKLIGHT_QCOM_SPMI_WLED undefined -- the fallback below would then
+ * be compiled while qcom-spmi-wled.c simultaneously exports the real
+ * function, and the two definitions collide.
+ */
+#if IS_ENABLED(CONFIG_BACKLIGHT_QCOM_SPMI_WLED)
 int wled_flash_led_prepare(struct led_trigger *trig, int options,
 					int *max_current);
 #else
