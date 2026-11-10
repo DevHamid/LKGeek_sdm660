@@ -36,7 +36,6 @@
 #include <linux/sched/topology.h>
 #include <linux/sched/types.h>
 
-#include "sched-pelt.h"
 
 /* 4.19: cpufreq_driver.adjust_perf is absent, so this path is never taken. */
 static inline bool cpufreq_driver_has_adjust_perf(void)
@@ -80,9 +79,21 @@ cpufreq_get_capacity_ref_freq(struct cpufreq_policy *policy)
 }
 
 /*
- * PELT decay: val * y^n with y^32 = 1/2, matching decay_load() in
- * kernel/sched/pelt.c.  Equivalent to upstream cpufreq_pelt_decay().
+ * PELT decay: val * y^n with y^32 = 1/2, identical to decay_load() in
+ * kernel/sched/pelt.c.  sched-pelt.h is private to kernel/sched, so the
+ * table is carried here; the values are that generated table.
  */
+static const u32 rfx_yN_inv[] = {
+	0xffffffff, 0xfa83b2da, 0xf5257d14, 0xefe4b99a, 0xeac0c6e6, 0xe5b906e6,
+	0xe0ccdeeb, 0xdbfbb796, 0xd744fcc9, 0xd2a81d91, 0xce248c14, 0xc9b9bd85,
+	0xc5672a10, 0xc12c4cc9, 0xbd08a39e, 0xb8fbaf46, 0xb504f333, 0xb123f581,
+	0xad583ee9, 0xa9a15ab4, 0xa5fed6a9, 0xa2704302, 0x9ef5325f, 0x9b8d39b9,
+	0x9837f050, 0x94f4efa8, 0x91c3d373, 0x8ea4398a, 0x8b95c1e3, 0x88980e80,
+	0x85aac367, 0x82cd8698,
+};
+
+#define RFX_LOAD_AVG_PERIOD	32
+
 static inline unsigned long cpufreq_pelt_decay(unsigned long val, u64 delta_ns)
 {
 	u64 periods, n;
@@ -94,14 +105,14 @@ static inline unsigned long cpufreq_pelt_decay(unsigned long val, u64 delta_ns)
 
 	/* ns -> PELT periods (1ms each), rounded down */
 	periods = div64_u64(delta_ns, 1024ULL * 1024ULL);
-	if (periods > LOAD_AVG_PERIOD * 63)
+	if (periods >= RFX_LOAD_AVG_PERIOD * 64)
 		return 0;
 
 	n = periods;
-	val >>= n / LOAD_AVG_PERIOD;
-	n %= LOAD_AVG_PERIOD;
+	val >>= n / RFX_LOAD_AVG_PERIOD;
+	n %= RFX_LOAD_AVG_PERIOD;
 
-	return mul_u64_u32_shr((u64)val, runnable_avg_yN_inv[n], 32);
+	return mul_u64_u32_shr((u64)val, rfx_yN_inv[n], 32);
 }
 
 #endif /* _CPUFREQ_REFLEX_COMPAT_H */
