@@ -150,7 +150,7 @@ static int send6(struct wg_device *wg, struct sk_buff *skb,
 	skb->ignore_df = 1;
 	udp_tunnel6_xmit_skb(dst, sock, skb, skb->dev, &fl.saddr, &fl.daddr, ds,
 			     ip6_dst_hoplimit(dst), 0, fl.fl6_sport,
-			     fl.fl6_dport, false, 0);
+			     fl.fl6_dport);
 	goto out;
 
 err:
@@ -332,10 +332,15 @@ err:
 
 static void sock_free(struct sock *sock)
 {
+	struct socket *socket;
+
 	if (unlikely(!sock))
 		return;
 	sk_clear_memalloc(sock);
-	udp_tunnel_sock_release(sock);
+	socket = sock->sk_socket;
+	if (unlikely(!socket))
+		return;
+	udp_tunnel_sock_release(socket);
 }
 
 static void set_sock_opts(struct socket *sock)
@@ -389,14 +394,14 @@ retry:
 		goto out;
 	}
 	set_sock_opts(new4);
-	setup_udp_tunnel_sock(net, new4->sk, &cfg);
+	setup_udp_tunnel_sock(net, new4, &cfg);
 
 #if IS_ENABLED(CONFIG_IPV6)
 	if (ipv6_mod_enabled()) {
 		port6.local_udp_port = inet_sk(new4->sk)->inet_sport;
 		ret = udp_sock_create(net, &port6, &new6);
 		if (ret < 0) {
-			udp_tunnel_sock_release(new4->sk);
+			udp_tunnel_sock_release(new4);
 			if (ret == -EADDRINUSE && !port && retries++ < 100)
 				goto retry;
 			pr_err("%s: Could not create IPv6 socket\n",
@@ -404,7 +409,7 @@ retry:
 			goto out;
 		}
 		set_sock_opts(new6);
-		setup_udp_tunnel_sock(net, new6->sk, &cfg);
+		setup_udp_tunnel_sock(net, new6, &cfg);
 	}
 #endif
 
