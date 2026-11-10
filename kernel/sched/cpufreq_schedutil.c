@@ -344,6 +344,27 @@ unsigned long schedutil_cpu_util(int cpu, unsigned long util_cfs,
 	return min(max, util);
 }
 
+/*
+ * Upstream (>= 5.10) exports cpufreq_get_effective_util() for governors
+ * other than schedutil -- the 'reflex' governor in drivers/cpufreq needs
+ * exactly this aggregation (FREQUENCY_UTIL without uclamp).  Provide the
+ * same value from schedutil's own path instead of duplicating the maths.
+ */
+unsigned long rfx_cpu_util_freq(int cpu, unsigned long *bw_min,
+				unsigned long *bw_max)
+{
+	unsigned long max = arch_scale_cpu_capacity(NULL, cpu);
+	unsigned long util = schedutil_cpu_util(cpu,
+						cpu_util_cfs(cpu_rq(cpu)), max,
+						FREQUENCY_UTIL, NULL);
+
+	*bw_min = 0;
+	*bw_max = SCHED_CAPACITY_SCALE;
+
+	return util;
+}
+EXPORT_SYMBOL_GPL(rfx_cpu_util_freq);
+
 #ifdef CONFIG_SCHED_WALT
 static unsigned long sugov_get_util(struct sugov_cpu *sg_cpu)
 {

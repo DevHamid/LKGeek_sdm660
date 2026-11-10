@@ -57,7 +57,6 @@
 
 #include <asm/topology.h>
 
-#include "sched.h"
 #include "cpufreq_reflex_compat.h"
 
 /**************************************************************
@@ -229,18 +228,15 @@ static unsigned int rfx_get_next_freq(struct rfx_policy *rfx_pol,
 }
 
 /*
- * Get CPU utilization from schedutil's aggregation (PELT + RT + DL + IRQ).
- * Upstream exports cpufreq_get_effective_util(); 4.19 does not, and
- * schedutil_cpu_util()/cpu_util_cfs() live in kernel/sched/sched.h.  Use
- * schedutil's own exported aggregator (cpu_util.c) instead.
+ * Get CPU utilization from schedutil's aggregation (PELT + RT + DL + IRQ),
+ * via the schedutil helper exported by kernel/sched for this governor.
+ * This mirrors upstream's cpufreq_get_effective_util() on the
+ * FREQUENCY_UTIL path.
  */
 static void rfx_get_util(struct rfx_cpu *rfx_c, unsigned long boost)
 {
-	rfx_c->util = schedutil_cpu_util(rfx_c->cpu, cpu_util_cfs(cpu_rq(rfx_c->cpu)),
-					 arch_scale_cpu_capacity(NULL, rfx_c->cpu),
-					 FREQUENCY_UTIL, NULL);
-	rfx_c->bw_min = 0;
-	rfx_c->bw_max = SCHED_CAPACITY_SCALE;
+	rfx_c->util = max(rfx_cpu_util_freq(rfx_c->cpu, &rfx_c->bw_min,
+					    &rfx_c->bw_max), boost);
 }
 
 /************************ Speed floors ***********************/
