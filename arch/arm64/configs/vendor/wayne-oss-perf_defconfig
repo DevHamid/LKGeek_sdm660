@@ -1,5 +1,23 @@
 CONFIG_LOCALVERSION="-LKGeek-devhamid-remastered"
 # CONFIG_LOCALVERSION_AUTO is not set
+# Module support. Required by OpenWrt: kmods (nft extensions, WireGuard
+# tools, filesystem helpers) and out-of-tree packages all need it, and
+# without CONFIG_MODULES the kernel cannot load anything at all.
+#
+# Enabling this wakes up tristates that default to 'm' and were sitting at
+# 'n' while modules were off. Two of them, BACKLIGHT_CLASS_DEVICE and
+# HW_RANDOM, are parents of symbols this defconfig pins to =y -- kconfig
+# demotes a =y child to =m when its parent tristate is =m, which silently
+# turned BACKLIGHT_QCOM_SPMI_WLED and HW_RANDOM_MSM_LEGACY into modules and
+# broke the wled build. Pin those parents to =y so the children stay built
+# in. Verified against the resolved .config: with these five lines the only
+# diff versus the modules-off config is MODULES/MODULE_UNLOAD plus the three
+# symbols kconfig auto-selects, and the .config ends up with zero =m entries.
+CONFIG_MODULES=y
+CONFIG_MODULE_UNLOAD=y
+CONFIG_BACKLIGHT_CLASS_DEVICE=y
+CONFIG_BACKLIGHT_GENERIC=y
+CONFIG_HW_RANDOM=y
 CONFIG_NO_HZ=y
 CONFIG_HIGH_RES_TIMERS=y
 CONFIG_PREEMPT=y
