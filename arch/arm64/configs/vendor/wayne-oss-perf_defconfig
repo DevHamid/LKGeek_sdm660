@@ -986,10 +986,21 @@ CONFIG_CGROUP_DEVICE=y
 CONFIG_FAIR_GROUP_SCHED=y
 CONFIG_CGROUP_FREEZER=y
 CONFIG_CGROUP_NET_PRIO=y
-# MEMCG_KMEM is a hidden 'bool' with 'default y' that depends on MEMCG, so
-# enabling MEMCG above auto-enables it. Kept on: the MGLRU backport's
-# CONFIG_MEMCG_KMEM paths use the 5.x shrinker_rwsem, which mm/vmscan.c now
-# declares and uses consistently (see commit fixing shrinker_rwsem).
+# Docker/containers. MEMCG was left off by the vendor defconfig but the
+# comment above claimed it was on, so that note was wrong -- the resolved
+# .config has '# CONFIG_MEMCG is not set'. Docker's memory limits and
+# OOM behaviour need it, and MGLRU's per-memcg reclaim paths (get_lruvec,
+# get_mm_list, mem_cgroup_page_lruvec) are all #ifdef CONFIG_MEMCG guarded
+# and compile only when MEMCG is on. MEMCG_KMEM is a hidden bool with
+# 'default y' that depends on MEMCG, so it is pulled in automatically; it is
+# needed because the MGLRU backport's MEMCG_KMEM paths use the 5.x
+# shrinker_rwsem, which mm/vmscan.c declares and uses consistently.
+CONFIG_MEMCG=y
+CONFIG_MEMCG_SWAP=y
+CONFIG_MEMCG_SWAP_ENABLED=y
+CONFIG_CGROUP_PIDS=y
+CONFIG_CGROUP_RDMA=y
+CONFIG_CGROUP_PERF=y
 CONFIG_DEVTMPFS=y
 CONFIG_TMPFS_XATTR=y
 CONFIG_NET_NS=y
@@ -1087,3 +1098,7 @@ CONFIG_SCHED_BORE=y
 # CONFIG_MQ_IOSCHED_ADIOS is not set
 # CONFIG_ADIOS_DEFAULT is not set
 # CONFIG_MQ_IOSCHED_DEFAULT_ADIOS is not set
+# Remaining container/overlay-network dependencies.
+CONFIG_BINFMT_MISC=y
+CONFIG_VXLAN=y
+CONFIG_NETFILTER_XT_MATCH_IPVS=y
