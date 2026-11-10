@@ -218,6 +218,17 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
 		if (kfifo_in_locked(pgdat->kcompress_fifo, &tmp, sizeof(tmp),
 				    &pgdat->kcompress_fifo_lock) == sizeof(tmp)) {
 			spin_unlock_irq(&pgdat->kcompress_fifo_lock);
+			/*
+			 * The kthread now owns this page and will finish the
+			 * write.  Mark it as being written back so pageout()
+			 * takes the PageWriteback() -> keep branch instead of
+			 * trying to reclaim a page that is still in flight,
+			 * and stop holding a reference on it.  The kthread
+			 * re-locks the page before touching it.
+			 */
+			get_page(page);
+			set_page_writeback(page);
+			unlock_page(page);
 			wake_up_interruptible(&pgdat->kcompressd_wait);
 			goto out;
 		}
@@ -237,18 +248,42 @@ out:
 
 static int kcompressd_sync(struct page *page)
 {
+	struct writeback_control wbc = {
+		.sync_mode = WB_SYNC_NONE,
+		.for_reclaim = 1,
+	};
 	int ret;
 
-	ret = frontswap_store(page);
-	if (ret)
-		return ret;
+	/*
+	 * swap_writepage() handed the page over with the lock released and
+	 * PG_writeback set.  __frontswap_store() asserts PageLocked() and the
+	 * bdev path expects a locked page too, so take the lock back before
+	 * doing anything with it.
+	 */
+	lock_page(page);
 
-	set_page_writeback(page);
-	unlock_page(page);
-	end_page_writeback(page);
-	return 0;
+	if (frontswap_store(page) == 0) {
+		unlock_page(page);
+		end_page_writeback(page);
+		put_page(page);
+		return 0;
+	}
+
+	/*
+	 * No frontswap (CONFIG_FRONTSWAP is off on this tree, so the store
+	 * above is a stub returning -1).  Fall through to the real write so
+	 * the page actually reaches the swap device: __swap_writepage()
+	 * consumes the lock and ends writeback through its end_io.
+	 */
+	ret = __swap_writepage(page, &wbc, end_swap_bio_write);
+	if (ret) {
+		/* __swap_writepage() did not consume the page: finish it here. */
+		unlock_page(page);
+		end_page_writeback(page);
+	}
+	put_page(page);
+	return ret;
 }
-
 static int kcompressd_func(void *data)
 {
 	int nid = (int)(unsigned long)data;
@@ -278,7 +313,14 @@ static int kcompressd_func(void *data)
 
 		for (i = 0; i < nr_pages; i++) {
 			if (kthread_should_stop()) {
-				unlock_page(list[i]);
+				/*
+				 * Page arrives with PG_writeback set, the lock
+				 * released and a reference held on its behalf.
+				 * End writeback and drop that reference; leaving
+				 * either behind pins the page forever.
+				 */
+				end_page_writeback(list[i]);
+				put_page(list[i]);
 				continue;
 			}
 			kcompressd_sync(list[i]);
@@ -349,6 +391,21 @@ void kcompressd_stop(int nid)
 		kthread_stop(kcompressd);
 
 	if (pgdat->kcompressd_fifo_ok) {
+		struct page *p;
+
+		/*
+		 * kthread_stop() only guarantees the loop has exited.  Pages
+		 * still sitting in the fifo were handed over with
+		 * PG_writeback set, the lock released and a reference held;
+		 * free the fifo without draining them and every one of those
+		 * pages is pinned forever.  End writeback and drop the
+		 * reference for each first.
+		 */
+		while (kfifo_out(pgdat->kcompress_fifo, &p, sizeof(p)) == sizeof(p)) {
+			end_page_writeback(p);
+			put_page(p);
+		}
+
 		kfifo_free(pgdat->kcompress_fifo);
 		kfree(pgdat->kcompress_fifo);
 		pgdat->kcompress_fifo = NULL;
