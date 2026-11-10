@@ -74,7 +74,6 @@ void nf_logger_request_module(int pf, enum nf_log_type type);
 	MODULE_ALIAS("nf-logger-" __stringify(family) "-" __stringify(type))
 
 /* Calls the registered backend logging function */
-#ifdef CONFIG_DEBUG_KERNEL
 __printf(8, 9)
 void nf_log_packet(struct net *net,
 		   u_int8_t pf,
@@ -94,41 +93,12 @@ void nf_log_trace(struct net *net,
 		  const struct net_device *out,
 		  const struct nf_loginfo *li,
 		  const char *fmt, ...);
-#else
-static inline void nf_log_packet(struct net *net,
-		   		u_int8_t pf,
-		   		unsigned int hooknum,
-		   		const struct sk_buff *skb,
-		   		const struct net_device *in,
-		   		const struct net_device *out,
-		   		const struct nf_loginfo *li,
-		   		const char *fmt, ...) {}
-
-static inline void nf_log_trace(struct net *net,
-				u_int8_t pf,
-				unsigned int hooknum,
-				const struct sk_buff *skb,
-				const struct net_device *in,
-				const struct net_device *out,
-				const struct nf_loginfo *li,
-				const char *fmt, ...) {}
-#endif
 
 struct nf_log_buf;
 
-#ifdef CONFIG_DEBUG_KERNEL
 struct nf_log_buf *nf_log_buf_open(void);
 __printf(2, 3) int nf_log_buf_add(struct nf_log_buf *m, const char *f, ...);
 void nf_log_buf_close(struct nf_log_buf *m);
-#else
-static inline struct nf_log_buf *nf_log_buf_open(void) { return NULL; }
-static inline __printf(2, 3) int nf_log_buf_add(struct nf_log_buf *m,
-						const char *f, ...)
-{
-	return 0;
-}
-static inline void nf_log_buf_close(struct nf_log_buf *m) {}
-#endif
 
 /* common logging functions */
 int nf_log_dump_udp_header(struct nf_log_buf *m, const struct sk_buff *skb,
@@ -138,7 +108,6 @@ int nf_log_dump_tcp_header(struct nf_log_buf *m, const struct sk_buff *skb,
 			   unsigned int logflags);
 void nf_log_dump_sk_uid_gid(struct net *net, struct nf_log_buf *m,
 			    struct sock *sk);
-void nf_log_dump_vlan(struct nf_log_buf *m, const struct sk_buff *skb);
 void nf_log_dump_packet_common(struct nf_log_buf *m, u_int8_t pf,
 			       unsigned int hooknum, const struct sk_buff *skb,
 			       const struct net_device *in,
