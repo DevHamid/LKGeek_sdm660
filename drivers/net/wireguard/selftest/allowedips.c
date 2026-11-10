@@ -272,7 +272,7 @@ static __init bool randomized_test(void)
 		goto free;
 	}
 	for (i = 0; i < NUM_PEERS; ++i) {
-		peers[i] = kzalloc_obj(*peers[i]);
+		peers[i] = kzalloc(sizeof(*peers[i]), GFP_KERNEL);
 		if (unlikely(!peers[i])) {
 			pr_err("allowedips random self-test malloc: FAIL\n");
 			goto free;
@@ -447,7 +447,7 @@ static __init inline struct in6_addr *ip6(u32 a, u32 b, u32 c, u32 d)
 
 static __init struct wg_peer *init_peer(void)
 {
-	struct wg_peer *peer = kzalloc_obj(*peer);
+	struct wg_peer *peer = kzalloc(sizeof(*peer), GFP_KERNEL);
 
 	if (!peer)
 		return NULL;
