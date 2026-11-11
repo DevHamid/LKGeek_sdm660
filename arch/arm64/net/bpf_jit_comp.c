@@ -69,6 +69,7 @@ struct jit_ctx {
 	int *offset;
 	__le32 *image;
 	u32 stack_size;
+	unsigned long *tb;
 };
 
 static inline void emit(const u32 insn, struct jit_ctx *ctx)
@@ -80,23 +81,33 @@ static inline void emit(const u32 insn, struct jit_ctx *ctx)
 }
 
 static inline void emit_a64_mov_i(const int is64, const int reg,
-				  const s32 val, struct jit_ctx *ctx)
+				      const s32 val, struct jit_ctx *ctx)
 {
 	u16 hi = val >> 16;
 	u16 lo = val & 0xffff;
 
+	if (hi == 0xffff) {
+		emit(A64_MOVN(is64, reg, (u16)~lo, 0), ctx);
+		return;
+	}
+	if (!hi) {
+		emit(A64_MOVZ(is64, reg, lo, 0), ctx);
+		return;
+	}
+	if (!lo && (!is64 || !(hi & 0x8000))) {
+		emit(A64_MOVZ(is64, reg, hi, 16), ctx);
+		return;
+	}
+	if (lo == 0xffff && (!is64 || (hi & 0x8000))) {
+		emit(A64_MOVN(is64, reg, (u16)~hi, 16), ctx);
+		return;
+	}
 	if (hi & 0x8000) {
-		if (hi == 0xffff) {
-			emit(A64_MOVN(is64, reg, (u16)~lo, 0), ctx);
-		} else {
-			emit(A64_MOVN(is64, reg, (u16)~hi, 16), ctx);
-			if (lo != 0xffff)
-				emit(A64_MOVK(is64, reg, lo, 0), ctx);
-		}
+		emit(A64_MOVN(is64, reg, (u16)~hi, 16), ctx);
+		emit(A64_MOVK(is64, reg, lo, 0), ctx);
 	} else {
 		emit(A64_MOVZ(is64, reg, lo, 0), ctx);
-		if (hi)
-			emit(A64_MOVK(is64, reg, hi, 16), ctx);
+		emit(A64_MOVK(is64, reg, hi, 16), ctx);
 	}
 }
 
@@ -266,9 +277,15 @@ static int emit_bpf_tail_call(struct jit_ctx *ctx)
 #define jmp_offset (out_offset - (cur_offset))
 	size_t off;
 
+	/* The struct offsets fit the immediate forms, the count fits cmp */
+	BUILD_BUG_ON(offsetof(struct bpf_array, map.max_entries) % 4 ||
+		     offsetof(struct bpf_array, map.max_entries) > 0xfff * 4);
+	BUILD_BUG_ON(offsetof(struct bpf_array, ptrs) > 0xfff);
+	BUILD_BUG_ON(offsetof(struct bpf_prog, bpf_func) % 8 ||
+		     offsetof(struct bpf_prog, bpf_func) > 0xfff * 8);
+	BUILD_BUG_ON(MAX_TAIL_CALL_CNT > 0xfff);
+
 	/* if (index >= array->map.max_entries)
-	 *     goto out;
-	 */
 	off = offsetof(struct bpf_array, map.max_entries);
 	emit_a64_mov_i64(tmp, off, ctx);
 	emit(A64_LDR32(tmp, r2, tmp), ctx);
@@ -280,8 +297,7 @@ static int emit_bpf_tail_call(struct jit_ctx *ctx)
 	 *     goto out;
 	 * tail_call_cnt++;
 	 */
-	emit_a64_mov_i64(tmp, MAX_TAIL_CALL_CNT, ctx);
-	emit(A64_CMP(1, tcc, tmp), ctx);
+	emit(A64_CMP_I(1, tcc, MAX_TAIL_CALL_CNT), ctx);
 	emit(A64_B_(A64_COND_HI, jmp_offset), ctx);
 	emit(A64_ADD_I(1, tcc, tcc, 1), ctx);
 
@@ -351,6 +367,125 @@ static void build_epilogue(struct jit_ctx *ctx)
  * >0 - successfully JITed a 16-byte eBPF instruction.
  * <0 - failed to JIT.
  */
+
+static bool emit_mul_const(bool is64, u8 dst, u8 tmp, s32 imm, struct jit_ctx *ctx)
+{
+	u64 c = imm < 0 ? -(u64)(s64)imm : imm;
+	int tz, n;
+
+	switch (imm) {
+	case 0:
+		emit_a64_mov_i(is64, dst, 0, ctx);
+		return true;
+	case 1:
+		if (!is64)
+			emit(A64_MOV(0, dst, dst), ctx);
+		return true;
+	case -1:
+		emit(A64_NEG(is64, dst, dst), ctx);
+		return true;
+	}
+	tz = __ffs(c);
+	c >>= tz;
+	if (c == 1) {
+		if (imm > 0)
+			emit(A64_LSL(is64, dst, dst, tz), ctx);
+		else
+			emit(A64_SUB_LSL(is64, dst, A64_ZR, dst, tz), ctx);
+		return true;
+	}
+	if (imm > 0) {
+		if (is_power_of_2(c - 1)) {
+			n = ilog2(c - 1);
+			if (n > 4 && tz)
+				return false;
+			emit(A64_ADD_LSL(is64, dst, dst, dst, n), ctx);
+			if (tz)
+				emit(A64_LSL(is64, dst, dst, tz), ctx);
+			return true;
+		}
+		if (is_power_of_2(c + 1)) {
+			n = ilog2(c + 1);
+			if (tz > 4)
+				return false;
+			emit(A64_LSL(is64, tmp, dst, n + tz), ctx);
+			emit(A64_SUB_LSL(is64, dst, tmp, dst, tz), ctx);
+			return true;
+		}
+	} else {
+		if (is_power_of_2(c + 1)) {
+			n = ilog2(c + 1);
+			if (!tz) {
+				emit(A64_SUB_LSL(is64, dst, dst, dst, n), ctx);
+				return true;
+			}
+			if (n + tz > 4)
+				return false;
+			emit(A64_LSL(is64, tmp, dst, tz), ctx);
+			emit(A64_SUB_LSL(is64, dst, tmp, dst, n + tz), ctx);
+			return true;
+		}
+		if (!tz && is_power_of_2(c - 1)) {
+			n = ilog2(c - 1);
+			if (n > 4)
+				return false;
+			emit(A64_ADD_LSL(is64, dst, dst, dst, n), ctx);
+			emit(A64_NEG(is64, dst, dst), ctx);
+			return true;
+		}
+	}
+	return false;
+}
+
+/*
+ * The bit that a sign test, an unsigned 32-bit compare at the sign bit or a
+ * single bit test checks, with *nonzero set if it branches on a set bit, or -1.
+ */
+static int tb_bit(u8 op, bool is64, s32 imm, bool *nonzero)
+{
+	const int sign = is64 ? 63 : 31;
+	u64 mask;
+
+	switch (op) {
+	case BPF_JSLT:
+	case BPF_JSGE:
+		/* x < 0, x >= 0 */
+		if (imm)
+			return -1;
+		*nonzero = op == BPF_JSLT;
+		return sign;
+	case BPF_JSGT:
+	case BPF_JSLE:
+		/* x > -1, x <= -1 */
+		if (imm != -1)
+			return -1;
+		*nonzero = op == BPF_JSLE;
+		return sign;
+	case BPF_JGT:
+	case BPF_JLE:
+		/* x > 0x7fffffff, x <= 0x7fffffff in 32 bits */
+		if (is64 || imm != 0x7fffffff)
+			return -1;
+		*nonzero = op == BPF_JGT;
+		return 31;
+	case BPF_JGE:
+	case BPF_JLT:
+		/* x >= 0x80000000, x < 0x80000000 in 32 bits */
+		if (is64 || imm != INT_MIN)
+			return -1;
+		*nonzero = op == BPF_JGE;
+		return 31;
+	case BPF_JSET:
+		mask = is64 ? (u64)(s64)imm : (u32)imm;
+		if (!is_power_of_2(mask))
+			return -1;
+		*nonzero = true;
+		return ilog2(mask);
+	default:
+		return -1;
+	}
+}
+
 static int build_insn(const struct bpf_insn *insn, struct jit_ctx *ctx)
 {
 	const u8 code = insn->code;
@@ -498,23 +633,41 @@ emit_bswap_uxt:
 		break;
 	case BPF_ALU | BPF_AND | BPF_K:
 	case BPF_ALU64 | BPF_AND | BPF_K:
+		/* All ones only zero extends the 32-bit variant */
+		if (imm == -1) {
+			if (!is64)
+				emit(A64_MOV(0, dst, dst), ctx);
+			break;
+		}
 		emit_a64_mov_i(is64, tmp, imm, ctx);
 		emit(A64_AND(is64, dst, dst, tmp), ctx);
 		break;
 	case BPF_ALU | BPF_OR | BPF_K:
 	case BPF_ALU64 | BPF_OR | BPF_K:
+		/* The or with all ones is the move of -1 */
+		if (imm == -1) {
+			emit(A64_MOVN(is64, dst, 0, 0), ctx);
+			break;
+		}
 		emit_a64_mov_i(is64, tmp, imm, ctx);
 		emit(A64_ORR(is64, dst, dst, tmp), ctx);
 		break;
 	case BPF_ALU | BPF_XOR | BPF_K:
 	case BPF_ALU64 | BPF_XOR | BPF_K:
+		/* The xor with all ones is the not */
+		if (imm == -1) {
+			emit(A64_MVN(is64, dst, dst), ctx);
+			break;
+		}
 		emit_a64_mov_i(is64, tmp, imm, ctx);
 		emit(A64_EOR(is64, dst, dst, tmp), ctx);
 		break;
 	case BPF_ALU | BPF_MUL | BPF_K:
 	case BPF_ALU64 | BPF_MUL | BPF_K:
-		emit_a64_mov_i(is64, tmp, imm, ctx);
-		emit(A64_MUL(is64, dst, dst, tmp), ctx);
+		if (!emit_mul_const(is64, dst, tmp, imm, ctx)) {
+			emit_a64_mov_i(is64, tmp, imm, ctx);
+			emit(A64_MUL(is64, dst, dst, tmp), ctx);
+		}
 		break;
 	case BPF_ALU | BPF_DIV | BPF_K:
 	case BPF_ALU64 | BPF_DIV | BPF_K:
@@ -703,19 +856,21 @@ emit_cond_jmp:
 	case BPF_ST | BPF_MEM | BPF_DW:
 		/* Load imm to a register then store it */
 		emit_a64_mov_i(1, tmp2, off, ctx);
-		emit_a64_mov_i(1, tmp, imm, ctx);
+		/* A zero comes from the zero register, any other imm through a register */
+		if (imm)
+			emit_a64_mov_i(1, tmp, imm, ctx);
 		switch (BPF_SIZE(code)) {
 		case BPF_W:
-			emit(A64_STR32(tmp, dst, tmp2), ctx);
+			emit(A64_STR32(imm ? tmp : A64_ZR, dst, tmp2), ctx);
 			break;
 		case BPF_H:
-			emit(A64_STRH(tmp, dst, tmp2), ctx);
+			emit(A64_STRH(imm ? tmp : A64_ZR, dst, tmp2), ctx);
 			break;
 		case BPF_B:
-			emit(A64_STRB(tmp, dst, tmp2), ctx);
+			emit(A64_STRB(imm ? tmp : A64_ZR, dst, tmp2), ctx);
 			break;
 		case BPF_DW:
-			emit(A64_STR64(tmp, dst, tmp2), ctx);
+			emit(A64_STR64(imm ? tmp : A64_ZR, dst, tmp2), ctx);
 			break;
 		}
 		break;
