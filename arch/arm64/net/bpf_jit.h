@@ -37,9 +37,11 @@
 #define A64_CBZ(sf, Rt, imm19) A64_COMP_BRANCH(sf, Rt, (imm19) << 2, ZERO)
 #define A64_CBNZ(sf, Rt, imm19) A64_COMP_BRANCH(sf, Rt, (imm19) << 2, NONZERO)
 
-/* Test bit & branch (immediate) */
+/* Test bit & branch (immediate). The offset is an instruction count, as for
+ * the other branch forms, so it is scaled to bytes here.
+ */
 #define A64_TEST_BRANCH(Rt, bit, offset, type) \
-	aarch64_insn_gen_test_branch_imm(0, offset, Rt, bit, \
+	aarch64_insn_gen_test_branch_imm(0, (offset) << 2, Rt, bit, \
 		AARCH64_INSN_BRANCH_TEST_##type)
 #define A64_TBZ(Rt, bit, offset) \
 	A64_TEST_BRANCH(Rt, bit, offset, ZERO)
