@@ -164,6 +164,106 @@ static inline void emit_addr_mov_i64(const int reg, const u64 val,
 	}
 }
 
+/*
+ * Helpers for emitting BPF loads and stores.
+ *
+ * A BPF memory access has an access size and a signed 32-bit offset. arm64
+ * can encode it three ways: a scaled unsigned 12-bit immediate offset
+ * (LDR/STR), an unscaled signed 9-bit byte offset (LDUR/STUR), or a register
+ * offset (LDR/STR with Xm). Pick the cheapest form that fits.
+ */
+static bool is_lsi_offset(int offset, int scale)
+{
+	if (offset < 0)
+		return false;
+
+	if (!scale)
+		return offset <= 4095;
+
+	return offset <= 4095 << scale;
+}
+
+/* The unscaled forms take a signed 9-bit byte offset instead */
+static bool is_lsu_offset(int offset)
+{
+	return offset >= -256 && offset < 256;
+}
+
+/* The A64 size of a BPF load or store, and the scale of its offset */
+static enum aarch64_insn_size_type a64_ldst_size(const u8 code, int *scale)
+{
+	switch (BPF_SIZE(code)) {
+	case BPF_W:
+		*scale = 2;
+		return AARCH64_INSN_SIZE_32;
+	case BPF_H:
+		*scale = 1;
+		return AARCH64_INSN_SIZE_16;
+	case BPF_B:
+		*scale = 0;
+		return AARCH64_INSN_SIZE_8;
+	case BPF_DW:
+		*scale = 3;
+		return AARCH64_INSN_SIZE_64;
+	default:
+		*scale = 0;
+		return AARCH64_INSN_SIZE_8;
+	}
+}
+
+/* The forms of a load or store: scaled immediate, unscaled, register offset */
+enum a64_ldst_form { A64_LDST_IMM, A64_LDST_UNSCALED, A64_LDST_REG };
+
+/* The A64 type of a BPF load or store in the given form */
+static enum aarch64_insn_ldst_type a64_ldst_type(const u8 code,
+						 enum a64_ldst_form form)
+{
+	static const enum aarch64_insn_ldst_type types[][2] = {
+		[A64_LDST_IMM] = {
+			AARCH64_INSN_LDST_LOAD_IMM_OFFSET,
+			AARCH64_INSN_LDST_STORE_IMM_OFFSET,
+		},
+		[A64_LDST_UNSCALED] = {
+			AARCH64_INSN_LDST_LOAD_UNSCALED_IMM_OFFSET,
+			AARCH64_INSN_LDST_STORE_UNSCALED_IMM_OFFSET,
+		},
+		[A64_LDST_REG] = {
+			AARCH64_INSN_LDST_LOAD_REG_OFFSET,
+			AARCH64_INSN_LDST_STORE_REG_OFFSET,
+		},
+	};
+
+	if (BPF_CLASS(code) != BPF_LDX)
+		return types[form][1];
+	return types[form][0];
+}
+
+/* Emit a BPF load or store of the given access size at the given offset */
+static void emit_ldst(const u8 code, const u8 rt, const u8 rn, const s32 off,
+		      const u8 tmp, struct jit_ctx *ctx)
+{
+	enum aarch64_insn_size_type size;
+	enum aarch64_insn_ldst_type type;
+	int scale;
+
+	size = a64_ldst_size(code, &scale);
+
+	if (is_lsi_offset(off, scale)) {
+		type = a64_ldst_type(code, A64_LDST_IMM);
+		emit(aarch64_insn_gen_load_store_imm(rt, rn, off, size, type),
+		     ctx);
+	} else if (is_lsu_offset(off)) {
+		type = a64_ldst_type(code, A64_LDST_UNSCALED);
+		emit(aarch64_insn_gen_load_store_imm(rt, rn, off, size, type),
+		     ctx);
+	} else {
+		type = a64_ldst_type(code, A64_LDST_REG);
+		emit_a64_mov_i(1, tmp, off, ctx);
+		emit(aarch64_insn_gen_load_store_reg(rt, rn, tmp, size, type),
+		     ctx);
+	}
+}
+
 static inline int bpf2a64_offset(int bpf_to, int bpf_from,
 				 const struct jit_ctx *ctx)
 {
@@ -829,21 +929,7 @@ emit_cond_jmp:
 	case BPF_LDX | BPF_MEM | BPF_H:
 	case BPF_LDX | BPF_MEM | BPF_B:
 	case BPF_LDX | BPF_MEM | BPF_DW:
-		emit_a64_mov_i(1, tmp, off, ctx);
-		switch (BPF_SIZE(code)) {
-		case BPF_W:
-			emit(A64_LDR32(dst, src, tmp), ctx);
-			break;
-		case BPF_H:
-			emit(A64_LDRH(dst, src, tmp), ctx);
-			break;
-		case BPF_B:
-			emit(A64_LDRB(dst, src, tmp), ctx);
-			break;
-		case BPF_DW:
-			emit(A64_LDR64(dst, src, tmp), ctx);
-			break;
-		}
+		emit_ldst(code, dst, src, off, tmp, ctx);
 		break;
 
 	/* speculation barrier */
@@ -865,24 +951,12 @@ emit_cond_jmp:
 	case BPF_ST | BPF_MEM | BPF_B:
 	case BPF_ST | BPF_MEM | BPF_DW:
 		/* Load imm to a register then store it */
-		emit_a64_mov_i(1, tmp2, off, ctx);
-		/* A zero comes from the zero register, any other imm through a register */
-		if (imm)
-			emit_a64_mov_i(1, tmp, imm, ctx);
-		switch (BPF_SIZE(code)) {
-		case BPF_W:
-			emit(A64_STR32(imm ? tmp : A64_ZR, dst, tmp2), ctx);
-			break;
-		case BPF_H:
-			emit(A64_STRH(imm ? tmp : A64_ZR, dst, tmp2), ctx);
-			break;
-		case BPF_B:
-			emit(A64_STRB(imm ? tmp : A64_ZR, dst, tmp2), ctx);
-			break;
-		case BPF_DW:
-			emit(A64_STR64(imm ? tmp : A64_ZR, dst, tmp2), ctx);
-			break;
-		}
+		emit_a64_mov_i(1, tmp2, imm, ctx);
+		/*
+		 * A zero comes from the zero register, any other imm through a
+		 * register, so hand emit_ldst the register holding the value.
+		 */
+		emit_ldst(code, imm ? tmp2 : A64_ZR, dst, off, tmp, ctx);
 		break;
 
 	/* STX: *(size *)(dst + off) = src */
@@ -890,21 +964,7 @@ emit_cond_jmp:
 	case BPF_STX | BPF_MEM | BPF_H:
 	case BPF_STX | BPF_MEM | BPF_B:
 	case BPF_STX | BPF_MEM | BPF_DW:
-		emit_a64_mov_i(1, tmp, off, ctx);
-		switch (BPF_SIZE(code)) {
-		case BPF_W:
-			emit(A64_STR32(src, dst, tmp), ctx);
-			break;
-		case BPF_H:
-			emit(A64_STRH(src, dst, tmp), ctx);
-			break;
-		case BPF_B:
-			emit(A64_STRB(src, dst, tmp), ctx);
-			break;
-		case BPF_DW:
-			emit(A64_STR64(src, dst, tmp), ctx);
-			break;
-		}
+		emit_ldst(code, src, dst, off, tmp, ctx);
 		break;
 
 	/* STX XADD: lock *(u32 *)(dst + off) += src */
