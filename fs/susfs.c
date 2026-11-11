@@ -480,8 +480,58 @@ out_copy_to_user:
 static DEFINE_MUTEX(susfs_mutex_lock_sus_kstat);
 static DEFINE_HASHTABLE(SUS_KSTAT_HLIST, 14);
 
-extern int calculate_f_flags_wrapper(struct vfsmount *mnt);
-extern int statfs_by_dentry_wrapper(struct dentry *dentry, struct kstatfs *buf);
+int calculate_f_flags_wrapper(struct vfsmount *mnt)
+{
+	int flags = 0;
+
+	if (mnt->mnt_flags & MNT_READONLY)
+		flags |= ST_RDONLY;
+	if (mnt->mnt_flags & MNT_NOSUID)
+		flags |= ST_NOSUID;
+	if (mnt->mnt_flags & MNT_NODEV)
+		flags |= ST_NODEV;
+	if (mnt->mnt_flags & MNT_NOEXEC)
+		flags |= ST_NOEXEC;
+	if (mnt->mnt_flags & MNT_SYNCHRONOUS)
+		flags |= ST_SYNCHRONOUS;
+	if (mnt->mnt_flags & MNT_MANDLOCK)
+		flags |= ST_MANDLOCK;
+	if (mnt->mnt_flags & MNT_WRITE_HOLD)
+		flags |= ST_WRITE_HOLD;
+	if (mnt->mnt_flags & MNT_NOATIME)
+		flags |= ST_NOATIME;
+	if (mnt->mnt_flags & MNT_NODIRATIME)
+		flags |= ST_NODIRATIME;
+
+	if (mnt->mnt_sb->s_flags & SB_SYNCHRONOUS)
+		flags |= ST_SYNCHRONOUS;
+	if (mnt->mnt_sb->s_flags & SB_MANDLOCK)
+		flags |= ST_MANDLOCK;
+	if (mnt->mnt_sb->s_flags & SB_RDONLY)
+		flags |= ST_RDONLY;
+
+	return ST_VALID | flags;
+}
+
+int statfs_by_dentry_wrapper(struct dentry *dentry, struct kstatfs *buf)
+{
+	int retval;
+
+	if (!dentry->d_sb->s_op->statfs)
+		return -ENOSYS;
+
+	memset(buf, 0, sizeof(*buf));
+	retval = security_sb_statfs(dentry);
+	if (retval)
+		return retval;
+
+	retval = dentry->d_sb->s_op->statfs(dentry, buf);
+	if (retval)
+		return retval;
+
+	buf->f_flags = calculate_f_flags_wrapper(dentry->d_sb->s_mnt);
+	return 0;
+}
 
 static int susfs_mark_inode_sus_kstat(char *target_pathname, struct st_susfs_sus_kstat_hlist *new_entry, bool is_update) {
 	struct path path;
