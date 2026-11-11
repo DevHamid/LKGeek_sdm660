@@ -499,7 +499,9 @@ static int build_insn(const struct bpf_insn *insn, struct jit_ctx *ctx)
 	const int i = insn - ctx->prog->insnsi;
 	const bool is64 = BPF_CLASS(code) == BPF_ALU64;
 	const bool isdw = BPF_SIZE(code) == BPF_DW;
+	u8 jmp_op;
 	u8 jmp_cond, reg;
+	s32 cmp_imm = imm;
 	s32 jmp_offset;
 
 #define check_imm(bits, imm) do {				\
@@ -714,7 +716,7 @@ emit_bswap_uxt:
 emit_cond_jmp:
 		jmp_offset = bpf2a64_offset(i + off, i, ctx);
 		check_imm19(jmp_offset);
-		switch (BPF_OP(code)) {
+		switch (jmp_op) {
 		case BPF_JEQ:
 			jmp_cond = A64_COND_EQ;
 			break;
@@ -765,8 +767,16 @@ emit_cond_jmp:
 	case BPF_JMP | BPF_JSLT | BPF_K:
 	case BPF_JMP | BPF_JSGE | BPF_K:
 	case BPF_JMP | BPF_JSLE | BPF_K:
-		emit_a64_mov_i(1, tmp, imm, ctx);
-		emit(A64_CMP(1, dst, tmp), ctx);
+		if (!is_addsub_imm(imm) && !is_addsub_imm(-(u32)imm))
+			adjust_cmp_imm(&jmp_op, &cmp_imm);
+		if (is_addsub_imm(cmp_imm)) {
+			emit(A64_CMP_I(is64, dst, cmp_imm), ctx);
+		} else if (is_addsub_imm(-(u32)cmp_imm)) {
+			emit(A64_CMN_I(is64, dst, -cmp_imm), ctx);
+		} else {
+			emit_a64_mov_i(is64, tmp, cmp_imm, ctx);
+			emit(A64_CMP(is64, dst, tmp), ctx);
+		}
 		goto emit_cond_jmp;
 	case BPF_JMP | BPF_JSET | BPF_K:
 		emit_a64_mov_i(1, tmp, imm, ctx);

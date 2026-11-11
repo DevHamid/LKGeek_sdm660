@@ -197,7 +197,8 @@ enum aarch64_insn_adsb_type {
 	AARCH64_INSN_ADSB_ADD,
 	AARCH64_INSN_ADSB_SUB,
 	AARCH64_INSN_ADSB_ADD_SETFLAGS,
-	AARCH64_INSN_ADSB_SUB_SETFLAGS
+	AARCH64_INSN_ADSB_SUB_SETFLAGS,
+	AARCH64_INSN_ADSB_ADD_UXTW,
 };
 
 enum aarch64_insn_movewide_type {
@@ -397,9 +398,21 @@ u32 aarch64_insn_gen_stadd(enum aarch64_insn_register address,
 			   enum aarch64_insn_register value,
 			   enum aarch64_insn_size_type size);
 u32 aarch64_insn_gen_add_sub_imm(enum aarch64_insn_register dst,
-				 enum aarch64_insn_register src,
-				 int imm, enum aarch64_insn_variant variant,
-				 enum aarch64_insn_adsb_type type);
+				      enum aarch64_insn_register src,
+				      int imm, enum aarch64_insn_variant variant,
+				      enum aarch64_insn_adsb_type type);
+
+static bool is_addsub_imm(int imm)
+{
+	if (imm == 0)
+		return true;
+	/* imm12 can encode 0-4095, optionally shifted left by 12 */
+	if ((imm & 0xfff) == imm)
+		return true;
+	if ((imm & 0xfff000) == imm)
+		return true;
+	return false;
+}
 u32 aarch64_insn_gen_bitfield(enum aarch64_insn_register dst,
 			      enum aarch64_insn_register src,
 			      int immr, int imms,
