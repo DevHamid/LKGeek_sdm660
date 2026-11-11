@@ -635,6 +635,74 @@ u32 aarch64_insn_gen_load_store_reg(enum aarch64_insn_register reg,
 					    offset);
 }
 
+u32 aarch64_insn_gen_load_store_imm(enum aarch64_insn_register reg,
+				      enum aarch64_insn_register base,
+				      unsigned int imm,
+				      enum aarch64_insn_size_type size,
+				      enum aarch64_insn_ldst_type type)
+{
+	u32 insn;
+	u32 shift;
+	bool unscaled;
+
+	switch (size) {
+	case AARCH64_INSN_SIZE_8:
+		shift = 0;
+		break;
+	case AARCH64_INSN_SIZE_16:
+		shift = 1;
+		break;
+	case AARCH64_INSN_SIZE_32:
+		shift = 2;
+		break;
+	case AARCH64_INSN_SIZE_64:
+		shift = 3;
+		break;
+	default:
+		pr_err("%s: unknown size encoding %d\n", __func__, size);
+		return AARCH64_BREAK_FAULT;
+	}
+
+	switch (type) {
+	case AARCH64_INSN_LDST_LOAD_IMM_OFFSET:
+		insn = aarch64_insn_get_ldr_imm_value();
+		unscaled = false;
+		break;
+	case AARCH64_INSN_LDST_STORE_IMM_OFFSET:
+		insn = aarch64_insn_get_str_imm_value();
+		unscaled = false;
+		break;
+	case AARCH64_INSN_LDST_LOAD_UNSCALED_IMM_OFFSET:
+		insn = aarch64_insn_get_ldr_unscaled_value();
+		unscaled = true;
+		break;
+	case AARCH64_INSN_LDST_STORE_UNSCALED_IMM_OFFSET:
+		insn = aarch64_insn_get_str_unscaled_value();
+		unscaled = true;
+		break;
+	default:
+		pr_err("%s: unknown load/store encoding %d\n", __func__, type);
+		return AARCH64_BREAK_FAULT;
+	}
+
+	/* LDUR/STUR take a signed 9-bit byte offset, no scaling */
+	if (unscaled && ((s32)imm < -256 || (s32)imm > 255)) {
+		pr_err("%s: invalid unscaled imm: %d\n", __func__, (s32)imm);
+		return AARCH64_BREAK_FAULT;
+	}
+
+	insn = aarch64_insn_encode_ldst_size(size, insn);
+	insn = aarch64_insn_encode_register(AARCH64_INSN_REGTYPE_RT, insn, reg);
+	insn = aarch64_insn_encode_register(AARCH64_INSN_REGTYPE_RN, insn, base);
+
+	if (unscaled)
+		return aarch64_insn_encode_immediate(AARCH64_INSN_IMM_9, insn,
+						     (u32)imm & 0x1ff);
+
+	return aarch64_insn_encode_immediate(AARCH64_INSN_IMM_12, insn,
+					     imm >> shift);
+}
+
 u32 aarch64_insn_gen_load_store_pair(enum aarch64_insn_register reg1,
 				     enum aarch64_insn_register reg2,
 				     enum aarch64_insn_register base,
