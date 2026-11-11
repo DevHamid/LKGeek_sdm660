@@ -41,10 +41,10 @@
 #define A64_TEST_BRANCH(Rt, bit, offset, type) \
 	aarch64_insn_gen_test_branch_imm(0, offset, Rt, bit, \
 		AARCH64_INSN_BRANCH_TEST_##type)
-#define A64_TBZ(Rt, bit, imm14) \
-	A64_TEST_BRANCH(Rt, bit, A64_BR_OFF(imm14), ZERO)
-#define A64_TBNZ(Rt, bit, imm14) \
-	A64_TEST_BRANCH(Rt, bit, A64_BR_OFF(imm14), NONZERO)
+#define A64_TBZ(Rt, bit, offset) \
+	A64_TEST_BRANCH(Rt, bit, offset, ZERO)
+#define A64_TBNZ(Rt, bit, offset) \
+	A64_TEST_BRANCH(Rt, bit, offset, NONZERO)
 
 /* Conditional branch (immediate) */
 #define A64_COND_BRANCH(cond, offset) \
@@ -163,10 +163,6 @@
 		A64_VARIANT(sf), AARCH64_INSN_ADSB_##type)
 #define A64_ADDSUB_SREG(sf, Rd, Rn, Rm, type) \
 	A64_ADDSUB_SHIFT(sf, Rd, Rn, Rm, 0, type)
-/* Rd = Rn + (u32)Rm, zero-extended */
-#define A64_ADD_UXTW(Rd, Rn, Rm) \
-	A64_ADDSUB_SHIFT(sf, Rd, Rn, Rm, 0, \
-		A64_VARIANT(64), AARCH64_INSN_ADSB_ADD_UXTW)
 /* Rd = Rn OP Rm */
 #define A64_ADD(sf, Rd, Rn, Rm)  A64_ADDSUB_SREG(sf, Rd, Rn, Rm, ADD)
 /* Rd = Rn + (Rm << shift) */
@@ -183,9 +179,9 @@
 /* Rn - Rm; set condition flags */
 #define A64_CMP(sf, Rn, Rm) A64_SUBS(sf, A64_ZR, Rn, Rm)
 /* Rd = Rn - imm12; sets flags only */
-#define A64_CMP_I(sf, Rd, imm12) A64_SUBS(sf, A64_ZR, Rd, imm12)
+#define A64_CMP_I(sf, Rd, imm12) A64_ADDSUB_IMM(sf, A64_ZR, Rd, imm12, SUB_SETFLAGS)
 /* Rd = Rn + imm12; sets flags only */
-#define A64_CMN_I(sf, Rd, imm12) A64_ADDS(sf, A64_ZR, Rd, imm12)
+#define A64_CMN_I(sf, Rd, imm12) A64_ADDSUB_IMM(sf, A64_ZR, Rd, imm12, ADD_SETFLAGS)
 /* Rd = -Rm */
 #define A64_DATA1(sf, Rd, Rn, type) aarch64_insn_gen_data1(Rd, Rn, \
 	A64_VARIANT(sf), AARCH64_INSN_DATA1_##type)
@@ -220,8 +216,11 @@
 /* Rd = Rn OP Rm */
 #define A64_AND(sf, Rd, Rn, Rm)  A64_LOGIC_SREG(sf, Rd, Rn, Rm, AND)
 #define A64_ORR(sf, Rd, Rn, Rm)  A64_LOGIC_SREG(sf, Rd, Rn, Rm, ORR)
+#define A64_ORN(sf, Rd, Rn, Rm)  A64_LOGIC_SREG(sf, Rd, Rn, Rm, ORN)
 #define A64_EOR(sf, Rd, Rn, Rm)  A64_LOGIC_SREG(sf, Rd, Rn, Rm, EOR)
 #define A64_ANDS(sf, Rd, Rn, Rm) A64_LOGIC_SREG(sf, Rd, Rn, Rm, AND_SETFLAGS)
+/* Rd = ~Rn */
+#define A64_MVN(sf, Rd, Rn) A64_ORN(sf, Rd, A64_ZR, Rn)
 /* Rn & Rm; set condition flags */
 #define A64_TST(sf, Rn, Rm) A64_ANDS(sf, A64_ZR, Rn, Rm)
 

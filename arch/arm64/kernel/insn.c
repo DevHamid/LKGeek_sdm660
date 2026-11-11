@@ -267,6 +267,10 @@ static int __kprobes aarch64_get_imm_shift_mask(enum aarch64_insn_imm_type type,
 		mask = BIT(9) - 1;
 		shift = 12;
 		break;
+	case AARCH64_INSN_IMM_5:
+		mask = BIT(5) - 1;
+		shift = 19;
+		break;
 	case AARCH64_INSN_IMM_7:
 		mask = BIT(7) - 1;
 		shift = 15;
@@ -568,6 +572,49 @@ u32 aarch64_insn_gen_cond_branch_imm(unsigned long pc, unsigned long addr,
 	insn |= cond;
 
 	return aarch64_insn_encode_immediate(AARCH64_INSN_IMM_19, insn,
+					     offset >> 2);
+}
+
+u32 aarch64_insn_gen_test_branch_imm(unsigned long pc, unsigned long addr,
+				     enum aarch64_insn_register reg,
+				     unsigned int bit,
+				     enum aarch64_insn_branch_type type)
+{
+	u32 insn;
+	long offset;
+
+	/*
+	 * The offset is scaled by 4, so the range is +/- 32KiB. The bit
+	 * number is split: bit 5 goes in the opcode, bits 4:0 in the bit
+	 * field next to the register.
+	 */
+	offset = branch_imm_common(pc, addr, SZ_32K);
+	if (offset >= SZ_32K)
+		return AARCH64_BREAK_FAULT;
+
+	if (bit > 63)
+		return AARCH64_BREAK_FAULT;
+
+	switch (type) {
+	case AARCH64_INSN_BRANCH_TEST_ZERO:
+		insn = aarch64_insn_get_tbz_value();
+		break;
+	case AARCH64_INSN_BRANCH_TEST_NONZERO:
+		insn = aarch64_insn_get_tbnz_value();
+		break;
+	default:
+		pr_err("%s: unknown branch encoding %d\n", __func__, type);
+		return AARCH64_BREAK_FAULT;
+	}
+
+	insn |= ((bit >> 5) & 0x1) << 31;
+
+	insn = aarch64_insn_encode_register(AARCH64_INSN_REGTYPE_RT, insn, reg);
+
+	insn = aarch64_insn_encode_immediate(AARCH64_INSN_IMM_5, insn,
+					     bit & 0x1f);
+
+	return aarch64_insn_encode_immediate(AARCH64_INSN_IMM_14, insn,
 					     offset >> 2);
 }
 

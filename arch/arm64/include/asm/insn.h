@@ -67,6 +67,7 @@ enum aarch64_insn_imm_type {
 	AARCH64_INSN_IMM_9,
 	AARCH64_INSN_IMM_7,
 	AARCH64_INSN_IMM_6,
+	AARCH64_INSN_IMM_5,
 	AARCH64_INSN_IMM_S,
 	AARCH64_INSN_IMM_R,
 	AARCH64_INSN_IMM_N,
@@ -173,6 +174,8 @@ enum aarch64_insn_branch_type {
 	AARCH64_INSN_BRANCH_RETURN,
 	AARCH64_INSN_BRANCH_COMP_ZERO,
 	AARCH64_INSN_BRANCH_COMP_NONZERO,
+	AARCH64_INSN_BRANCH_TEST_ZERO,
+	AARCH64_INSN_BRANCH_TEST_NONZERO,
 };
 
 enum aarch64_insn_size_type {
@@ -202,7 +205,6 @@ enum aarch64_insn_adsb_type {
 	AARCH64_INSN_ADSB_SUB,
 	AARCH64_INSN_ADSB_ADD_SETFLAGS,
 	AARCH64_INSN_ADSB_SUB_SETFLAGS,
-	AARCH64_INSN_ADSB_ADD_UXTW,
 };
 
 enum aarch64_insn_movewide_type {
@@ -377,7 +379,11 @@ u32 aarch64_insn_gen_comp_branch_imm(unsigned long pc, unsigned long addr,
 				     enum aarch64_insn_variant variant,
 				     enum aarch64_insn_branch_type type);
 u32 aarch64_insn_gen_cond_branch_imm(unsigned long pc, unsigned long addr,
-				     enum aarch64_insn_condition cond);
+			     enum aarch64_insn_condition cond);
+u32 aarch64_insn_gen_test_branch_imm(unsigned long pc, unsigned long addr,
+				     enum aarch64_insn_register reg,
+				     unsigned int bit,
+				     enum aarch64_insn_branch_type type);
 u32 aarch64_insn_gen_hint(enum aarch64_insn_hint_op op);
 u32 aarch64_insn_gen_nop(void);
 u32 aarch64_insn_gen_branch_reg(enum aarch64_insn_register reg,
