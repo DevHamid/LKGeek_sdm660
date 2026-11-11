@@ -603,6 +603,8 @@ static int build_insn(const struct bpf_insn *insn, struct jit_ctx *ctx)
 	u8 jmp_cond, reg;
 	s32 cmp_imm = imm;
 	s32 jmp_offset;
+	int bit;
+	bool nonzero = false;
 
 #define check_imm(bits, imm) do {				\
 	if ((((imm) > 0) && ((imm) >> (bits))) ||		\
@@ -614,6 +616,7 @@ static int build_insn(const struct bpf_insn *insn, struct jit_ctx *ctx)
 } while (0)
 #define check_imm19(imm) check_imm(19, imm)
 #define check_imm26(imm) check_imm(26, imm)
+#define check_imm14(imm) check_imm(14, imm)
 
 	switch (code) {
 	/* dst = src */
@@ -813,6 +816,7 @@ emit_bswap_uxt:
 	case BPF_JMP | BPF_JSGE | BPF_X:
 	case BPF_JMP | BPF_JSLE | BPF_X:
 		emit(A64_CMP(1, dst, src), ctx);
+		jmp_op = BPF_OP(code);
 emit_cond_jmp:
 		jmp_offset = bpf2a64_offset(i + off, i, ctx);
 		check_imm19(jmp_offset);
@@ -867,8 +871,25 @@ emit_cond_jmp:
 	case BPF_JMP | BPF_JSLT | BPF_K:
 	case BPF_JMP | BPF_JSGE | BPF_K:
 	case BPF_JMP | BPF_JSLE | BPF_K:
-		if (!is_addsub_imm(imm) && !is_addsub_imm(-(u32)imm))
-			adjust_cmp_imm(&jmp_op, &cmp_imm);
+		jmp_op = BPF_OP(code);
+		/*
+		 * A compare against a single bit can be a test-bit-and-branch
+		 * instead of a compare plus a conditional branch, which is one
+		 * instruction shorter and needs no general purpose register.
+		 */
+		bit = tb_bit(jmp_op, is64, cmp_imm, &nonzero);
+		if (bit >= 0) {
+			jmp_offset = bpf2a64_offset(i + off, i, ctx);
+			check_imm14(jmp_offset);
+			emit(nonzero ? A64_TBNZ(dst, bit, jmp_offset) :
+				       A64_TBZ(dst, bit, jmp_offset), ctx);
+			break;
+		}
+		/*
+		 * The arm64 compare immediates are only 12 bits, so the
+		 * hardware cannot compare against every s32 the BPF program
+		 * may use. Materialise the immediate when it does not fit.
+		 */
 		if (is_addsub_imm(cmp_imm)) {
 			emit(A64_CMP_I(is64, dst, cmp_imm), ctx);
 		} else if (is_addsub_imm(-(u32)cmp_imm)) {
@@ -879,6 +900,18 @@ emit_cond_jmp:
 		}
 		goto emit_cond_jmp;
 	case BPF_JMP | BPF_JSET | BPF_K:
+		/*
+		 * A test of a single bit is a test-bit-and-branch, no need to
+		 * materialise the immediate or set the flags.
+		 */
+		bit = tb_bit(BPF_JSET, is64, imm, &nonzero);
+		if (bit >= 0) {
+			jmp_op = BPF_OP(code);
+			jmp_offset = bpf2a64_offset(i + off, i, ctx);
+			check_imm14(jmp_offset);
+			emit(A64_TBNZ(dst, bit, jmp_offset), ctx);
+			break;
+		}
 		emit_a64_mov_i(1, tmp, imm, ctx);
 		emit(A64_TST(1, dst, tmp), ctx);
 		goto emit_cond_jmp;
