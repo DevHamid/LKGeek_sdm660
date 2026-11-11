@@ -1358,6 +1358,49 @@ int susfs_open_redirect_spoof_show_map_vma_srcu(struct inode *inode, unsigned lo
 	}
 	return -EINVAL;
 }
+
+/* compatibility: spoof seq_show for /proc/pid/fd */
+int susfs_open_redirect_spoof_seq_show(struct inode *inode, int *out_mnt_id, unsigned long *out_ino)
+{
+	struct st_susfs_open_redirect_hlist *entry = NULL;
+	int srcu_idx = srcu_read_lock(&susfs_srcu_open_redirect);
+
+	hash_for_each_possible_rcu(OPEN_REDIRECT_HLIST, entry, node, inode->i_ino) {
+		if (entry->reversed_lookup_only &&
+			entry->target_dev == inode->i_sb->s_dev)
+		{
+			SUSFS_LOGI("spoof seq_show mnt_id/ino for redirected path: '%s'\n",
+					entry->info.target_pathname);
+			*out_mnt_id = entry->spoofed_mnt_id;
+			*out_ino = entry->redirected_ino;
+			srcu_read_unlock(&susfs_srcu_open_redirect, srcu_idx);
+			return 0;
+		}
+	}
+	srcu_read_unlock(&susfs_srcu_open_redirect, srcu_idx);
+	return -ENOENT;
+}
+
+/* compatibility: spoof vfs_statfs */
+int susfs_open_redirect_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf)
+{
+	struct st_susfs_open_redirect_hlist *entry = NULL;
+	int srcu_idx = srcu_read_lock(&susfs_srcu_open_redirect);
+
+	hash_for_each_possible_rcu(OPEN_REDIRECT_HLIST, entry, node, inode->i_ino) {
+		if (entry->reversed_lookup_only &&
+			entry->target_dev == inode->i_sb->s_dev)
+		{
+			SUSFS_LOGI("spoof vfs_statfs for redirected path: '%s'\n",
+					entry->info.target_pathname);
+			memcpy(buf, &entry->spoofed_kstatfs, sizeof(struct kstatfs));
+			srcu_read_unlock(&susfs_srcu_open_redirect, srcu_idx);
+			return 0;
+		}
+	}
+	srcu_read_unlock(&susfs_srcu_open_redirect, srcu_idx);
+	return -ENOENT;
+}
 #endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
 
 /* sus_map */
