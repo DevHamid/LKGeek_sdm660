@@ -492,21 +492,11 @@ int calculate_f_flags_wrapper(struct vfsmount *mnt)
 		flags |= ST_NODEV;
 	if (mnt->mnt_flags & MNT_NOEXEC)
 		flags |= ST_NOEXEC;
-	if (mnt->mnt_flags & MNT_SYNCHRONOUS)
-		flags |= ST_SYNCHRONOUS;
-	if (mnt->mnt_flags & MNT_MANDLOCK)
-		flags |= ST_MANDLOCK;
-	if (mnt->mnt_flags & MNT_WRITE_HOLD)
-		flags |= ST_WRITE_HOLD;
 	if (mnt->mnt_flags & MNT_NOATIME)
 		flags |= ST_NOATIME;
 	if (mnt->mnt_flags & MNT_NODIRATIME)
 		flags |= ST_NODIRATIME;
 
-	if (mnt->mnt_sb->s_flags & SB_SYNCHRONOUS)
-		flags |= ST_SYNCHRONOUS;
-	if (mnt->mnt_sb->s_flags & SB_MANDLOCK)
-		flags |= ST_MANDLOCK;
 	if (mnt->mnt_sb->s_flags & SB_RDONLY)
 		flags |= ST_RDONLY;
 
@@ -526,11 +516,7 @@ int statfs_by_dentry_wrapper(struct dentry *dentry, struct kstatfs *buf)
 		return retval;
 
 	retval = dentry->d_sb->s_op->statfs(dentry, buf);
-	if (retval)
-		return retval;
-
-	buf->f_flags = calculate_f_flags_wrapper(dentry->d_sb->s_mnt);
-	return 0;
+	return retval;
 }
 
 static int susfs_mark_inode_sus_kstat(char *target_pathname, struct st_susfs_sus_kstat_hlist *new_entry, bool is_update) {
