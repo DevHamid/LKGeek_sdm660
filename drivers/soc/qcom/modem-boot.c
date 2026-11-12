@@ -56,6 +56,7 @@
 #include <linux/err.h>
 #include <linux/string.h>
 #include <linux/sysfs.h>
+#include <linux/kdev_t.h>	/* MKDEV() for device_create() */
 /* 4.19 sdm660 layout: the header lives at include/soc/qcom/, not
  * include/linux/soc/qcom/. Both of the paths this file used to include
  * (linux/kstrto.h, linux/soc/qcom/subsystem_restart.h) do not exist in
