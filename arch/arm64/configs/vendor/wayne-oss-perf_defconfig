@@ -998,3 +998,6 @@ CONFIG_SCHED_BORE=y
 # CONFIG_MQ_IOSCHED_ADIOS is not set
 # CONFIG_ADIOS_DEFAULT is not set
 # CONFIG_MQ_IOSCHED_DEFAULT_ADIOS is not set
+
+# Modem cold-boot control (modem_boot.ko); rmtfs must answer first.
+CONFIG_QCOM_MODEM_BOOT=m
