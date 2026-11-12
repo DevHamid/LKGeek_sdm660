@@ -28,15 +28,13 @@ static inline int qpnp_flash_led_prepare(struct led_trigger *trig, int options,
 }
 #endif
 
-/* qcom-spmi-wled.c includes this header and then *defines*
- * wled_flash_led_prepare() itself. With CONFIG_BACKLIGHT_QCOM_SPMI_WLED=y
- * the plain declaration below turns into "redefinition of
- * wled_flash_led_prepare". The driver defines
- * __WLED_FLASH_PREPARE_IMPL__ before including this header, so the
- * declaration is skipped only for the translation unit that owns it. */
-#if defined CONFIG_BACKLIGHT_QCOM_SPMI_WLED && defined __WLED_FLASH_PREPARE_IMPL__
-/* defined in drivers/video/backlight/qcom-spmi-wled.c */
-#elif defined CONFIG_BACKLIGHT_QCOM_SPMI_WLED
+/* CONFIG_BACKLIGHT_QCOM_SPMI_WLED may be built as a module, in which case
+ * kbuild defines only CONFIG_BACKLIGHT_QCOM_SPMI_WLED_MODULE and not the bare
+ * CONFIG_ symbol. Testing the bare symbol alone made this header fall through
+ * to the -EINVAL stub below, which then clashed with the real definition in
+ * drivers/video/backlight/qcom-spmi-wled.c ("redefinition of
+ * wled_flash_led_prepare"). Accept either spelling. */
+#if defined CONFIG_BACKLIGHT_QCOM_SPMI_WLED || defined CONFIG_BACKLIGHT_QCOM_SPMI_WLED_MODULE
 int wled_flash_led_prepare(struct led_trigger *trig, int options,
 					int *max_current);
 #else
