@@ -613,7 +613,7 @@ static int build_insn(const struct bpf_insn *insn, struct jit_ctx *ctx)
 	const bool is64 = BPF_CLASS(code) == BPF_ALU64 ||
 			  BPF_CLASS(code) == BPF_JMP;
 	const bool isdw = BPF_SIZE(code) == BPF_DW;
-	u8 jmp_op;
+	u8 jmp_op = 0;
 	u8 jmp_cond, reg;
 	s32 cmp_imm = imm;
 	s32 jmp_offset;
@@ -872,6 +872,7 @@ emit_cond_jmp:
 		break;
 	case BPF_JMP | BPF_JSET | BPF_X:
 		emit(A64_TST(1, dst, src), ctx);
+		jmp_op = BPF_JSET;
 		goto emit_cond_jmp;
 	/* IF (dst COND imm) JUMP off */
 	case BPF_JMP | BPF_JEQ | BPF_K:
@@ -927,6 +928,7 @@ emit_cond_jmp:
 		}
 		emit_a64_mov_i(1, tmp, imm, ctx);
 		emit(A64_TST(1, dst, tmp), ctx);
+		jmp_op = BPF_JSET;
 		goto emit_cond_jmp;
 	/* function call */
 	case BPF_JMP | BPF_CALL:
@@ -1063,13 +1065,6 @@ static int build_body(struct jit_ctx *ctx)
 		if (ctx->image == NULL)
 			ctx->offset[i] = ctx->idx;
 		if (ret) {
-			/*
-			 * Every non-zero return here aborts the whole
-			 * program.  Name the instruction and its opcode:
-			 * several paths return without printing, and
-			 * pr_err_once()/pr_info() may already have been
-			 * consumed earlier in boot.
-			 */
 			pr_err("bpf_jit: insn %d/%d code=0x%02x dst=%d src=%d off=%d imm=%d -> ret=%d idx=%d\n",
 			       i, prog->len, insn->code, insn->dst_reg,
 			       insn->src_reg, insn->off, insn->imm, ret, ctx->idx);
