@@ -28,7 +28,15 @@ static inline int qpnp_flash_led_prepare(struct led_trigger *trig, int options,
 }
 #endif
 
-#ifdef CONFIG_BACKLIGHT_QCOM_SPMI_WLED
+/* qcom-spmi-wled.c includes this header and then *defines*
+ * wled_flash_led_prepare() itself. With CONFIG_BACKLIGHT_QCOM_SPMI_WLED=y
+ * the plain declaration below turns into "redefinition of
+ * wled_flash_led_prepare". The driver defines
+ * __WLED_FLASH_PREPARE_IMPL__ before including this header, so the
+ * declaration is skipped only for the translation unit that owns it. */
+#if defined CONFIG_BACKLIGHT_QCOM_SPMI_WLED && defined __WLED_FLASH_PREPARE_IMPL__
+/* defined in drivers/video/backlight/qcom-spmi-wled.c */
+#elif defined CONFIG_BACKLIGHT_QCOM_SPMI_WLED
 int wled_flash_led_prepare(struct led_trigger *trig, int options,
 					int *max_current);
 #else
