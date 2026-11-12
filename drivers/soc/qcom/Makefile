@@ -111,3 +111,5 @@ obj-$(CONFIG_QTI_HW_KEY_MANAGER) += hwkm_qti.o
 hwkm_qti-y += hwkm.o
 obj-$(CONFIG_MSM_BAM_DMUX) += bam_dmux.o
 obj-$(CONFIG_QPNP_HAPTIC) += qpnp-haptic.o
+
+obj-$(CONFIG_QCOM_MODEM_BOOT) += modem-boot.o
