@@ -22,6 +22,9 @@
 #include <linux/regmap.h>
 #include <linux/spinlock.h>
 #include <linux/qpnp/qpnp-revid.h>
+/* This file defines wled_flash_led_prepare(); tell the header not to
+ * re-declare it. See include/linux/leds-qpnp-flash.h. */
+#define __WLED_FLASH_PREPARE_IMPL__
 #include <linux/leds-qpnp-flash.h>
 #include "../../leds/leds.h"
 
