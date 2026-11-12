@@ -540,11 +540,24 @@ static bool emit_mul_const(bool is64, u8 dst, u8 tmp, s32 imm, struct jit_ctx *c
 /*
  * The bit that a sign test, an unsigned 32-bit compare at the sign bit or a
  * single bit test checks, with *nonzero set if it branches on a set bit, or -1.
+ *
+ * The TBZ/TBNZ encoders take the branch target as a signed 14-bit field of
+ * 4-byte units, i.e. -8192..8191 instructions.  When the target falls outside
+ * that window the caller must fall back to the compare-and-conditional-branch
+ * form, so pass the target in and refuse here rather than emitting a branch
+ * the hardware cannot encode.
  */
-static int tb_bit(u8 op, bool is64, s32 imm, bool *nonzero)
+static int tb_bit(u8 op, bool is64, s32 imm, int jmp_offset, bool *nonzero)
 {
 	const int sign = is64 ? 63 : 31;
 	u64 mask;
+
+	/*
+	 * Outside the TBZ/TBNZ reach; use A64_CMP_I/A64_CMN_I + A64_B_ instead,
+	 * which covers +/-128 KiB and is emitted by the caller's fallback path.
+	 */
+	if (jmp_offset < -8192 || jmp_offset > 8191)
+		return -1;
 
 	switch (op) {
 	case BPF_JSLT:
@@ -617,21 +630,6 @@ static int build_insn(const struct bpf_insn *insn, struct jit_ctx *ctx)
 } while (0)
 #define check_imm19(imm) check_imm(19, imm)
 #define check_imm26(imm) check_imm(26, imm)
-/*
- * TBZ/TBNZ hold a signed 14-bit field of 4-byte units, so they reach
- * -32768..32764 bytes, i.e. -8192..8191 instructions.  Note this is HALF the
- * range of a plain 14-bit count, which is what check_imm(14, ...) accepts.
- *
- * Using check_imm(14, ...) here let offsets of 8192..16383 instructions
- * through; aarch64_insn_gen_test_branch_imm() then returned
- * AARCH64_BREAK_FAULT, validate_code() rejected the whole program, and with
- * CONFIG_BPF_JIT_ALWAYS_ON=y bpf_prog_select_runtime() returned -ENOTSUPP
- * instead of falling back to the interpreter.  Socket filters that netd and
- * wpa_supplicant install then failed to attach, which took out both UID
- * accounting (sdcardfs permission checks) and wireless association.
- */
-#define check_imm13(imm) check_imm(13, imm)
-#define check_imm14(imm) check_imm13(imm)
 
 	switch (code) {
 	/* dst = src */
@@ -891,13 +889,14 @@ emit_cond_jmp:
 		 * A compare against a single bit can be a test-bit-and-branch
 		 * instead of a compare plus a conditional branch, which is one
 		 * instruction shorter and needs no general purpose register.
+		 * The branch target has to be computed first: if it is outside
+		 * the TBZ/TBNZ reach the fallback below is used instead.
 		 */
-		bit = tb_bit(jmp_op, is64, cmp_imm, &nonzero);
+		jmp_offset = bpf2a64_offset(i + off, i, ctx);
+		bit = tb_bit(jmp_op, is64, cmp_imm, jmp_offset, &nonzero);
 		if (bit >= 0) {
-			jmp_offset = bpf2a64_offset(i + off, i, ctx);
-			check_imm14(jmp_offset);
 			emit(nonzero ? A64_TBNZ(dst, bit, jmp_offset) :
-				       A64_TBZ(dst, bit, jmp_offset), ctx);
+			       A64_TBZ(dst, bit, jmp_offset), ctx);
 			break;
 		}
 		/*
@@ -919,11 +918,10 @@ emit_cond_jmp:
 		 * A test of a single bit is a test-bit-and-branch, no need to
 		 * materialise the immediate or set the flags.
 		 */
-		bit = tb_bit(BPF_JSET, is64, imm, &nonzero);
+		jmp_offset = bpf2a64_offset(i + off, i, ctx);
+		bit = tb_bit(BPF_JSET, is64, imm, jmp_offset, &nonzero);
 		if (bit >= 0) {
 			jmp_op = BPF_OP(code);
-			jmp_offset = bpf2a64_offset(i + off, i, ctx);
-			check_imm14(jmp_offset);
 			emit(A64_TBNZ(dst, bit, jmp_offset), ctx);
 			break;
 		}
