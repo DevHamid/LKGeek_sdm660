@@ -1062,8 +1062,19 @@ static int build_body(struct jit_ctx *ctx)
 		}
 		if (ctx->image == NULL)
 			ctx->offset[i] = ctx->idx;
-		if (ret)
+		if (ret) {
+			/*
+			 * Every non-zero return here aborts the whole
+			 * program.  Name the instruction and its opcode:
+			 * several paths return without printing, and
+			 * pr_err_once()/pr_info() may already have been
+			 * consumed earlier in boot.
+			 */
+			pr_err("bpf_jit: insn %d/%d code=0x%02x dst=%d src=%d off=%d imm=%d -> ret=%d idx=%d\n",
+			       i, prog->len, insn->code, insn->dst_reg,
+			       insn->src_reg, insn->off, insn->imm, ret, ctx->idx);
 			return ret;
+		}
 	}
 
 	return 0;
