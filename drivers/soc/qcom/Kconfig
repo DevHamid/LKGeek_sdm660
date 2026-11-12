@@ -992,3 +992,12 @@ config QPNP_HAPTIC
 	  on the touch screen.  It uses the Android timed-output framework.
 
 source "drivers/soc/qcom/wcnss/Kconfig"
+
+config QCOM_MODEM_BOOT
+	tristate "QCOM modem boot control (wayne / sdm660)"
+	depends on MSM_PIL && MSM_SUBSYSTEM_RESTART
+	help
+	  Exposes /sys/class/modem-boot/modem0/{state,boot,restart,fwname}
+	  so userspace cold-boots the modem through PIL after rmtfs is
+	  answering. Does not boot at load: rmtfs must serve the modem's
+	  remote-FS requests first or the modem watchdogs itself.
