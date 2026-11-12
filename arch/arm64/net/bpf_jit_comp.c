@@ -1076,8 +1076,18 @@ static int validate_code(struct jit_ctx *ctx)
 	for (i = 0; i < ctx->idx; i++) {
 		u32 a64_insn = le32_to_cpu(ctx->image[i]);
 
-		if (a64_insn == AARCH64_BREAK_FAULT)
+		if (a64_insn == AARCH64_BREAK_FAULT) {
+			/*
+			 * Silent rejection is undebuggable: a program that
+			 * reaches here is thrown away and, with
+			 * CONFIG_BPF_JIT_ALWAYS_ON=y, the caller only sees
+			 * -ENOTSUPP.  Name the position so the offending
+			 * instruction can be found in the BPF program.
+			 */
+			pr_err("bpf_jit: BREAK_FAULT at insn %d of %d (last insn %d of %d)\n",
+			       i, ctx->idx, i / 4, ctx->prog->len);
 			return -1;
+		}
 	}
 
 	return 0;
@@ -1150,11 +1160,13 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 
 	/* Fake pass to fill in ctx->offset. */
 	if (build_body(&ctx)) {
+		pr_err("bpf_jit: ABORT fake body ctx.idx=%d len=%d\n", ctx.idx, prog->len);
 		prog = orig_prog;
 		goto out_off;
 	}
 
 	if (build_prologue(&ctx, was_classic)) {
+		pr_err("bpf_jit: ABORT fake prologue ctx.idx=%d\n", ctx.idx);
 		prog = orig_prog;
 		goto out_off;
 	}
@@ -1180,6 +1192,8 @@ skip_init_ctx:
 	build_prologue(&ctx, was_classic);
 
 	if (build_body(&ctx)) {
+		pr_err("bpf_jit: ABORT real body ctx.idx=%d len=%d image_size=%d\n",
+		       ctx.idx, prog->len, image_size);
 		bpf_jit_binary_free(header);
 		prog = orig_prog;
 		goto out_off;
@@ -1187,8 +1201,30 @@ skip_init_ctx:
 
 	build_epilogue(&ctx);
 
+	/*
+	 * The fake pass sized the buffer.  If the real pass produced a
+	 * different instruction count, some of the buffer is still
+	 * AARCH64_BREAK_FAULT filler and validate_code() will reject a
+	 * program that is actually fine -- or worse, the emit overran
+	 * image_size.  Make the mismatch visible instead of silent.
+	 */
+	if (ctx.idx != image_size / (int)sizeof(u32))
+		pr_err("bpf_jit: SIZE MISMATCH fake=%d real=%d len=%d\n",
+		       image_size / (int)sizeof(u32), ctx.idx, prog->len);
+
 	/* 3. Extra pass to validate JITed code. */
 	if (validate_code(&ctx)) {
+		u32 last = ctx.idx ? le32_to_cpu(ctx.image[ctx.idx - 1]) : 0;
+
+		/*
+		 * The image is pre-filled with AARCH64_BREAK_FAULT by
+		 * jit_fill_hole(), so a hole that the emit pass never
+		 * overwrote means the sizing pass under-counted.  Report
+		 * both ends to tell a sizing mismatch from an encoder
+		 * that produced the sentinel itself.
+		 */
+		pr_err("bpf_jit: validate failed, ctx.idx=%d last=0x%08x jit_data.idx=%d\n",
+		       ctx.idx, last, extra_pass ? jit_data->ctx.idx : -1);
 		bpf_jit_binary_free(header);
 		prog = orig_prog;
 		goto out_off;
