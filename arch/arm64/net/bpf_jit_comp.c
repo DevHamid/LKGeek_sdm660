@@ -617,7 +617,21 @@ static int build_insn(const struct bpf_insn *insn, struct jit_ctx *ctx)
 } while (0)
 #define check_imm19(imm) check_imm(19, imm)
 #define check_imm26(imm) check_imm(26, imm)
-#define check_imm14(imm) check_imm(14, imm)
+/*
+ * TBZ/TBNZ hold a signed 14-bit field of 4-byte units, so they reach
+ * -32768..32764 bytes, i.e. -8192..8191 instructions.  Note this is HALF the
+ * range of a plain 14-bit count, which is what check_imm(14, ...) accepts.
+ *
+ * Using check_imm(14, ...) here let offsets of 8192..16383 instructions
+ * through; aarch64_insn_gen_test_branch_imm() then returned
+ * AARCH64_BREAK_FAULT, validate_code() rejected the whole program, and with
+ * CONFIG_BPF_JIT_ALWAYS_ON=y bpf_prog_select_runtime() returned -ENOTSUPP
+ * instead of falling back to the interpreter.  Socket filters that netd and
+ * wpa_supplicant install then failed to attach, which took out both UID
+ * accounting (sdcardfs permission checks) and wireless association.
+ */
+#define check_imm13(imm) check_imm(13, imm)
+#define check_imm14(imm) check_imm13(imm)
 
 	switch (code) {
 	/* dst = src */
