@@ -775,8 +775,6 @@ CONFIG_QCOM_L2_COUNTERS=y
 CONFIG_ANDROID=y
 CONFIG_ANDROID_BINDER_IPC=y
 CONFIG_ANDROID_BINDERFS=y
-CONFIG_ANDROID_SIMPLE_LMK=y
-CONFIG_ANDROID_SIMPLE_LMK_MINFREE=140
 CONFIG_QCOM_QFPROM=y
 CONFIG_NVMEM_SPMI_SDAM=y
 CONFIG_CORESIGHT_PLACEHOLDER=y
@@ -937,10 +935,17 @@ CONFIG_CGROUP_DEVICE=y
 CONFIG_FAIR_GROUP_SCHED=y
 CONFIG_CGROUP_FREEZER=y
 CONFIG_CGROUP_NET_PRIO=y
-# MEMCG_KMEM is a hidden 'bool' with 'default y' that depends on MEMCG, so
-# enabling MEMCG above auto-enables it. Kept on: the MGLRU backport's
-# CONFIG_MEMCG_KMEM paths use the 5.x shrinker_rwsem, which mm/vmscan.c now
-# declares and uses consistently (see commit fixing shrinker_rwsem).
+# Memory controller + PSI: restore lmkd function (matches sdm660-perf-full)
+# MEMCG and PSI are required by AOSP lmkd; enabling them auto-disables
+# ANDROID_SIMPLE_LMK via Kconfig (!MEMCG && !PSI depends), which is correct.
+# MEMCG_KMEM auto-enables with MEMCG. MGLRU backport's shrinker_rwsem is in
+# use (mm/vmscan.c) so the MEMCG_KMEM shrinker path is coherent now.
+CONFIG_MEMCG=y
+CONFIG_MEMCG_SWAP=y
+CONFIG_MEMCG_SWAP_ENABLED=y
+CONFIG_PSI=y
+# CONFIG_PSI_DEFAULT_DISABLED is not set
+CONFIG_PSI_FTRACE=y
 CONFIG_DEVTMPFS=y
 CONFIG_TMPFS_XATTR=y
 CONFIG_NET_NS=y
