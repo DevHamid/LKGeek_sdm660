@@ -941,19 +941,17 @@ CONFIG_CGROUP_NET_PRIO=y
 # Memory controller + PSI: restore lmkd function (matches sdm660-perf-full)
 # MEMCG and PSI are required by AOSP lmkd; enabling them auto-disables
 # ANDROID_SIMPLE_LMK via Kconfig (!MEMCG && !PSI depends), which is correct.
-# ISOLATION BUILD: MEMCG_KMEM forced off. The Nov 7 revert (d0d18730b997)
-# disabled it because the MGLRU backport's CONFIG_MEMCG_KMEM blocks use the
-# 5.x shrinker_rwsem; fc9f1e3a22d1 converted the lock and re-enabled it, but
-# that combination has never actually booted on this device - the first build
-# with it froze and rebooted at boot. Testing with it off to isolate.
-# Docker --memory still works: that needs MEMCG, not kernel-mem accounting.
+# ISOLATION BUILD: MEMCG on, PSI OFF, MGLRU dormant, no SIMPLE_LMK.
+# MEMCG alone (PSI off) is the decisive bisect: freezes with MEMCG+PSI,
+# with MEMCG+PSI(no KMEM/MMGLRU). If this boots, PSI was the trigger and
+# lmkd reads MEMCG's memory.pressure_level + vmpressure instead of PSI.
 CONFIG_MEMCG=y
 CONFIG_MEMCG_SWAP=y
 CONFIG_MEMCG_SWAP_ENABLED=y
 # CONFIG_MEMCG_KMEM is not set
-CONFIG_PSI=y
+# CONFIG_PSI is not set
 # CONFIG_PSI_DEFAULT_DISABLED is not set
-CONFIG_PSI_FTRACE=y
+# CONFIG_PSI_FTRACE is not set
 CONFIG_DEVTMPFS=y
 CONFIG_TMPFS_XATTR=y
 CONFIG_NET_NS=y
