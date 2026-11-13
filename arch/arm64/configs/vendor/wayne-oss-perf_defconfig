@@ -1,4 +1,4 @@
-CONFIG_LOCALVERSION="-LKGeek-devhamid-remastered"
+CONFIG_LOCALVERSION="-LKGeek-perf-devhamid"
 # CONFIG_LOCALVERSION_AUTO is not set
 CONFIG_NO_HZ=y
 CONFIG_HIGH_RES_TIMERS=y
@@ -108,13 +108,10 @@ CONFIG_ENERGY_MODEL=y
 CONFIG_CPU_IDLE=y
 CONFIG_HOTPLUG_CPU=y
 CONFIG_FORCE_FAST_CHARGE=y
-CONFIG_NTSYNC=y
 CONFIG_CPU_FREQ=y
 CONFIG_CPU_FREQ_STAT=y
 CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y
 CONFIG_CPU_FREQ_GOV_SCHEDHORIZON=y
-CONFIG_CPU_FREQ_GOV_REFLEX=y
-CONFIG_CPU_FREQ_DEFAULT_GOV_REFLEX=y
 CONFIG_SCHEDHORIZON_DEFAULT_EFFICIENT_FREQ_LP=902400
 CONFIG_SCHEDHORIZON_DEFAULT_EFFICIENT_FREQ_HP=1113600
 CONFIG_SCHEDHORIZON_DEFAULT_UP_DELAY_LP=200
@@ -355,9 +352,6 @@ CONFIG_FW_LOADER_USER_HELPER_FALLBACK=y
 CONFIG_REGMAP_WCD_IRQ=y
 CONFIG_DMA_CMA=y
 CONFIG_LRU_GEN=y
-# ISOLATION BUILD: MGLRU compiled in but dormant at boot. This tree has no
-# lru_gen= cmdline param, so the only way to A/B it is this config. Previous
-# booting builds had LRU_GEN_ENABLED=y, so this also lowers risk for the test.
 # CONFIG_LRU_GEN_ENABLED is not set
 CONFIG_ANON_MIN_RATIO=15
 CONFIG_CLEAN_LOW_RATIO=0
@@ -368,7 +362,6 @@ CONFIG_ZSTD_DECOMPRESS=y
 CONFIG_ZRAM_DEF_COMP_LZ4=y
 CONFIG_ZRAM_DEF_COMP="lz4"
 CONFIG_ZRAM_WRITEBACK=y
-CONFIG_ZRAM_MULTI_COMP=y
 CONFIG_PAGE_FLIPPING=y
 CONFIG_BLK_DEV_LOOP=y
 CONFIG_BLK_DEV_LOOP_MIN_COUNT=16
@@ -778,6 +771,8 @@ CONFIG_QCOM_L2_COUNTERS=y
 CONFIG_ANDROID=y
 CONFIG_ANDROID_BINDER_IPC=y
 CONFIG_ANDROID_BINDERFS=y
+CONFIG_ANDROID_SIMPLE_LMK=y
+CONFIG_ANDROID_SIMPLE_LMK_MINFREE=140
 CONFIG_QCOM_QFPROM=y
 CONFIG_NVMEM_SPMI_SDAM=y
 CONFIG_CORESIGHT_PLACEHOLDER=y
@@ -857,10 +852,7 @@ CONFIG_MAGIC_SYSRQ=y
 CONFIG_MAGIC_SYSRQ_DEFAULT_ENABLE=0x0
 # CONFIG_MAGIC_SYSRQ_SERIAL is not set
 CONFIG_PANIC_ON_OOPS=y
-CONFIG_PANIC_TIMEOUT=10
-CONFIG_DETECT_HUNG_TASK=y
-CONFIG_DEFAULT_HUNG_TASK_TIMEOUT=90
-CONFIG_BOOTPARAM_HUNG_TASK_PANIC=y
+CONFIG_PANIC_TIMEOUT=-1
 CONFIG_RCU_PANIC_ON_STALL=1
 # CONFIG_RUNTIME_TESTING_MENU is not set
 CONFIG_BUG_ON_DATA_CORRUPTION=y
@@ -917,7 +909,6 @@ CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
 CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
 CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
 CONFIG_KSU_SUSFS_SUS_MAP=y
-CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER=y
 # CONFIG_KSU_SUSFS_SUS_SU is not set
 CONFIG_NOMOUNT=y
 CONFIG_LSM="selinux,baseband_guard"
@@ -938,20 +929,10 @@ CONFIG_CGROUP_DEVICE=y
 CONFIG_FAIR_GROUP_SCHED=y
 CONFIG_CGROUP_FREEZER=y
 CONFIG_CGROUP_NET_PRIO=y
-# Memory controller + PSI: restore lmkd function (matches sdm660-perf-full)
-# MEMCG and PSI are required by AOSP lmkd; enabling them auto-disables
-# ANDROID_SIMPLE_LMK via Kconfig (!MEMCG && !PSI depends), which is correct.
-# ISOLATION BUILD: MEMCG on, PSI OFF, MGLRU dormant, no SIMPLE_LMK.
-# MEMCG alone (PSI off) is the decisive bisect: freezes with MEMCG+PSI,
-# with MEMCG+PSI(no KMEM/MMGLRU). If this boots, PSI was the trigger and
-# lmkd reads MEMCG's memory.pressure_level + vmpressure instead of PSI.
-CONFIG_MEMCG=y
-CONFIG_MEMCG_SWAP=y
-CONFIG_MEMCG_SWAP_ENABLED=y
-# CONFIG_MEMCG_KMEM is not set
-# CONFIG_PSI is not set
-# CONFIG_PSI_DEFAULT_DISABLED is not set
-# CONFIG_PSI_FTRACE is not set
+# MEMCG_KMEM is a hidden 'bool' with 'default y' that depends on MEMCG, so
+# enabling MEMCG above auto-enables it. Kept on: the MGLRU backport's
+# CONFIG_MEMCG_KMEM paths use the 5.x shrinker_rwsem, which mm/vmscan.c now
+# declares and uses consistently (see commit fixing shrinker_rwsem).
 CONFIG_DEVTMPFS=y
 CONFIG_TMPFS_XATTR=y
 CONFIG_NET_NS=y
@@ -989,28 +970,4 @@ CONFIG_FW_LOADER=y
 CONFIG_SYSCTL=y
 CONFIG_SYSVIPC=y
 CONFIG_POSIX_MQUEUE=y
-
-# BORE burst-oriented scheduling.
-CONFIG_SCHED_BORE=y
-# POC is disabled: it cannot select anything on this SoC.
-# POC gates every selection site on !sched_asym_cpucap_active(), and sdm660
-# declares asymmetric capacities (capacity-dmips-mhz 636 on CPU0-3, 1024 on
-# CPU4-7), so sched_asym_cpucapacity is enabled at boot and POC stays inert
-# no matter what the sysctls say.  Removing the gate would let POC pick idle
-# CPUs by bitmap position instead of capacity, i.e. hand heavy work to little
-# cores while big cores idle.  poc_sd_shared_init() is wired into
-# attach_sched_domain() so the eligibility bit is computed correctly; the
-# code stays in the tree, just uncompiled, in case this moves to a SoC with
-# uniform core capacities.
-# CONFIG_SCHED_POC_SELECTOR is not set
-# ADIOS is disabled: selecting it at runtime freezes the device and
-# puts it in a reboot loop (reproduced by
-#   echo adios > /sys/block/mmcblk0/queue/scheduler
-# which froze, rebooted, then froze at home screen on every boot).
-# Leaving it built only leaves the trap armed, so drop the code entirely.
-# CONFIG_MQ_IOSCHED_ADIOS is not set
-# CONFIG_ADIOS_DEFAULT is not set
-# CONFIG_MQ_IOSCHED_DEFAULT_ADIOS is not set
-
-# Modem cold-boot control (modem_boot.ko); rmtfs must answer first.
 CONFIG_QCOM_MODEM_BOOT=m
