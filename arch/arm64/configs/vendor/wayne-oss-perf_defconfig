@@ -355,7 +355,10 @@ CONFIG_FW_LOADER_USER_HELPER_FALLBACK=y
 CONFIG_REGMAP_WCD_IRQ=y
 CONFIG_DMA_CMA=y
 CONFIG_LRU_GEN=y
-CONFIG_LRU_GEN_ENABLED=y
+# ISOLATION BUILD: MGLRU compiled in but dormant at boot. This tree has no
+# lru_gen= cmdline param, so the only way to A/B it is this config. Previous
+# booting builds had LRU_GEN_ENABLED=y, so this also lowers risk for the test.
+# CONFIG_LRU_GEN_ENABLED is not set
 CONFIG_ANON_MIN_RATIO=15
 CONFIG_CLEAN_LOW_RATIO=0
 CONFIG_CLEAN_MIN_RATIO=15
@@ -938,11 +941,16 @@ CONFIG_CGROUP_NET_PRIO=y
 # Memory controller + PSI: restore lmkd function (matches sdm660-perf-full)
 # MEMCG and PSI are required by AOSP lmkd; enabling them auto-disables
 # ANDROID_SIMPLE_LMK via Kconfig (!MEMCG && !PSI depends), which is correct.
-# MEMCG_KMEM auto-enables with MEMCG. MGLRU backport's shrinker_rwsem is in
-# use (mm/vmscan.c) so the MEMCG_KMEM shrinker path is coherent now.
+# ISOLATION BUILD: MEMCG_KMEM forced off. The Nov 7 revert (d0d18730b997)
+# disabled it because the MGLRU backport's CONFIG_MEMCG_KMEM blocks use the
+# 5.x shrinker_rwsem; fc9f1e3a22d1 converted the lock and re-enabled it, but
+# that combination has never actually booted on this device - the first build
+# with it froze and rebooted at boot. Testing with it off to isolate.
+# Docker --memory still works: that needs MEMCG, not kernel-mem accounting.
 CONFIG_MEMCG=y
 CONFIG_MEMCG_SWAP=y
 CONFIG_MEMCG_SWAP_ENABLED=y
+# CONFIG_MEMCG_KMEM is not set
 CONFIG_PSI=y
 # CONFIG_PSI_DEFAULT_DISABLED is not set
 CONFIG_PSI_FTRACE=y
