@@ -771,8 +771,6 @@ CONFIG_QCOM_L2_COUNTERS=y
 CONFIG_ANDROID=y
 CONFIG_ANDROID_BINDER_IPC=y
 CONFIG_ANDROID_BINDERFS=y
-CONFIG_ANDROID_SIMPLE_LMK=y
-CONFIG_ANDROID_SIMPLE_LMK_MINFREE=140
 CONFIG_QCOM_QFPROM=y
 CONFIG_NVMEM_SPMI_SDAM=y
 CONFIG_CORESIGHT_PLACEHOLDER=y
@@ -929,10 +927,36 @@ CONFIG_CGROUP_DEVICE=y
 CONFIG_FAIR_GROUP_SCHED=y
 CONFIG_CGROUP_FREEZER=y
 CONFIG_CGROUP_NET_PRIO=y
-# MEMCG_KMEM is a hidden 'bool' with 'default y' that depends on MEMCG, so
-# enabling MEMCG above auto-enables it. Kept on: the MGLRU backport's
-# CONFIG_MEMCG_KMEM paths use the 5.x shrinker_rwsem, which mm/vmscan.c now
-# declares and uses consistently (see commit fixing shrinker_rwsem).
+# Memory controller + PSI + companion subsystems, aligned verbatim to the
+# proven-booting sdm660-perf-full_defconfig (same SoC, same tree).
+# MEMCG+PSI+KMEM alone shipped in all three earlier failed builds; the full
+# reference config also carries CGROUP_WRITEBACK, CGROUP_CPUACCT and
+# SOCK_CGROUP_DATA, which 4.19 MEMCG wires writeback/socket accounting
+# through. This is the substantive delta vs. those three failures.
+CONFIG_PAGE_COUNTER=y
+CONFIG_MEMCG=y
+CONFIG_MEMCG_SWAP=y
+CONFIG_MEMCG_SWAP_ENABLED=y
+CONFIG_MEMCG_KMEM=y
+CONFIG_BLK_CGROUP=y
+# CONFIG_DEBUG_BLK_CGROUP is not set
+CONFIG_CGROUP_WRITEBACK=y
+CONFIG_CGROUP_SCHED=y
+# CONFIG_CFS_BANDWIDTH is not set
+# CONFIG_RT_GROUP_SCHED is not set
+# CONFIG_CGROUP_PIDS is not set
+# CONFIG_CGROUP_RDMA is not set
+CONFIG_CGROUP_CPUACCT=y
+# CONFIG_CGROUP_PERF is not set
+CONFIG_CGROUP_BPF=y
+# CONFIG_CGROUP_DEBUG is not set
+CONFIG_SOCK_CGROUP_DATA=y
+CONFIG_PSI=y
+# CONFIG_PSI_DEFAULT_DISABLED is not set
+CONFIG_PSI_FTRACE=y
+# CONFIG_ANDROID_SIMPLE_LMK is not set
+# (SIMPLE_LMK is auto-disabled by MEMCG/PSI Kconfig; MEMCG replaces it and
+# restores AOSP lmkd pressure_level + vmpressure input.)
 CONFIG_DEVTMPFS=y
 CONFIG_TMPFS_XATTR=y
 CONFIG_NET_NS=y
