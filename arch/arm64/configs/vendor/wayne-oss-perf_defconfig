@@ -47,7 +47,7 @@ CONFIG_BPF_JIT_ALWAYS_ON=y
 # CONFIG_RSEQ is not set
 CONFIG_EMBEDDED=y
 CONFIG_PERF_EVENTS=y
-# CONFIG_VM_EVENT_COUNTERS is not set
+CONFIG_VM_EVENT_COUNTERS=y
 # CONFIG_SLUB_DEBUG is not set
 CONFIG_SLUB=y
 CONFIG_SLUB_CPU_PARTIAL=y
@@ -1003,3 +1003,9 @@ CONFIG_SCHED_BORE=y
 
 # Modem cold-boot control (modem_boot.ko); rmtfs must answer first.
 CONFIG_QCOM_MODEM_BOOT=m
+
+# MGLRU / reclaim observability (2026-11-14): real pgscan/pgsteal counters,
+# debugfs lru_gen gen tables, full LRU_GEN stats, PSI pressure stalls.
+CONFIG_DEBUG_FS=y
+CONFIG_LRU_GEN_STATS=y
+CONFIG_PSI=y
