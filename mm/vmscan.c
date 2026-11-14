@@ -2068,6 +2068,39 @@ static int current_may_throttle(void)
 }
 
 /*
+ * The classic LRU and MGLRU paths share this: update the reclaim
+ * writeback statistics and nudge the flushers when everything we
+ * scanned was dirty but not queued for IO.
+ */
+static void handle_reclaim_writeback(unsigned long nr_taken,
+				     struct scan_control *sc,
+				     struct reclaim_stat *stat, bool file)
+{
+	/*
+	 * If dirty pages are scanned that are not queued for IO, it
+	 * implies that flushers are not doing their job. This can
+	 * happen when memory pressure pushes dirty pages to the end of
+	 * the LRU before the dirty limits are breached and the dirty
+	 * data has expired. It can also happen when the proportion of
+	 * dirty pages grows not through writes but through memory
+	 * pressure reclaiming all the clean cache. And in some cases,
+	 * the flushers simply cannot keep up with the allocation
+	 * rate. Nudge the flusher threads in case they are asleep.
+	 */
+	if (stat->nr_unqueued_dirty == nr_taken)
+		wakeup_flusher_threads(WB_REASON_VMSCAN);
+
+	sc->nr.dirty += stat->nr_dirty;
+	sc->nr.congested += stat->nr_congested;
+	sc->nr.unqueued_dirty += stat->nr_unqueued_dirty;
+	sc->nr.writeback += stat->nr_writeback;
+	sc->nr.immediate += stat->nr_immediate;
+	sc->nr.taken += nr_taken;
+	if (file)
+		sc->nr.file_taken += nr_taken;
+}
+
+/*
  * shrink_inactive_list() is a helper for shrink_node().  It returns the number
  * of reclaimed pages
  */
@@ -2154,28 +2187,7 @@ shrink_inactive_list(unsigned long nr_to_scan, struct lruvec *lruvec,
 	mem_cgroup_uncharge_list(&page_list);
 	free_unref_page_list(&page_list);
 
-	/*
-	 * If dirty pages are scanned that are not queued for IO, it
-	 * implies that flushers are not doing their job. This can
-	 * happen when memory pressure pushes dirty pages to the end of
-	 * the LRU before the dirty limits are breached and the dirty
-	 * data has expired. It can also happen when the proportion of
-	 * dirty pages grows not through writes but through memory
-	 * pressure reclaiming all the clean cache. And in some cases,
-	 * the flushers simply cannot keep up with the allocation
-	 * rate. Nudge the flusher threads in case they are asleep.
-	 */
-	if (stat.nr_unqueued_dirty == nr_taken)
-		wakeup_flusher_threads(WB_REASON_VMSCAN);
-
-	sc->nr.dirty += stat.nr_dirty;
-	sc->nr.congested += stat.nr_congested;
-	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;
-	sc->nr.writeback += stat.nr_writeback;
-	sc->nr.immediate += stat.nr_immediate;
-	sc->nr.taken += nr_taken;
-	if (file)
-		sc->nr.file_taken += nr_taken;
+	handle_reclaim_writeback(nr_taken, sc, &stat, file);
 
 	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id,
 			nr_scanned, nr_reclaimed, &stat, sc->priority, file);
@@ -4654,8 +4666,10 @@ static int evict_pages(struct lruvec *lruvec, struct scan_control *sc, int swapp
 	int type;
 	int scanned;
 	int reclaimed;
+	unsigned long nr_taken;
 	LIST_HEAD(list);
 	struct page *page;
+	struct reclaim_stat stat;
 	enum vm_event_item item;
 	struct lru_gen_mm_walk *walk;
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
@@ -4688,7 +4702,13 @@ static int evict_pages(struct lruvec *lruvec, struct scan_control *sc, int swapp
 	if (list_empty(&list))
 		return scanned;
 
-	reclaimed = shrink_page_list(&list, pgdat, sc, 0, NULL, false);
+	nr_taken = 0;
+	list_for_each_entry(page, &list, lru)
+		nr_taken++;
+
+	reclaimed = shrink_page_list(&list, pgdat, sc, 0, &stat, false);
+	handle_reclaim_writeback(nr_taken, sc, &stat,
+				 type == LRU_GEN_FILE);
 
 	/*
 	 * To avoid livelock, don't add rejected pages back to the same lists
