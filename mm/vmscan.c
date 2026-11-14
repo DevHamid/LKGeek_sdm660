@@ -4216,7 +4216,6 @@ static unsigned long lru_gen_min_ttl __read_mostly;
 static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 {
 	struct mem_cgroup *memcg;
-	bool success = false;
 	unsigned long min_ttl = READ_ONCE(lru_gen_min_ttl);
 
 	VM_BUG_ON(!current_is_kswapd());
@@ -4243,17 +4242,14 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 	do {
 		struct lruvec *lruvec = mem_cgroup_lruvec(pgdat, memcg);
 
-		if (age_lruvec(lruvec, sc, min_ttl))
-			success = true;
+		age_lruvec(lruvec, sc, min_ttl);
 
 		cond_resched();
 	} while ((memcg = mem_cgroup_iter(NULL, memcg, NULL)));
 
 	current->reclaim_state->mm_walk = NULL;
 
-	if (!success) {
-		lru_gen_min_ttl_unsatisfied++;
-	}
+	/* OOM kill deliberately avoided: high min_ttl_ms is not OOM-worthy. */
 }
 
 /*
