@@ -2071,10 +2071,16 @@ static int current_may_throttle(void)
  * The classic LRU and MGLRU paths share this: update the reclaim
  * writeback statistics and nudge the flushers when everything we
  * scanned was dirty but not queued for IO.
+ *
+ * Note: sc->nr.unqueued_dirty and sc->nr.file_taken are NOT updated
+ * here. They feed the 4.19 kswapd PGDAT_DIRTY check, whose semantics
+ * were established by the classic path; the MGLRU path maintains them
+ * in sort_page() only, so kswapd dirty-node detection keeps behaving
+ * exactly as it did before the unification.
  */
 static void handle_reclaim_writeback(unsigned long nr_taken,
 				     struct scan_control *sc,
-				     struct reclaim_stat *stat, bool file)
+				     struct reclaim_stat *stat)
 {
 	/*
 	 * If dirty pages are scanned that are not queued for IO, it
@@ -2092,12 +2098,9 @@ static void handle_reclaim_writeback(unsigned long nr_taken,
 
 	sc->nr.dirty += stat->nr_dirty;
 	sc->nr.congested += stat->nr_congested;
-	sc->nr.unqueued_dirty += stat->nr_unqueued_dirty;
 	sc->nr.writeback += stat->nr_writeback;
 	sc->nr.immediate += stat->nr_immediate;
 	sc->nr.taken += nr_taken;
-	if (file)
-		sc->nr.file_taken += nr_taken;
 }
 
 /*
@@ -2187,7 +2190,10 @@ shrink_inactive_list(unsigned long nr_to_scan, struct lruvec *lruvec,
 	mem_cgroup_uncharge_list(&page_list);
 	free_unref_page_list(&page_list);
 
-	handle_reclaim_writeback(nr_taken, sc, &stat, file);
+	handle_reclaim_writeback(nr_taken, sc, &stat);
+	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;
+	if (file)
+		sc->nr.file_taken += nr_taken;
 
 	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id,
 			nr_scanned, nr_reclaimed, &stat, sc->priority, file);
@@ -4707,8 +4713,7 @@ static int evict_pages(struct lruvec *lruvec, struct scan_control *sc, int swapp
 		nr_taken++;
 
 	reclaimed = shrink_page_list(&list, pgdat, sc, 0, &stat, false);
-	handle_reclaim_writeback(nr_taken, sc, &stat,
-				 type == LRU_GEN_FILE);
+	handle_reclaim_writeback(nr_taken, sc, &stat);
 
 	/*
 	 * To avoid livelock, don't add rejected pages back to the same lists
