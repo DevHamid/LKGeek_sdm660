@@ -186,7 +186,9 @@ CONFIG_BLK_DEV_ZONED=y
 CONFIG_BLK_INLINE_ENCRYPTION=y
 CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK=y
 CONFIG_PARTITION_ADVANCED=y
-# CONFIG_MQ_IOSCHED_DEADLINE is not set
+# Control scheduler for A/B testing of the elevator-switch path itself
+# (bfq -> deadline must survive if the switch machinery is healthy).
+CONFIG_MQ_IOSCHED_DEADLINE=y
 CONFIG_IOSCHED_BFQ=y
 CONFIG_BFQ_DEFAULT=y
 # CONFIG_COREDUMP is not set
@@ -992,12 +994,11 @@ CONFIG_SCHED_BORE=y
 # code stays in the tree, just uncompiled, in case this moves to a SoC with
 # uniform core capacities.
 # CONFIG_SCHED_POC_SELECTOR is not set
-# ADIOS is disabled: selecting it at runtime freezes the device and
-# puts it in a reboot loop (reproduced by
+# ADIOS freeze diagnosis build: re-enabled with milestone tracing (block/adios.c)
+# to capture the last code path before the freeze reported earlier.  BFQ stays
+# the default; ADIOS is only selectable at runtime via
 #   echo adios > /sys/block/mmcblk0/queue/scheduler
-# which froze, rebooted, then froze at home screen on every boot).
-# Leaving it built only leaves the trap armed, so drop the code entirely.
-# CONFIG_MQ_IOSCHED_ADIOS is not set
+CONFIG_MQ_IOSCHED_ADIOS=y
 # CONFIG_ADIOS_DEFAULT is not set
 # CONFIG_MQ_IOSCHED_DEFAULT_ADIOS is not set
 

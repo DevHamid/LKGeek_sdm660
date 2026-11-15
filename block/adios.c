@@ -28,6 +28,21 @@
 #define ADIOS_VERSION "3.3.0"
 
 /*
+ * Freeze-diagnosis tracing (wayne test build): milestone counters printed to
+ * the console, which pstore/ramoops captures continuously.  The last breadcrumb
+ * in the ramoops console log identifies the path the device was on when it
+ * froze.  Each event logs on occurrence 1, 1000 and 1000000 only.
+ */
+static atomic_t adios_dbg_count[16];
+
+#define adios_dbg(idx, fmt, ...) do {				\
+	int _c = atomic_inc_return(&adios_dbg_count[(idx)]);	\
+	if (_c == 1 || _c == 1000 || _c == 1000000)		\
+		pr_info("adios: dbg[%d] #%d " fmt "\n",		\
+			(idx), _c, ##__VA_ARGS__);		\
+} while (0)
+
+/*
  * 4.19 API shims.
  *
  * blk_insert_t arrived with the 6.9 mq insert rework, where insert_requests()
@@ -929,6 +944,8 @@ static bool adios_bio_merge(struct blk_mq_hw_ctx *hctx, struct bio *bio) {
 	ret = blk_mq_sched_try_merge(q, bio, &free);
 	spin_unlock_irqrestore(&ad->lock, flags);
 
+	if (ret)
+		adios_dbg(5, "bio merge ok");
 	if (free)
 		blk_mq_free_request(free);
 
@@ -939,8 +956,10 @@ static bool merge_or_insert_to_dl_tree(struct adios_data *ad,
 		struct request *rq, struct request_queue *q, struct list_head *free) {
 	bool dl_idx;
 
-	if (blk_mq_sched_try_insert_merge(q, rq))
+	if (blk_mq_sched_try_insert_merge(q, rq)) {
+		adios_dbg(4, "try_insert_merge consumed rq");
 		return true;
+	}
 
 	dl_idx = adios_optype_not_read(rq);
 	add_to_dl_tree(ad, dl_idx, rq);
@@ -991,12 +1010,16 @@ static void insert_request_post_stability(struct blk_mq_hw_ctx *hctx,
 
 	/* Tier-0: BLK_MQ_INSERT_AT_HEAD Requests */
 	if (insert_flags & BLK_MQ_INSERT_AT_HEAD) {
+		adios_dbg(1, "tier0 insert");
 		insert_to_prio_queue(ad, rq, 0);
 		return;
 	}
 
-	if (merge_or_insert_to_dl_tree(ad, rq, q, free))
+	if (merge_or_insert_to_dl_tree(ad, rq, q, free)) {
+		adios_dbg(2, "dl insert-merge consumed rq");
 		return;
+	}
+	adios_dbg(3, "dl insert");
 }
 
 // Insert a request into the scheduler (before Read & Write models stabilizes)
@@ -1016,6 +1039,7 @@ static void insert_request_pre_stability(struct blk_mq_hw_ctx *hctx,
 		rd->pred_lat = ad->lat_model_latency_limit;
 
 	insert_to_prio_queue(ad, rq, pq_idx);
+	adios_dbg(0, "pre-stability insert pq=%u optype=%u", pq_idx, optype);
 
 	rcu_read_lock();
 	if (rcu_dereference(ad->latency_model[ADIOS_READ].params)->base > 0 &&
@@ -1023,8 +1047,10 @@ static void insert_request_pre_stability(struct blk_mq_hw_ctx *hctx,
 			stable = true;
 	rcu_read_unlock();
 
-	if (stable)
+	if (stable) {
 		ad->models_stable = true;
+		adios_dbg(13, "models stable");
+	}
 }
 
 // Insert multiple requests into the scheduler
@@ -1055,6 +1081,7 @@ static void adios_insert_requests(struct blk_mq_hw_ctx *hctx,
 		end_scoped_guard
 	} while (!stop);
 
+	adios_dbg(14, "insert batch done");
 	blk_mq_free_requests(&free);
 }
 
@@ -1210,6 +1237,7 @@ static bool fill_batch_queues(struct adios_data *ad, u64 tpl) {
 			list_sort(NULL, &ad->batch_queue[page][1], cmp_rq_pos);
 
 	if (count) {
+		adios_dbg(9, "filled %u rq, tpl=%llu", count, tpl);
 		/* We're sure that every request's rd->managed == true */
 		union adios_in_flight_rqs ifr = {
 			.count          = count,
@@ -1304,8 +1332,10 @@ static struct request *dispatch_from_bq(struct adios_data *ad) {
 	if (!bq_page_has_rq(bq_state, !ad->bq_page) &&
 			(!bq_curr_page_has_rq || (!tpl || tpl < div_u64(
 			ad->global_latency_window * ad->bq_refill_below_ratio, 100))) &&
-			eval_this_adios_state(state, ADIOS_STATE_DL))
+			eval_this_adios_state(state, ADIOS_STATE_DL)) {
+		adios_dbg(7, "bq refill begin tpl=%llu", tpl);
 		fill_batch_queues(ad, tpl);
+	}
 
 	// If current batch queue page is empty, and the other page has work, flip
 	if (!bq_curr_page_has_rq &&
@@ -1322,6 +1352,7 @@ static struct request *dispatch_from_bq(struct adios_data *ad) {
 		bool is_empty = !ad->bq_state[page];
 		if (is_empty)
 			set_adios_state(ad, ADIOS_STATE_BQ, page, false);
+		adios_dbg(8, "dispatch from bq");
 		return rq;
 	}
 
@@ -1346,6 +1377,7 @@ static struct request *dispatch_from_pq(struct adios_data *ad) {
 
 	rq = list_first_entry(q, struct request, queuelist);
 	list_del_init(&rq->queuelist);
+	adios_dbg(6, "dispatch from pq");
 	if (list_empty(q)) {
 		set_adios_state(ad, ADIOS_STATE_PQ, pq_idx, false);
 		update_elv_direction(ad);
@@ -1384,6 +1416,7 @@ found:
 static void update_timer_callback(struct timer_list *t) {
 	struct adios_data *ad = from_timer(ad, t, update_timer);
 
+	adios_dbg(12, "model update tick");
 	for (u8 optype = 0; optype < ADIOS_OPTYPES; optype++)
 		latency_model_update(ad, &ad->latency_model[optype]);
 }
@@ -1403,6 +1436,7 @@ static void adios_completed_request(struct request *rq, u64 now) {
 			ifr_to_sub.scalar, &ad->in_flight_rqs.atomic);
 	}
 	u8 optype = adios_optype(rq);
+	adios_dbg(10, "completed enter optype=%u", optype);
 
 	unsigned long flags;
 	struct adios_pcpu_completion *pc;
@@ -1448,6 +1482,7 @@ static void adios_completed_request(struct request *rq, u64 now) {
 	if (latency > ad->lat_model_latency_limit)
 		return;
 
+	adios_dbg(11, "latency=%llu ns optype=%u", latency, optype);
 	latency_model_input(ad, &ad->latency_model[optype],
 		rd->block_size, latency, rd->pred_lat, weight);
 	timer_reduce(&ad->update_timer, jiffies + msecs_to_jiffies(100));
@@ -1614,6 +1649,8 @@ static int adios_init_sched(struct request_queue *q, struct elevator_type *e) {
 	blk_stat_enable_accounting(q);
 
 	q->elevator = eq;
+	pr_info("adios: init ok: nr_requests=%u nr_hw_queues=%u is_rotational=%d\n",
+		q->nr_requests, q->nr_hw_queues, (int)ad->is_rotational);
 	return 0;
 
 free_buckets:
@@ -1644,6 +1681,7 @@ put_eq:
 static void adios_exit_sched(struct elevator_queue *e) {
 	struct adios_data *ad = e->elevator_data;
 
+	pr_info("adios: exit sched\n");
 	del_timer_sync(&ad->update_timer);	/* 4.19: no timer_shutdown_sync */
 
 	for (u8 i = 0; i < 2; i++)
