@@ -198,12 +198,14 @@ bad_bmap:
 }
 
 /*
- * do_swapout() - Write a page to swap space
+ * do_swapout() - Write a page to swap space from the kcompressd thread
  * @page: The page to write out
  *
- * This function writes the page to swap space, either using frontswap
- * or synchronous write. It ensures that the page is unlocked and the
- * reference count is decremented after the operation.
+ * The page arrives from the fifo with PG_writeback set, the lock released
+ * and a reference held on its behalf (see kcompressd_store()).  Re-take
+ * the lock for the actual store: frontswap_store() and the bdev write
+ * path both expect a locked page.  On return the page is unlocked, out
+ * of writeback and our reference is dropped.
  */
 static void do_swapout(struct page *page)
 {
@@ -214,15 +216,24 @@ static void do_swapout(struct page *page)
 		.range_end = LLONG_MAX,
 		.for_reclaim = 1,
 	};
+	int ret;
 
-	if (frontswap_store(page) == 0) {
-		set_page_writeback(page);
-		unlock_page(page);
+	lock_page(page);
+
+	/*
+	 * swap_writepage() already tried frontswap before handing the
+	 * page over (a stub on this tree), so go straight to the real
+	 * store.  __swap_writepage() consumes the lock and ends writeback
+	 * through its end_io on the success paths; if it fails to take
+	 * the page over (bio allocation failure), the page is left
+	 * unlocked but still carrying our PG_writeback -- finish that
+	 * here so the page is not pinned forever.
+	 */
+	ret = __swap_writepage(page, &wbc, end_swap_bio_write);
+	if (ret && PageWriteback(page))
 		end_page_writeback(page);
-	} else
-		__swap_writepage(page, &wbc, end_swap_bio_write); /* Implies unlock_page */
 
-	/* Decrement the page reference count */
+	/* Decrement the page reference count taken by kcompressd_store() */
 	put_page(page);
 }
 
@@ -266,26 +277,36 @@ static bool kcompressd_store(struct page *page)
 	 * If the kcompress_fifo is full, we must swap out the head
 	 * page to make space for the new page.
 	 */
-	spin_lock_irqsave(pgdat->kcompress_fifo_lock, flags);
+	spin_lock_irqsave(&pgdat->kcompress_fifo_lock, flags);
 	if (kfifo_len(pgdat->kcompress_fifo) >= sysctl_kcompressd * sizeof(page) &&
 			unlikely(!kfifo_out(pgdat->kcompress_fifo, &head, sizeof(page)))) {
-		spin_unlock_irqrestore(pgdat->kcompress_fifo_lock, flags);
+		spin_unlock_irqrestore(&pgdat->kcompress_fifo_lock, flags);
 		/* Can't dequeue the head page. Fall back to synchronous write. */
 		return false;
 	}
-	spin_unlock_irqrestore(pgdat->kcompress_fifo_lock, flags);
+	spin_unlock_irqrestore(&pgdat->kcompress_fifo_lock, flags);
 
 	/* Increment the page reference count to avoid it being freed */
 	get_page(page);
 
 	/* Enqueue the page for compression */
 	ret = kfifo_in(pgdat->kcompress_fifo, &page, sizeof(page));
-	if (likely(ret))
-		/* We successfully enqueued the page. wake up kcompressd */
+	if (likely(ret)) {
+		/*
+		 * We successfully enqueued the page.  The kthread now owns
+		 * it and will finish the write: mark it as being written
+		 * back so pageout() sees an in-flight page instead of a
+		 * locked page it cannot re-lock (that would wedge
+		 * reclaim), release the lock -- the kthread re-locks it
+		 * before storing -- and wake kcompressd up.
+		 */
+		set_page_writeback(page);
+		unlock_page(page);
 		wake_up_interruptible(&pgdat->kcompressd_wait);
-	else
+	} else {
 		/* Enqueue failed, so we must cancel the reference count */
 		put_page(page);
+	}
 
 	/*
 	 * If we had to swap out the head page, do it now.
@@ -323,9 +344,20 @@ int kcompressd(void *p)
 				!kfifo_is_empty(pgdat->kcompress_fifo));
 
 		while (kfifo_out_locked(pgdat->kcompress_fifo,
-				&page, sizeof(page), pgdat->kcompress_fifo_lock))
+				&page, sizeof(page), &pgdat->kcompress_fifo_lock))
 			do_swapout(page);
 	}
+
+	/*
+	 * Pages still queued when stopping were handed over with
+	 * PG_writeback set and a reference held; finish them so they are
+	 * not pinned forever.  (Normally the loop above drains the fifo
+	 * before exiting.)
+	 */
+	while (kfifo_out_locked(pgdat->kcompress_fifo, &page, sizeof(page),
+				&pgdat->kcompress_fifo_lock))
+		do_swapout(page);
+
 	return 0;
 }
 
