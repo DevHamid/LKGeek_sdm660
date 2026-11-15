@@ -190,7 +190,6 @@ CONFIG_PARTITION_ADVANCED=y
 # (bfq -> deadline must survive if the switch machinery is healthy).
 CONFIG_MQ_IOSCHED_DEADLINE=y
 CONFIG_IOSCHED_BFQ=y
-CONFIG_BFQ_DEFAULT=y
 # CONFIG_COREDUMP is not set
 CONFIG_DEFAULT_MMAP_MIN_ADDR=32768
 CONFIG_CMA=y
@@ -994,13 +993,14 @@ CONFIG_SCHED_BORE=y
 # code stays in the tree, just uncompiled, in case this moves to a SoC with
 # uniform core capacities.
 # CONFIG_SCHED_POC_SELECTOR is not set
-# ADIOS freeze diagnosis build: re-enabled with milestone tracing (block/adios.c)
-# to capture the last code path before the freeze reported earlier.  BFQ stays
-# the default; ADIOS is only selectable at runtime via
-#   echo adios > /sys/block/mmcblk0/queue/scheduler
+# ADIOS: built in and the DEFAULT scheduler for single-queue blk-mq devices
+# (elevator_init_mq).  Validated stable on wayne 2026-11-15 after fixing the
+# scoped_guard lock leak and the flush_rq completion crash.  BFQ/deadline/none
+# remain runtime-selectable:
+#   echo bfq > /sys/block/mmcblk0/queue/scheduler
 CONFIG_MQ_IOSCHED_ADIOS=y
-# CONFIG_ADIOS_DEFAULT is not set
-# CONFIG_MQ_IOSCHED_DEFAULT_ADIOS is not set
+CONFIG_ADIOS_DEFAULT=y
+CONFIG_MQ_IOSCHED_DEFAULT_ADIOS=y
 
 # Modem cold-boot control (modem_boot.ko); rmtfs must answer first.
 CONFIG_QCOM_MODEM_BOOT=m

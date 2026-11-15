@@ -904,7 +904,9 @@ int elevator_init_mq(struct request_queue *q)
 	if (unlikely(q->elevator))
 		goto out;
 
-#if defined(CONFIG_BFQ_DEFAULT)
+#if defined(CONFIG_ADIOS_DEFAULT)
+		e = elevator_get(q, "adios", false);
+#elif defined(CONFIG_BFQ_DEFAULT)
 		e = elevator_get(q, "bfq", false);
 #elif defined(CONFIG_MQ_KYBER_DEFAULT)
 		e = elevator_get(q, "kyber", false);
