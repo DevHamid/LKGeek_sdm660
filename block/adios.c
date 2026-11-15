@@ -780,8 +780,15 @@ static inline u32 eval_this_adios_state(u32 state, u32 shift)
 static inline u32 eval_adios_state(struct adios_data *ad, u32 shift)
 { return eval_this_adios_state(get_adios_state(ad), shift); }
 
-// Add a request to the deadline-sorted red-black tree
-static void add_to_dl_tree(
+// Defined below; reused by add_to_dl_tree's allocation-failure fallback
+static void insert_to_prio_queue(struct adios_data *ad,
+		struct request *rq, bool pq_idx);
+
+// Add a request to the deadline-sorted red-black tree.
+// Returns false if the dl_group allocation failed and the request was
+// parked in the FIFO priority queue instead (still dispatchable, but not
+// in the rqhash -- see merge_or_insert_to_dl_tree).
+static bool add_to_dl_tree(
 		struct adios_data *ad, bool dl_idx, struct request *rq) {
 	struct rb_root_cached *root = &ad->dl_tree[dl_idx];
 	struct rb_node **link = &(root->rb_root.rb_node), *parent = NULL;
@@ -826,8 +833,20 @@ static void add_to_dl_tree(
 	dlg = rb_entry_safe(parent, struct dl_group, node);
 	if (!dlg || dlg->deadline != deadline) {
 		dlg = kmem_cache_zalloc(ad->dl_group_pool, GFP_ATOMIC);
-		if (!dlg)
-			return;
+		if (!dlg) {
+			/*
+			 * Allocation failed.  Do NOT leave the request only
+			 * in the rqhash: a request that is in no dispatch
+			 * structure would never be dispatched and stall its
+			 * submitter until the hung-task timeout.  Park it in
+			 * the FIFO priority queue instead, where it stays
+			 * dispatchable; its latency contribution is lost,
+			 * which is acceptable under memory pressure.
+			 */
+			adios_dbg(15, "dl_group alloc fail, parked in pq");
+			insert_to_prio_queue(ad, rq, 1);
+			return false;
+		}
 		dlg->deadline = deadline;
 		INIT_LIST_HEAD(&dlg->rqs);
 		rb_link_node(&dlg->node, parent, link);
@@ -839,6 +858,7 @@ found:
 
 	if (was_empty)
 		set_adios_state(ad, ADIOS_STATE_DL, dl_idx, true);
+	return true;
 }
 
 // Remove a request from the deadline-sorted red-black tree
@@ -846,8 +866,13 @@ static void del_from_dl_tree(
 		struct adios_data *ad, bool dl_idx, struct request *rq) {
 	struct rb_root_cached *root = &ad->dl_tree[dl_idx];
 	struct adios_rq_data *rd = get_rq_data(rq);
-	struct dl_group *dlg = container_of(rd->dl_group, struct dl_group, rqs);
+	struct dl_group *dlg;
 
+	/* rq-parked (alloc-failure) or pq-only requests have no group */
+	if (!rd->dl_group)
+		return;
+
+	dlg = container_of(rd->dl_group, struct dl_group, rqs);
 	list_del_init(&rd->dl_node);
 	if (list_empty(&dlg->rqs)) {
 		rb_erase_cached(&dlg->node, root);
@@ -962,7 +987,8 @@ static bool merge_or_insert_to_dl_tree(struct adios_data *ad,
 	}
 
 	dl_idx = adios_optype_not_read(rq);
-	add_to_dl_tree(ad, dl_idx, rq);
+	if (!add_to_dl_tree(ad, dl_idx, rq))
+		return false;	/* parked in pq; keep it out of the rqhash */
 
 	if (rq_mergeable(rq)) {
 		elv_rqhash_add(q, rq);
@@ -1426,6 +1452,19 @@ static void adios_completed_request(struct request *rq, u64 now) {
 	struct adios_data *ad = rq->q->elevator->elevator_data;
 	struct adios_rq_data *rd = get_rq_data(rq);
 	union adios_in_flight_rqs ifr = { .scalar = 0 };
+
+	/*
+	 * 4.19: the flush state machine's flush_rq is a bare kzalloc'd
+	 * request that never went through ->prepare_request, and
+	 * blk_kick_flush() borrows the first pending request's
+	 * internal_tag for it, so we are called for it here with
+	 * elv.priv[0] == NULL.  (mq-deadline and BFQ never see it because
+	 * they register no .completed_request on 4.19; upstream ADIOS
+	 * targets 6.x where the flush_rq carries proper elevator data.)
+	 * The flush_rq carries no latency data -- just ignore it.
+	 */
+	if (!rd)
+		return;
 
 	if (rd->managed) {
 		union adios_in_flight_rqs ifr_to_sub = {
