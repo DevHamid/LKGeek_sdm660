@@ -15,6 +15,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/mm.h>
+#include <linux/kfifo.h>
 #include <linux/sched/mm.h>
 #include <linux/module.h>
 #include <linux/gfp.h>
@@ -7126,6 +7127,7 @@ static int kswapd_cpu_online(unsigned int cpu)
 int kswapd_run(int nid)
 {
 	pg_data_t *pgdat = NODE_DATA(nid);
+	struct kfifo *fifo;
 	int ret = 0;
 
 	if (pgdat->kswapd)
@@ -7151,6 +7153,29 @@ int kswapd_run(int nid)
 		kthread_stop(pgdat->kshrinkd);
 		pgdat->kshrinkd = NULL;
 	}
+
+	init_waitqueue_head(&pgdat->kcompressd_wait);
+	spin_lock_init(&pgdat->kcompress_fifo_lock);
+	fifo = kmalloc(sizeof(struct kfifo), GFP_KERNEL);
+	if (fifo && !kfifo_alloc(fifo,
+			KCOMPRESS_FIFO_SIZE * sizeof(struct page *), GFP_KERNEL)) {
+		pgdat->kcompress_fifo = fifo;
+		pgdat->kcompressd = kthread_run(kcompressd, pgdat,
+						"kcompressd%d", nid);
+		if (IS_ERR(pgdat->kcompressd)) {
+			pr_err("Failed to start kcompressd on node %d\n", nid);
+			pgdat->kcompressd = NULL;
+			kfifo_free(fifo);
+			kfree(fifo);
+			pgdat->kcompress_fifo = NULL;
+		} else
+			printk(KERN_INFO
+				"Kcompressd-Unofficial 0.5 by Masahito Suzuki (forked from Kcompressd by Qun-Wei Lin from MediaTek)\n");
+	} else {
+		pr_err("kcompressd: fail to alloc fifo on node %d\n", nid);
+		kfree(fifo);
+		pgdat->kcompressd = NULL;
+	}
 	return ret;
 }
 
@@ -7170,6 +7195,13 @@ void kswapd_stop(int nid)
 	if (kshrinkd) {
 		kthread_stop(kshrinkd);
 		NODE_DATA(nid)->kshrinkd = NULL;
+	}
+	if (NODE_DATA(nid)->kcompressd) {
+		kthread_stop(NODE_DATA(nid)->kcompressd);
+		NODE_DATA(nid)->kcompressd = NULL;
+		kfifo_free(NODE_DATA(nid)->kcompress_fifo);
+		kfree(NODE_DATA(nid)->kcompress_fifo);
+		NODE_DATA(nid)->kcompress_fifo = NULL;
 	}
 }
 

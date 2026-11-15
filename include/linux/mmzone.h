@@ -21,6 +21,7 @@
 #include <linux/android_kabi.h>
 #include <asm/page.h>
 
+struct kfifo;
 /* Free memory management - zoned buddy allocator.  */
 #ifndef CONFIG_FORCE_MAX_ZONEORDER
 #define MAX_ORDER 11
@@ -915,6 +916,12 @@ typedef struct pglist_data {
 
 	wait_queue_head_t kshrinkd_wait;
 	struct task_struct *kshrinkd;
+
+#define KCOMPRESS_FIFO_SIZE 256
+	wait_queue_head_t kcompressd_wait;
+	struct task_struct *kcompressd;
+	struct kfifo *kcompress_fifo;
+	spinlock_t kcompress_fifo_lock;
 
 #ifdef CONFIG_COMPACTION
 	int kcompactd_max_order;
