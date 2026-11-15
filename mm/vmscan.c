@@ -4488,7 +4488,8 @@ static int scan_pages(struct lruvec *lruvec, struct scan_control *sc,
 	int sorted = 0;
 	int scanned = 0;
 	int isolated = 0;
-	int remaining = MAX_LRU_BATCH;
+	/* small per-call batch: the caller loop re-evaluates each round */
+	int remaining = MIN_LRU_BATCH;
 	struct lru_gen_struct *lrugen = &lruvec->lrugen;
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 
