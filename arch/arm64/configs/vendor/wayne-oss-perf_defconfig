@@ -1004,3 +1004,7 @@ CONFIG_MQ_IOSCHED_DEFAULT_ADIOS=y
 
 # Modem cold-boot control (modem_boot.ko); rmtfs must answer first.
 CONFIG_QCOM_MODEM_BOOT=m
+
+# Freeze bisect M1: MEMCG alone (no PSI, no debug configs).
+# MEMCG_KMEM auto-on; shrinker_rwsem declared in mm/vmscan.c:203 (v7 series).
+CONFIG_MEMCG=y
