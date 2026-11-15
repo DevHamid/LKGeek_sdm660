@@ -4748,79 +4748,61 @@ static int evict_pages(struct lruvec *lruvec, struct scan_control *sc, int swapp
 	return scanned;
 }
 
-static long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc, bool can_swap)
+static bool should_run_aging(struct lruvec *lruvec, unsigned long *max_seq,
+			     unsigned long *min_seq, bool can_swap,
+			     struct scan_control *sc)
 {
 	bool need_aging;
+	int type;
+
+	/* have to run aging, since eviction is not possible anymore */
+	for_each_evictable_type(type, can_swap) {
+		if (min_seq[type] + MIN_NR_GENS > max_seq[type])
+			return true;
+	}
+
+	get_nr_evictable(lruvec, max_seq, min_seq, can_swap, &need_aging);
+
+	/* try to avoid aging, do gentle reclaim at the default priority */
+	if (sc->priority == DEF_PRIORITY)
+		return false;
+
+	/* better to run aging even though eviction is still possible */
+	return need_aging;
+}
+
+static long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc,
+			   struct mem_cgroup *memcg, bool can_swap)
+{
 	long nr_to_scan;
-	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
+	bool need_aging;
 	DEFINE_MAX_SEQ(lruvec);
 	DEFINE_MIN_SEQ(lruvec);
 
 	nr_to_scan = get_nr_evictable(lruvec, max_seq, min_seq, can_swap, &need_aging);
+
+	/* try to scrape all its memory if this memcg was deleted */
+	if (!mem_cgroup_online(memcg))
+		return nr_to_scan;
+
 	if (!nr_to_scan)
 		return 0;
 
 	/* reset the priority if the target has been met */
 	nr_to_scan >>= sc->nr_reclaimed < sc->nr_to_reclaim ? sc->priority : DEF_PRIORITY;
 
-	if (!mem_cgroup_online(memcg))
-		nr_to_scan++;
-
-	if (!nr_to_scan)
-		return 0;
-
-	if (!need_aging) {
-		sc->memcgs_need_aging = false;
-		return nr_to_scan;
-	}
-
-	/* leave the work to lru_gen_age_node() */
-	if (current_is_kswapd())
-		return 0;
-
-	/* stop scanning this lruvec as it's low on cold folios */
-	{
-		bool aged = false;
-		int type;
-
-		for_each_evictable_type(type, can_swap) {
-			/*
-			 * Per-type independent aging: only age the type that
-			 * actually needs it. Aging a type that already has
-			 * enough evictable generations would forcibly drain
-			 * its oldest gen via inc_min_seq() and disrupt the
-			 * eviction progress, especially when the other type
-			 * is stuck (e.g., file cache protected by le9uo).
-			 */
-			if (min_seq[type] + MIN_NR_GENS < max_seq[type])
-				continue;
-
-			if (try_to_inc_max_seq(lruvec, max_seq[type], type, sc, can_swap, false))
-				aged = true;
-		}
-
-		if (aged)
-			return nr_to_scan;
-	}
-
-	/* check if any type can still evict */
-	{
-		int type;
-		for_each_evictable_type(type, can_swap) {
-			if (min_seq[type] + MIN_NR_GENS <= max_seq[type])
-				return nr_to_scan;
-		}
-	}
-	return 0;
+	return nr_to_scan;
 }
 
 static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 {
 	struct blk_plug plug;
-	long scanned = 0;
 	bool swapped = false;
+	int swappiness;
+	long nr_to_scan;
 	unsigned long reclaimed = sc->nr_reclaimed;
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
+	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 
 	prepare_workingset_protection(pgdat, sc);
 
@@ -4835,21 +4817,61 @@ static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc
 	if (current_is_kswapd())
 		current->reclaim_state->mm_walk = &pgdat->mm_walk;
 
-	while (true) {
+	if (sc->may_swap)
+		swappiness = get_swappiness(lruvec, sc);
+	else if (global_reclaim(sc) && get_swappiness(lruvec, sc))
+		swappiness = 1;
+	else
+		swappiness = 0;
+
+	/* pin the scan budget for this pass; the loop only decrements it */
+	nr_to_scan = get_nr_to_scan(lruvec, sc, memcg, !!swappiness);
+
+	while (nr_to_scan > 0) {
 		int delta;
-		int swappiness;
-		long nr_to_scan;
+		int type;
+		bool aged = false;
+		bool can_evict = false;
+		DEFINE_MAX_SEQ(lruvec);
+		DEFINE_MIN_SEQ(lruvec);
 
-		if (sc->may_swap)
-			swappiness = get_swappiness(lruvec, sc);
-		else if (global_reclaim(sc) && get_swappiness(lruvec, sc))
-			swappiness = 1;
-		else
-			swappiness = 0;
+		if (should_run_aging(lruvec, max_seq, min_seq, !!swappiness, sc)) {
+			/* leave the work to lru_gen_age_node() */
+			if (current_is_kswapd())
+				break;
 
-		nr_to_scan = get_nr_to_scan(lruvec, sc, swappiness);
-		if (!nr_to_scan)
-			break;
+			/* stop scanning this lruvec as it's low on cold folios */
+			for_each_evictable_type(type, swappiness) {
+				/*
+				 * Per-type independent aging: only age the type that
+				 * actually needs it. Aging a type that already has
+				 * enough evictable generations would forcibly drain
+				 * its oldest gen via inc_min_seq() and disrupt the
+				 * eviction progress, especially when the other type
+				 * is stuck (e.g., file cache protected by le9uo).
+				 */
+				if (min_seq[type] + MIN_NR_GENS < max_seq[type])
+					continue;
+
+				if (try_to_inc_max_seq(lruvec, max_seq[type], type, sc, !!swappiness, false))
+					aged = true;
+			}
+
+			/* check if any type can still evict */
+			for_each_evictable_type(type, swappiness) {
+				if (min_seq[type] + MIN_NR_GENS <= max_seq[type]) {
+					can_evict = true;
+					break;
+				}
+			}
+
+			if (aged || !can_evict)
+				break;
+
+			/* aging stalled but eviction is still possible: keep the budget */
+		} else {
+			sc->memcgs_need_aging = false;
+		}
 
 		delta = evict_pages(lruvec, sc, swappiness, &swapped);
 		if (!delta)
@@ -4858,15 +4880,14 @@ static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc
 		if (sc->memcgs_avoid_swapping && swappiness < 200 && swapped)
 			break;
 
-		scanned += delta;
-		if (scanned >= nr_to_scan) {
-			if (!swapped && sc->nr_reclaimed - reclaimed >= MIN_LRU_BATCH)
-				sc->memcgs_need_swapping = false;
-			break;
-		}
+		nr_to_scan -= delta;
 
 		cond_resched();
 	}
+
+	if (!swapped && nr_to_scan <= 0 &&
+	    sc->nr_reclaimed - reclaimed >= MIN_LRU_BATCH)
+		sc->memcgs_need_swapping = false;
 
 	if (current_is_kswapd())
 		current->reclaim_state->mm_walk = NULL;
