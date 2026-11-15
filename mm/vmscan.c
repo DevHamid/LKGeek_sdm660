@@ -4652,7 +4652,14 @@ static int isolate_pages(struct lruvec *lruvec, struct scan_control *sc, int swa
 		if (*isolated)
 			break;
 
-		type = !type;
+		/*
+		 * If scanned > 0 but nothing was isolated, this type still has
+		 * pages (they were sorted or protected): keep scanning it instead
+		 * of falling back, which would override the swappiness choice
+		 * from get_type_to_scan().
+		 */
+		if (!scanned)
+			type = !type;
 		tier = -1;
 	}
 
