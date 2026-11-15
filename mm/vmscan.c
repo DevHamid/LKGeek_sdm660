@@ -3956,10 +3956,9 @@ static void inc_min_seq(struct lruvec *lruvec, int type)
 	WRITE_ONCE(lrugen->min_seq[type], lrugen->min_seq[type] + 1);
 }
 
-static bool try_to_inc_min_seq(struct lruvec *lruvec, bool can_swap)
+static void try_to_inc_min_seq(struct lruvec *lruvec, bool can_swap)
 {
 	int gen, type, zone;
-	bool success = false;
 	struct lru_gen_struct *lrugen = &lruvec->lrugen;
 	DEFINE_MIN_SEQ(lruvec);
 
@@ -3992,10 +3991,7 @@ next:
 
 		reset_ctrl_pos(lruvec, type, true);
 		WRITE_ONCE(lrugen->min_seq[type], min_seq[type]);
-		success = true;
 	}
-
-	return success;
 }
 
 static void inc_max_seq(struct lruvec *lruvec, int type)
@@ -4485,7 +4481,7 @@ static bool isolate_page(struct lruvec *lruvec, struct page *page, struct scan_c
 }
 
 static int scan_pages(struct lruvec *lruvec, struct scan_control *sc,
-		      int type, int tier, struct list_head *list)
+		      int type, int tier, struct list_head *list, int *isolatedp)
 {
 	int gen, zone;
 	enum vm_event_item item;
@@ -4553,12 +4549,9 @@ static int scan_pages(struct lruvec *lruvec, struct scan_control *sc,
 	__count_memcg_events(memcg, item, isolated);
 	__count_memcg_events(memcg, PGREFILL, sorted);
 
-	/*
-	 * There might not be eligible pages due to reclaim_idx, may_unmap and
-	 * may_writepage. Check the remaining to prevent livelock if there is no
-	 * progress.
-	 */
-	return isolated || !remaining ? scanned : 0;
+	*isolatedp = isolated;
+
+	return scanned;
 }
 
 static int get_tier_idx(struct lruvec *lruvec, int type)
@@ -4623,11 +4616,12 @@ static int get_type_to_scan(struct lruvec *lruvec, struct scan_control *sc, int 
 }
 
 static int isolate_pages(struct lruvec *lruvec, struct scan_control *sc, int swappiness,
-			 int *type_scanned, struct list_head *list)
+			 struct list_head *list, int *isolated, int *type_scanned)
 {
 	int i;
 	int type;
 	int scanned;
+	int total_scanned = 0;
 	int tier = -1;
 	DEFINE_MIN_SEQ(lruvec);
 
@@ -4653,8 +4647,9 @@ static int isolate_pages(struct lruvec *lruvec, struct scan_control *sc, int swa
 		if (tier < 0)
 			tier = get_tier_idx(lruvec, type);
 
-		scanned = scan_pages(lruvec, sc, type, tier, list);
-		if (scanned)
+		scanned = scan_pages(lruvec, sc, type, tier, list, isolated);
+		total_scanned += scanned;
+		if (*isolated)
 			break;
 
 		type = !type;
@@ -4663,7 +4658,7 @@ static int isolate_pages(struct lruvec *lruvec, struct scan_control *sc, int swa
 
 	*type_scanned = type;
 
-	return scanned;
+	return total_scanned;
 }
 
 static int evict_pages(struct lruvec *lruvec, struct scan_control *sc, int swappiness,
@@ -4672,6 +4667,7 @@ static int evict_pages(struct lruvec *lruvec, struct scan_control *sc, int swapp
 	int type;
 	int scanned;
 	int reclaimed;
+	int isolated = 0;
 	unsigned long nr_taken;
 	LIST_HEAD(list);
 	struct page *page;
@@ -4683,25 +4679,14 @@ static int evict_pages(struct lruvec *lruvec, struct scan_control *sc, int swapp
 
 	spin_lock_irq(&pgdat->lru_lock);
 
-	scanned = isolate_pages(lruvec, sc, swappiness, &type, &list);
+	/* in case page deletion left empty old gens, flush them */
+	try_to_inc_min_seq(lruvec, swappiness);
 
-	if (try_to_inc_min_seq(lruvec, swappiness))
-		scanned++;
+	scanned = isolate_pages(lruvec, sc, swappiness, &list, &isolated, &type);
 
-	/* check if any evictable type can still evict */
-	{
-		bool can_evict = false;
-		int type_i;
-
-		for_each_evictable_type(type_i, swappiness) {
-			if (get_nr_gens(lruvec, type_i) > MIN_NR_GENS) {
-				can_evict = true;
-				break;
-			}
-		}
-		if (!can_evict)
-			scanned = 0;
-	}
+	/* scanning may have emptied the oldest gen, flush it */
+	if (scanned)
+		try_to_inc_min_seq(lruvec, swappiness);
 
 	spin_unlock_irq(&pgdat->lru_lock);
 
