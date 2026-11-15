@@ -84,6 +84,12 @@ static inline void adios_irqsave_guard_release(struct adios_irqsave_guard *g)
  * which rejects declarations there.  The enclosing block keeps repeated uses
  * in one function from colliding on _g, and `break`/`continue` in the body
  * behave as they do in a plain block, which is all this scheduler uses.
+ *
+ * CRITICAL: the release clause is a for-loop increment, so it runs ONLY when
+ * the guarded block falls through normally.  A `return` or `goto` from inside
+ * the guarded block skips it and leaks the lock with IRQs disabled (found the
+ * hard way: that was the freeze-on-select bug).  Compute a result into a
+ * variable and return after end_scoped_guard instead.
  */
 #define scoped_guard(guard_cls, guard_lock)				\
 	{								\
@@ -1340,9 +1346,11 @@ static inline bool bq_page_has_rq(u32 bq_state, bool page) {
 	return bq_state & (1U << page);
 }
 
-// Dispatch a request from the batch queues
+// Dispatch a request from the batch queues.
+// NOTE: the scoped_guard() shim releases the lock only when the guarded
+// block falls through normally -- no return/goto from inside!
 static struct request *dispatch_from_bq(struct adios_data *ad) {
-	struct request *rq;
+	struct request *rq = NULL;
 
 	scoped_guard(spinlock_irqsave, &ad->bq_lock) {
 
@@ -1379,15 +1387,11 @@ static struct request *dispatch_from_bq(struct adios_data *ad) {
 		if (is_empty)
 			set_adios_state(ad, ADIOS_STATE_BQ, page, false);
 		adios_dbg(8, "dispatch from bq");
-		return rq;
 	}
-
-	return NULL;
 	}
 	end_scoped_guard
 
-	/* unreachable: the guard body above always returns */
-	return NULL;
+	return rq;
 }
 
 // Dispatch a request from the priority queue
@@ -1399,21 +1403,19 @@ static struct request *dispatch_from_pq(struct adios_data *ad) {
 	u8  pq_idx = pq_state >> 1;
 	struct list_head *q = &ad->prio_queue[pq_idx];
 
-	if (unlikely(list_empty(q))) return NULL;
-
-	rq = list_first_entry(q, struct request, queuelist);
-	list_del_init(&rq->queuelist);
-	adios_dbg(6, "dispatch from pq");
-	if (list_empty(q)) {
-		set_adios_state(ad, ADIOS_STATE_PQ, pq_idx, false);
-		update_elv_direction(ad);
+	if (likely(!list_empty(q))) {
+		rq = list_first_entry(q, struct request, queuelist);
+		list_del_init(&rq->queuelist);
+		adios_dbg(6, "dispatch from pq");
+		if (list_empty(q)) {
+			set_adios_state(ad, ADIOS_STATE_PQ, pq_idx, false);
+			update_elv_direction(ad);
+		}
 	}
-	return rq;
-}
+	}
 	end_scoped_guard
 
-	/* unreachable: the guard body above always returns */
-	return NULL;
+	return rq;
 }
 
 // Dispatch a request to the hardware queue
@@ -1934,14 +1936,11 @@ static ssize_t adios_read_priority_store(
 		return -EINVAL;
 
 	scoped_guard(spinlock_irqsave, &ad->lock) {
-	ad->dl_prio[0] = prio;
-	ad->dl_bias = 0;
-
-	return count;
+		ad->dl_prio[0] = prio;
+		ad->dl_bias = 0;
 	}
 	end_scoped_guard
 
-	/* unreachable: the guard body above always returns */
 	return count;
 }
 
