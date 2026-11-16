@@ -917,7 +917,8 @@ config MEMCG_SWAP_ENABLED
 config MEMCG_KMEM
 	bool
 	depends on MEMCG && !SLOB
-	default y
+	# Freeze bisect M4a: promptless symbol, default flipped to n (defconfig cannot disable it)
+	default n
 
 config BLK_CGROUP
 	bool "IO controller"
