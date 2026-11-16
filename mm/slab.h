@@ -300,6 +300,11 @@ extern void slab_deactivate_memcg_cache_rcu_sched(struct kmem_cache *s,
 
 #else /* CONFIG_MEMCG_KMEM */
 
+static inline void slab_deactivate_memcg_cache_rcu_sched(struct kmem_cache *s,
+		void (*deact_fn)(struct kmem_cache *))
+{
+}
+
 /* If !memcg, all caches are root. */
 #define slab_root_caches	slab_caches
 #define root_caches_node	list
