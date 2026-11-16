@@ -917,7 +917,10 @@ config MEMCG_SWAP_ENABLED
 config MEMCG_KMEM
 	bool
 	depends on MEMCG && !SLOB
-	default y
+	# wayne: MEMCG_KMEM=y hangs early boot on this tree (silent logo hang,
+	# suspected interaction with the backported vmscan/shrinker rework).
+	# MEMCG page accounting (what Android uses) is unaffected.
+	default n
 
 config BLK_CGROUP
 	bool "IO controller"
