@@ -1007,4 +1007,6 @@ CONFIG_QCOM_MODEM_BOOT=m
 
 # Freeze bisect M1: MEMCG alone (no PSI, no debug configs).
 # MEMCG_KMEM auto-on; shrinker_rwsem declared in mm/vmscan.c:203 (v7 series).
+# Freeze bisect M4c: MEMCG only, swap accounting off (MEMCG_SWAP has a prompt, defconfig line is honored)
 CONFIG_MEMCG=y
+# CONFIG_MEMCG_SWAP is not set
