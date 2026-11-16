@@ -778,6 +778,11 @@ CONFIG_ANDROID_BINDER_IPC=y
 CONFIG_ANDROID_BINDERFS=y
 CONFIG_ANDROID_SIMPLE_LMK=y
 CONFIG_ANDROID_SIMPLE_LMK_MINFREE=140
+
+# MEMCG enablement, device-validated 2026-11-16 (memcg-nokmem-lmk bisect):
+# page accounting on; MEMCG_KMEM stays off (init/Kconfig default n - KMEM=y
+# hangs early boot on this tree); SIMPLE_LMK coexists with MEMCG now.
+CONFIG_MEMCG=y
 CONFIG_QCOM_QFPROM=y
 CONFIG_NVMEM_SPMI_SDAM=y
 CONFIG_CORESIGHT_PLACEHOLDER=y
