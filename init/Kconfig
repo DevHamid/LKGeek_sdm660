@@ -952,7 +952,8 @@ config DEBUG_BLK_CGROUP
 config CGROUP_WRITEBACK
 	bool
 	depends on MEMCG && BLK_CGROUP
-	default y
+	# Freeze bisect M4b: promptless symbol, default flipped to n (defconfig cannot disable it)
+	default n
 
 menuconfig CGROUP_SCHED
 	bool "CPU controller"
