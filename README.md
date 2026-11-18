@@ -1,9 +1,77 @@
-# LKGeek sdm660 Wayne Kernel
+# 🚀 LKGeek Wayne Kernel
 
-Linux 4.19.325 for Xiaomi Wayne / Mi 6X (Qualcomm SDM660). The `adios-wayne`
-branch is the feature and stability branch used by GitHub Actions.
+### A carefully tuned Linux kernel for the Xiaomi Mi 6X
 
-## Audit Snapshot
+A community-built Linux 4.19.325 kernel for **Wayne / Mi 6X / SDM660**, focused
+on smoother memory reclaim, responsive scheduling, practical root integration,
+and useful networking and storage features.
+
+This is the **`adios-wayne`** line: a feature-rich branch with the risky parts
+kept visible, documented, and testable. It is built through GitHub Actions and
+is intended for people who want to understand and tune their device, not just
+flash an unexplained binary.
+
+[![Kernel 4.19.325](https://img.shields.io/badge/kernel-4.19.325-2ea44f?style=flat-square&logo=linux&logoColor=white)](https://github.com/DevHamid/LKGeek_sdm660)
+[![Wayne / SDM660](https://img.shields.io/badge/device-Wayne%20%2F%20SDM660-6f42c1?style=flat-square)](https://github.com/DevHamid/LKGeek_sdm660)
+[![Build](https://img.shields.io/badge/build-GitHub%20Actions-2088ff?style=flat-square&logo=githubactions&logoColor=white)](https://github.com/DevHamid/Kernel_Action)
+[![License GPL-2.0](https://img.shields.io/badge/license-GPL--2.0-lightgrey?style=flat-square)](LICENSES/preferred/GPL-2.0)
+
+## ✨ Why This Kernel Exists
+
+The Mi 6X is still capable hardware, but a modern Android workload asks a lot
+from a small memory budget and an aging 4.19 base. This branch brings selected
+memory, scheduler, storage, networking, and device-control improvements into
+one Wayne-focused tree, while keeping the trade-offs honest.
+
+### 🧠 Memory that reacts to the workload
+
+**MGLRU v7 reclaim improvements**, re-swappiness, Le9uo protection logic,
+ratio-based memory protection, and `kcompressd` work together in the reclaim
+path. The goal is better control over which memory is protected, aged, or
+reclaimed when the phone is under pressure.
+
+### ⚡ Scheduling built for everyday interaction
+
+**BORE**, **REFLEX**, and the adapted **Cambyses load-balancer behavior** target
+different parts of responsiveness: bursty foreground work, CPU frequency
+selection, and load migration. ADIOS is selected as the default MQ I/O
+scheduler so storage scheduling is part of the same tuning story.
+
+### 🛡️ Root and privacy integration
+
+**BakaSU**, **SUSFS**, **NoMount**, and **Re-Kernel** are integrated for users
+who need a controllable non-GKI kernel. The design keeps `SUS_SU` disabled for
+the inline-hook setup and keeps the Binder hooks documented instead of hiding
+them behind a vague "all features" label.
+
+### 🌐 Modern networking on an old base
+
+The tree includes **BBRv3**, an updated WireGuard port, and ARM64 BPF JIT fixes.
+BBRv3 is available for testing, while **CUBIC remains the safe default** until
+Wayne-specific measurements prove a better choice.
+
+### 📦 A practical toolbox
+
+NTSYNC, ZRAM-IR, LZ4, EROFS, F2FS compression, Incremental FS, modem boot
+control, LED triggers, KProfiles, and sound controls cover the features that
+matter when the kernel is used as a daily phone rather than a benchmark image.
+
+> **Honest status:** source presence, a successful CI build, and device
+> validation are different things. This README marks those differences instead
+> of turning every compiled feature into a performance promise.
+
+## 🧭 Feature Map
+
+| Area | What it brings | Current state |
+|---|---|---|
+| Memory | MGLRU v7 reclaim layer, re-swappiness, Le9uo, ratios, kcompressd, ZRAM-IR | Enabled in the verified build |
+| Responsiveness | BORE, REFLEX, Cambyses LB_STRICT_BUDGET, ADIOS | Enabled; POC stays disabled on asymmetric Wayne CPUs |
+| Root and control | BakaSU, SUSFS v2.4.0, NoMount, Re-Kernel | Enabled; some userspace behavior still needs device testing |
+| Networking | BBRv3, WireGuard, BPF JIT fixes | BBRv3 available; CUBIC is the default |
+| Compatibility | NTSYNC and Droidspaces-oriented kernel prerequisites | NTSYNC enabled; full Wine/container support is unverified |
+| Diagnostics | pstore and console-ramoops support | Enabled; warm-reboot persistence still needs confirmation |
+
+## 🔍 Audit Snapshot
 
 - Branch: `adios-wayne`
 - Commit: `2980bc5f8a15e33fb5f37e60cb41cedb0775f109`
@@ -15,9 +83,9 @@ The status below separates source presence, resolved build configuration, and
 device validation. `Unverified` means the source is present but the required
 device or reboot test was not available during this audit.
 
-## Feature Audit
+## 🔧 Technical Feature Audit
 
-### workflows.md checklist
+### Original workflows.md checklist
 
 | Feature | Source and build status | Result |
 |---|---|---|
@@ -38,7 +106,7 @@ device or reboot test was not available during this audit.
 | ADIOS | `block/adios.c` reports `ADIOS_VERSION "3.3.0"`. | Implemented, enabled, and selected as the default MQ I/O scheduler. Earlier freeze and flush-completion fixes are in the branch. |
 | Cambyses | `SCHED_FEAT_LB_STRICT_BUDGET` is implemented in CFS. | Partial: only the LB_STRICT_BUDGET behavior from Cambyses v0.6.0 is present, not a complete upstream import. |
 
-### Additional features found outside workflows.md
+### Additional features found outside the original checklist
 
 | Feature | Evidence and status |
 |---|---|
@@ -53,7 +121,7 @@ device or reboot test was not available during this audit.
 | LED and device controls | LED timer/oneshot/heartbeat and QTI tri-LED changes; `CONFIG_KPROFILES=y` and `CONFIG_SOUND_CONTROL=y`. |
 | Filesystem support | EROFS, F2FS compression, and Incremental FS are enabled. |
 
-## Resolved Configuration Notes
+## ⚙️ Resolved Configuration Notes
 
 The source defconfig is not sufficient to describe the final kernel. The successful CI build generated these important results:
 
@@ -70,7 +138,7 @@ The source defconfig is not sufficient to describe the final kernel. The success
 - `CONFIG_CGROUP_PIDS` and `CONFIG_CHECKPOINT_RESTORE` are disabled, so Droidspaces support is not a complete Docker claim.
 - Kconfig emits warnings for KernelSU choice values and duplicate or invalid defconfig assignments. The build completed, but these warnings should be cleaned up before treating the configuration as final.
 
-## Changelog for adios-wayne
+## 📝 Changelog for adios-wayne
 
 ### 2026-11-15
 
@@ -120,7 +188,7 @@ The source defconfig is not sufficient to describe the final kernel. The success
 - Added Baseband Guard with the legacy 4.19 SELinux integration path.
 - Added BBRv3, LZ4 1.10.0, and device-specific performance/control changes.
 
-## Remaining Validation and Cleanup
+## 🧪 Remaining Validation and Cleanup
 
 1. Capture a warm-reboot pstore result from the current image and inspect `console-ramoops-0`.
 2. Run a real NTSYNC/Wine userspace test before claiming application compatibility.
@@ -130,11 +198,11 @@ The source defconfig is not sufficient to describe the final kernel. The success
 6. Clean Kconfig warnings and invalid duplicate defconfig assignments.
 7. Run a final device soak test on the exact `adios-wayne` tip after the README audit changes.
 
-## Build
+## 🛠️ Build
 
 Build through [Kernel_Action](https://github.com/DevHamid/Kernel_Action). The local tree is for source review and changes; full kernel compilation belongs in GitHub Actions.
 
-## Credits
+## 🙏 Credits
 
 - [LKGeek-Team](https://github.com/LKGeek-Team) and the original SDM660 contributors
 - [Baka-SU/BakaSU](https://github.com/Baka-SU/BakaSU)
