@@ -21,7 +21,7 @@ device or reboot test was not available during this audit.
 
 | Feature | Source and build status | Result |
 |---|---|---|
-| MGLRU | 4.19 backport in `mm/`; `CONFIG_LRU_GEN=y` and `CONFIG_LRU_GEN_ENABLED=y` | Implemented and enabled. This is not an exact CachyOS v5 copy: it has the San-Kernel/v4-era data model, selected later reclaim changes, and local fixes. Earlier reclaim tests booted and passed safety checks. |
+| MGLRU | 4.19 backport in `mm/`; active branch includes the v7 reclaim-loop layer; `CONFIG_LRU_GEN=y` and `CONFIG_LRU_GEN_ENABLED=y` | Implemented and enabled. The branch carries the v7 reclaim-loop changes (`170f950d9`, `0ff7ae760`, `0ffcea89e`, `a4e57b58a`) adapted to the 4.19 San-Kernel/v4-era base, plus local fixes. It is not a verbatim modern-kernel tree. Earlier reclaim tests booted and passed safety checks. |
 | pstore / console-ramoops | Ramoops sizing, persistence, and diagnostics are present; Wayne reserves a 4 MiB region with record, console, and pmsg zones. `PSTORE`, `PSTORE_CONSOLE`, `PSTORE_PMSG`, `PSTORE_RAM`, and `PSTORE_LAST_KMSG` resolve on. | Implemented and enabled, but previous-boot persistence is unverified. A warm reboot must confirm `console-ramoops-0` contains the previous boot. |
 | BakaSU | `KernelSU` points to Baka-SU commit `516d3e87fbc986ccefdde2c2765f1700612441a9`; CI reports `v4.2.0-rc3-516d3e87-dirty`. | Implemented, enabled, and CI-confirmed. `dirty` is the build-tree suffix, not a separate release. |
 | SUSFS | `fs/susfs.c` and `include/linux/susfs.h`; source reports `v2.4.0`. | Implemented and enabled through inline hooks. `SUS_SU` is disabled. |
@@ -44,6 +44,7 @@ device or reboot test was not available during this audit.
 |---|---|
 | Kcompressd | Reclaim-side swap-compression worker in `mm/vmscan.c`; branch history contains build and page-lock/writeback fixes. |
 | Ratio memory protection | `ANON_MIN_RATIO`, `CLEAN_LOW_RATIO`, and `CLEAN_MIN_RATIO` are wired into reclaim; resolved values are `15/0/15`. |
+| Re-swappiness / Le9uo | Commit `900e12fc7` reshapes MGLRU state for per-type `max_seq`, walk state, and swappiness-aware reclaim. `mm/vmscan.c` contains the Le9uo protection path and swappiness values up to 200. | Present, compiled, and enabled as part of MGLRU. There is no separate `CONFIG_RE_SWAPPINESS` or `CONFIG_LE9UO` symbol; these are integrated MGLRU behaviors. |
 | ZRAM-IR | Branch history contains the ZRAM-IR 1.3 immediate-recompression backport and idle-accounting fix; ZRAM, writeback, multi-compression, and LZ4 are enabled. |
 | WireGuard refresh | 4.19 port plus API and upstream fixes; `CONFIG_WIREGUARD=y`. |
 | ARM64 BPF JIT fixes | Range-safe TBZ/TBNZ handling, JSET fallbacks, and related backported optimizations; BPF JIT is enabled. |
@@ -56,7 +57,7 @@ device or reboot test was not available during this audit.
 
 The source defconfig is not sufficient to describe the final kernel. The successful CI build generated these important results:
 
-- MGLRU is enabled by default.
+- MGLRU is enabled by default, including the v7 reclaim-loop layer and re-swappiness/Le9uo structural support.
 - ADIOS is the default MQ scheduler.
 - BORE and REFLEX are enabled; REFLEX is the default CPU governor.
 - BBRv3 is compiled in, but TCP defaults to CUBIC.
@@ -70,6 +71,11 @@ The source defconfig is not sufficient to describe the final kernel. The success
 - Kconfig emits warnings for KernelSU choice values and duplicate or invalid defconfig assignments. The build completed, but these warnings should be cleaned up before treating the configuration as final.
 
 ## Changelog for adios-wayne
+
+### 2026-11-15
+
+- Layered the adapted MGLRU v7 reclaim-loop changes onto the 4.19 base.
+- Integrated the re-swappiness and Le9uo MGLRU structure changes; these are part of MGLRU rather than separate Kconfig features.
 
 ### 2026-11-16
 
