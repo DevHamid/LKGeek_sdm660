@@ -1,157 +1,140 @@
-# 📋 Kernel Changelog & Documentation — LKGeek_sdm660 (wayne / SDM660)
+# LKGeek sdm660 Wayne Kernel
 
-## ✅ Current Status
+Linux 4.19.325 for Xiaomi Wayne / Mi 6X (Qualcomm SDM660). The `adios-wayne`
+branch is the feature and stability branch used by GitHub Actions.
 
-| Component | Version | Status |
+## Audit Snapshot
+
+- Branch: `adios-wayne`
+- Commit: `2980bc5f8a15e33fb5f37e60cb41cedb0775f109`
+- Build config: `arch/arm64/configs/vendor/wayne-oss-perf_defconfig`
+- Verified CI: [Kernel_Action run 43843387424](https://github.com/DevHamid/Kernel_Action/actions/runs/43843387424)
+- CI result: kernel, boot image, and AnyKernel3 artifacts built successfully
+
+The status below separates source presence, resolved build configuration, and
+device validation. `Unverified` means the source is present but the required
+device or reboot test was not available during this audit.
+
+## Feature Audit
+
+### workflows.md checklist
+
+| Feature | Source and build status | Result |
 |---|---|---|
-| Kernel | 4.19.325-LKGeek-perf-devhamid | ✅ Built & Booting |
-| ReSukiSU | v4.2.0-rc1 (35061/2) | ✅ Root working (native `su`) |
-| SuSFS | v2.3.0 | ✅ Active |
-| NoMount | v2.0.0 (Built-in) | ✅ Active |
-| Baseband-guard | v1.0.0 (Legacy LSM) | ✅ Active (Partitions Protected) |
-| Re-Kernel | Sakion-Team (Binder Hooked) | ✅ Active (Freezer Engine) |
+| MGLRU | 4.19 backport in `mm/`; `CONFIG_LRU_GEN=y` and `CONFIG_LRU_GEN_ENABLED=y` | Implemented and enabled. This is not an exact CachyOS v5 copy: it has the San-Kernel/v4-era data model, selected later reclaim changes, and local fixes. Earlier reclaim tests booted and passed safety checks. |
+| pstore / console-ramoops | Ramoops sizing, persistence, and diagnostics are present; Wayne reserves a 4 MiB region with record, console, and pmsg zones. `PSTORE`, `PSTORE_CONSOLE`, `PSTORE_PMSG`, `PSTORE_RAM`, and `PSTORE_LAST_KMSG` resolve on. | Implemented and enabled, but previous-boot persistence is unverified. A warm reboot must confirm `console-ramoops-0` contains the previous boot. |
+| BakaSU | `KernelSU` points to Baka-SU commit `516d3e87fbc986ccefdde2c2765f1700612441a9`; CI reports `v4.2.0-rc3-516d3e87-dirty`. | Implemented, enabled, and CI-confirmed. `dirty` is the build-tree suffix, not a separate release. |
+| SUSFS | `fs/susfs.c` and `include/linux/susfs.h`; source reports `v2.4.0`. | Implemented and enabled through inline hooks. `SUS_SU` is disabled. |
+| Re-Kernel | Driver and Binder transaction/reply hooks are present. | Implemented and enabled with `CONFIG_REKERNEL=y`; userspace controller behavior remains device-dependent. |
+| NoMount | Flattened tracked source under `fs/nomount/`; source reports version `20`. | Implemented and enabled with `CONFIG_NOMOUNT=y`. |
+| POC selector | `kernel/sched/poc_selector.c` version `3.0.0` is integrated. | Implemented in source but disabled for Wayne. SDM660 has asymmetric CPU capacity and the code deliberately gates selection there. |
+| REFLEX | `drivers/cpufreq/cpufreq_reflex.c` version `0.4.0`. | Implemented and enabled as the default CPU frequency governor. |
+| BBRv3 | `net/ipv4/tcp_bbr.c` contains `BBR_VERSION 3`, `bw_hi`, and `inflight_hi`. | Implemented and compiled in. It is not the active default: resolved config says `CONFIG_DEFAULT_TCP_CONG="cubic"`. |
+| LZ4 | Kernel LZ4 library reports `1.10.0`. | Implemented and enabled; ZRAM defaults to LZ4. |
+| NTSYNC | `drivers/misc/ntsync.c` with 4.19 compatibility shims. | Implemented and enabled with `CONFIG_NTSYNC=y`; Wine/Proton runtime compatibility is untested. |
+| Droidspaces | Namespace, cgroup, overlay, and networking prerequisites are staged. | Partial. `CONFIG_CGROUP_PIDS` and `CONFIG_CHECKPOINT_RESTORE` are off in the resolved image, so complete Droidspaces or Docker support is not proven. |
+| LMK PSI | PSI code and memory-stall hooks exist. | Not enabled: `CONFIG_PSI` is off in the resolved Wayne image. Simple LMK is separate and enabled. |
+| BORE | Scheduler code and Kconfig are present. | Implemented and enabled with `CONFIG_SCHED_BORE=y`; source history identifies BORE 3.1.8. |
+| ADIOS | `block/adios.c` reports `ADIOS_VERSION "3.3.0"`. | Implemented, enabled, and selected as the default MQ I/O scheduler. Earlier freeze and flush-completion fixes are in the branch. |
+| Cambyses | `SCHED_FEAT_LB_STRICT_BUDGET` is implemented in CFS. | Partial: only the LB_STRICT_BUDGET behavior from Cambyses v0.6.0 is present, not a complete upstream import. |
 
-**Active Line:** `build-all-rekernel`
+### Additional features found outside workflows.md
 
----
-
-## 🗂️ Branch & Tag Registry
-
-### Tags (Checkpoints — always build or branch from these):
-
-| Tag | State / Components Included |
+| Feature | Evidence and status |
 |---|---|
-| `working-manual-hook-root` | Manual Hook baseline, root working, NO SuSFS |
-| `working-susfs-2.2.0-su-fixed` | Root + SuSFS 2.2.0 + native `su` fix (`CONFIG_KSU_SUSFS_SUS_SU=n`) |
-| `working-susfs-inline-full` | SuSFS 2.2.0 full working (pre-NoMount) |
-| `working-bbg-nomount-susfs` | SuSFS 2.3.0 + NoMount v2.0.0 + Baseband-guard |
-| `working-all-features` | 🌟 **Golden State:** All 5 components fully integrated & hooked |
+| Kcompressd | Reclaim-side swap-compression worker in `mm/vmscan.c`; branch history contains build and page-lock/writeback fixes. |
+| Ratio memory protection | `ANON_MIN_RATIO`, `CLEAN_LOW_RATIO`, and `CLEAN_MIN_RATIO` are wired into reclaim; resolved values are `15/0/15`. |
+| ZRAM-IR | Branch history contains the ZRAM-IR 1.3 immediate-recompression backport and idle-accounting fix; ZRAM, writeback, multi-compression, and LZ4 are enabled. |
+| WireGuard refresh | 4.19 port plus API and upstream fixes; `CONFIG_WIREGUARD=y`. |
+| ARM64 BPF JIT fixes | Range-safe TBZ/TBNZ handling, JSET fallbacks, and related backported optimizations; BPF JIT is enabled. |
+| Baseband Guard | `security/baseband-guard/` and SELinux build-order fixes; `CONFIG_BBG=y`. Boot and recovery blocking remain disabled. |
+| Modem boot control | `drivers/soc/qcom/modem_boot.c` and Kconfig/Makefile integration; `CONFIG_QCOM_MODEM_BOOT=y`. Runtime behavior needs device testing. |
+| LED and device controls | LED timer/oneshot/heartbeat and QTI tri-LED changes; `CONFIG_KPROFILES=y` and `CONFIG_SOUND_CONTROL=y`. |
+| Filesystem support | EROFS, F2FS compression, and Incremental FS are enabled. |
 
-### Branches:
+## Resolved Configuration Notes
 
-| Branch | State / Purpose |
-|---|---|
-| `build-susfs-v2` | ❌ Abandoned — old Manual Hook conflict dead-end |
-| `susfs-2.3.0-upgrade` | SuSFS 2.3.0 core upgrade sandbox |
-| `build-susfs-nomount` | SuSFS 2.3.0 + NoMount v2.0.0 + Baseband-guard |
-| `build-all-rekernel` | 🚀 **Current Active Base** — All features integrated (Re-Kernel hooked) |
+The source defconfig is not sufficient to describe the final kernel. The successful CI build generated these important results:
 
----
+- MGLRU is enabled by default.
+- ADIOS is the default MQ scheduler.
+- BORE and REFLEX are enabled; REFLEX is the default CPU governor.
+- BBRv3 is compiled in, but TCP defaults to CUBIC.
+- PSI is disabled.
+- MEMCG and MEMCG_SWAP are enabled.
+- MEMCG_KMEM is disabled by the branch's boot-stability fix.
+- Simple LMK remains enabled alongside MEMCG.
+- POC is disabled.
+- NTSYNC, Re-Kernel, NoMount, SUSFS, WireGuard, ZRAM, and BPF JIT are enabled.
+- `CONFIG_CGROUP_PIDS` and `CONFIG_CHECKPOINT_RESTORE` are disabled, so Droidspaces support is not a complete Docker claim.
+- Kconfig emits warnings for KernelSU choice values and duplicate or invalid defconfig assignments. The build completed, but these warnings should be cleaned up before treating the configuration as final.
 
-## 🔧 Change Log
+## Changelog for adios-wayne
 
-### 1. SuSFS 2.2.0 → 2.3.0 Upgrade
-- Replaced `fs/susfs.c`, `include/linux/susfs.h`, `include/linux/susfs_def.h` with fresh v2.3.0 sources from JackA1ltman's `sample` branch.
-- Applied remaining hunks with `patch -p1 -N --fuzz=0 -r rejects.log` (⚠️ `-N` prevents `patch` from silently reversing already-applied code).
-- Dropped dead `susfs_sys_reboot()` call in `kernel/reboot.c` (upstream dropped reboot-spoofing in 2.3.0).
+### 2026-11-16
 
-### 2. 🐛 Root `su` Native Fix (The Big One)
-`CONFIG_KSU_SUSFS_SUS_SU` was defaulting to enabled, establishing a secondary/competing root interface that prevented `ksud` daemon from deploying standard `su` symlinks under Inline Hook mode.
+- Enabled MEMCG in `wayne-oss-perf_defconfig`.
+- Kept MEMCG_KMEM disabled because the 4.19 MGLRU tree hangs during early boot with slab accounting enabled.
+- Removed the Simple LMK `!MEMCG` conflict so Simple LMK remains available with MEMCG.
+- Added the slab compatibility stub for the MEMCG_KMEM-off configuration.
 
-- **Fix:** Explicitly set `# CONFIG_KSU_SUSFS_SUS_SU is not set` in defconfig.
-- `su` now works completely natively without any userspace wrapper scripts or hacks.
-- ⚠️ **Cleanup:** Any temporary `/system/bin/su` wrapper script calling `ksud debug su` in `anykernel.sh` is completely removed, ensuring clean, non-flaggable native root.
+### 2026-11-12
 
-### 3. NoMount v2.0.0 Integration (Built-in)
-- Integrated into kernel tree under `fs/nomount/`.
-- ⚠️ **CI Symlink Gotcha:** Official script clones as an embedded git repository and symlinks `fs/nomount -> ../NoMount/kernel/src`, which breaks on clean CI checkouts. Flattened by placing actual files directly in `fs/nomount/`.
-- Added `CONFIG_NOMOUNT=y` to defconfig.
+- Added Qualcomm SDM660 modem boot control.
+- Added ARM64 BPF JIT diagnostics and range-safe branch fallbacks.
+- Applied the local WireGuard 4.19 API fixes.
 
-### 4. Baseband-guard (BBG) LSM Integration
-- Integrated `vc-teahouse/Baseband-guard` to prevent malicious/accidental raw block writes to bootloader, modem, and EFS partitions.
-- **Non-GKI 4.19 Fixes:**
-  - Bypassed strict `CONFIG_LSM` abort by setting `HAS_DEFINE_LSM := false` in BBG Makefile to force the built-in 4.19 legacy SELinux integration path.
-  - Neutralized BBG's internal `flask.h` generation rule that wrote broken stubs and poisoned SELinux headers.
-  - Enforced Kbuild directory build ordering in `security/Makefile`:
-    ```makefile
-    $(obj)/baseband-guard: $(obj)/selinux
-    ```
-    *(Note: must NOT have trailing slashes, or Kbuild ignores the rule).*
-  - Mapped `security_initcall` to `late_initcall` in `security/baseband-guard/kernel_compat.h`.
-  - Injected `struct bbg_cred_security_struct bbg_cred;` into SELinux's `struct task_security_struct` in `security/selinux/include/objsec.h`.
+### 2026-11-11
 
-### 5. Re-Kernel (Sakion-Team Binder Freezer Hooks)
-- Integrated kernel-level process freezer notification engine to eliminate notification delays and audio stutters when using tombstone managers (NoActive, Thanox, Scene).
-- Built-in driver enabled via `CONFIG_REKERNEL=y` in `drivers/net/rekernel/`.
-- **C-Level Binder Hooking:** Bypassed the Java modifier tool in favor of direct C injection in `drivers/android/binder.c`:
-  - `REPLY` hook injected inside `binder_transaction()` in the `if (reply)` branch after `target_proc->tmp_ref++`.
-  - `TRANSACTION` hook injected inside `binder_transaction()` in the `else` branch right before `security_binder_transaction()`.
-- Note: Requires a companion app (NoActive recommended) to send freeze/thaw commands; driver stays idle when no controller is present.
+- Updated kernel-side SUSFS to v2.4.0.
+- Added 4.19 compatibility wrappers for SUSFS.
+- Made REFLEX v0.4.0 the default CPU frequency governor.
 
----
+### 2026-11-09
 
-## 🔄 Future Upgrade Playbook
+- Backported ZRAM-IR 1.3 immediate recompression and corrected idle accounting.
+- Added the NTSYNC 4.19 port and compatibility fixes.
+- Added Cambyses LB_STRICT_BUDGET behavior.
+- Fixed ramoops console sizing and previous-buffer preservation logic.
+- Added ramoops zone-state diagnostics.
 
-### Updating SuSFS
-1. `git checkout <latest working tag> && git checkout -b update-attempt`
-2. Check JackA1ltman's current branch (switches between `mainline` and `sample`).
-3. Delete pure SuSFS files: `rm -f fs/susfs.c include/linux/susfs.h include/linux/susfs_def.h`.
-4. Fetch new `susfs_patch_to_4.19.patch`.
-5. Apply with strict forward mode: `patch -p1 -N --fuzz=0 -r rejects.log < susfs_patch_to_4.19.patch`.
-6. Verify `# CONFIG_KSU_SUSFS_SUS_SU is not set` is still preserved in defconfig!
+### 2026-11-08
 
-### Updating Baseband-guard
-1. When updating `security/baseband-guard/`:
-   - Keep `HAS_DEFINE_LSM := false` in its Makefile.
-   - Do NOT allow BBG Makefile to generate `flask.h` (let SELinux generate it).
-   - Ensure `$(obj)/baseband-guard: $(obj)/selinux` remains in `security/Makefile` (no trailing slashes).
-   - Ensure `security_initcall` is mapped to `late_initcall` in `kernel_compat.h`.
-   - If resetting git files, remember to restore `bbg_cred` in `security/selinux/include/objsec.h`.
+- Ported BORE 3.1.8 and ADIOS 3.3.0 to the 4.19 scheduler and block layers.
+- Added POC selector 3.0.0, then disabled it for Wayne because asymmetric CPU capacity makes it ineligible.
+- Fixed 4.19 scheduler integration issues.
+- Added Droidspaces-oriented non-GKI 4.19 configuration support.
+- Switched KernelSU integration from ReSukiSU to the BakaSU submodule.
 
-### Updating NoMount
-1. Never commit `NoMount` as a submodule or symlink.
-2. Copy files directly to `fs/nomount/` as plain tracked files.
+### Earlier integration work
 
-### Updating Re-Kernel
-1. If `drivers/android/binder.c` is ever reset, re-inject the two `rekernel_report()` calls inside `binder_transaction()` (both `REPLY` and `TRANSACTION` branches).
-2. Ensure `CONFIG_REKERNEL=y` is set in defconfig.
+- Added SUSFS v2.3.0, followed by the current v2.4.0 update.
+- Added NoMount as flattened tracked files for clean CI checkouts.
+- Added Re-Kernel driver integration and Binder transaction/reply hooks.
+- Added Baseband Guard with the legacy 4.19 SELinux integration path.
+- Added BBRv3, LZ4 1.10.0, and device-specific performance/control changes.
 
----
+## Remaining Validation and Cleanup
 
-## 📦 Distribution Note
+1. Capture a warm-reboot pstore result from the current image and inspect `console-ramoops-0`.
+2. Run a real NTSYNC/Wine userspace test before claiming application compatibility.
+3. Run a container test before claiming Droidspaces or Docker support.
+4. Decide whether the intended default TCP congestion control is CUBIC or BBRv3, then remove conflicting Pixie/BBR defconfig lines.
+5. Enable PSI only in an isolated test build if LMK PSI is still desired.
+6. Clean Kconfig warnings and invalid duplicate defconfig assignments.
+7. Run a final device soak test on the exact `adios-wayne` tip after the README audit changes.
 
-Out of respect to **LKDenchin** and the **LKGeek Team**, who built the original base kernel this project stands on, **no prebuilt binaries are published for this fork.** If you want to use these changes, **fork this repository and build it yourself** using the included GitHub Actions workflow. Please keep all credit intact — do not strip attribution when forking or redistributing source.
+## Build
 
----
+Build through [Kernel_Action](https://github.com/DevHamid/Kernel_Action). The local tree is for source review and changes; full kernel compilation belongs in GitHub Actions.
 
-## 🤖 Professional Handoff Prompt Template
+## Credits
 
-*Use this prompt when handing context off to an AI assistant in future debugging or upgrading sessions to save tokens and prevent context loss:*
-
-```text
-CONTEXT: Xiaomi Wayne (Mi 6X / SDM660), Linux 4.19.325 custom kernel (fork: DevHamid/LKGeek_sdm660).
-ACTIVE INTEGRATIONS & ARCHITECTURE:
-1. ReSukiSU v4.2.0-rc1: Uses "CONFIG_KSU_SUSFS=y" (Inline Hook mode).
-   - CRITICAL: "CONFIG_KSU_SUSFS_SUS_SU" MUST BE DISABLED in defconfig, or native su daemon fails to deploy.
-2. SuSFS v2.3.0: Manually backported via JackA1ltman NonGKI_Kernel_Build_2nd.
-3. NoMount v2.0.0: Built-in under fs/nomount/ (plain tracked files, no symlinks/submodules due to CI clone issues).
-4. Baseband-guard (BBG): Running legacy SELinux integration.
-   - HAS_DEFINE_LSM forced to false in BBG Makefile.
-   - security/Makefile has explicit directory order: `$(obj)/baseband-guard: $(obj)/selinux` (no trailing slashes).
-   - bbg_cred hooked into security/selinux/include/objsec.h.
-   - security_initcall mapped to late_initcall in kernel_compat.h.
-5. Re-Kernel: Driver in drivers/net/rekernel/ (CONFIG_REKERNEL=y) with IPC/Reply hooks injected in drivers/android/binder.c.
-
-CONSTRAINT: Do not alter existing working hook placements without explicit verification against git diff. Be concise and provide copy-paste shell blocks.
-```
-
----
-
-## 🙏 Credits
-
-- [Claude](https://claude.ai) & [Gemini](https://gemini.google.com) — architectural diagnosis, preprocessor debugging, and Kbuild ordering
-- @wbprangga — prompt ideas & project inspiration
-- [Tashar02](https://github.com/Atom-X-Devs/scarlet_xiaomi_sdm660) & [LKGeek-Team](https://github.com/LKGeek-Team) — base SDM660 kernel
-- [Xiaolegun](https://github.com/xiaolegun) — Wayne boot & device development
-- [@LKDenchin](https://github.com/LKDenchin) — kernel & CI maintainer
-- [ReSukiSU](https://github.com/ReSukiSU/ReSukiSU) — kernel root engine & manager
-- [JackA1ltman/NonGKI_Kernel_Build_2nd](https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd) — non-GKI SuSFS & Re-Kernel backport patches
-- [maxsteeel (NoMount)](https://github.com/maxsteeel/nomount) — VFS module redirection
-- [vc-teahouse (Baseband-guard)](https://github.com/vc-teahouse/Baseband-guard) — bootloader/modem partition defense
-- [Sakion-Team (Re-Kernel)](https://github.com/Sakion-Team/Re-Kernel) — Binder process freezer
-- [MI 6X (wayne) INDONESIA 🇮🇩](https://t.me/Mi6XGroup) — community testing & support
-
----
-
-*Built with way too much coffee, zero sleep, and an unreasonable amount of `git checkout -f`.* ☕
-```
+- [LKGeek-Team](https://github.com/LKGeek-Team) and the original SDM660 contributors
+- [Baka-SU/BakaSU](https://github.com/Baka-SU/BakaSU)
+- [JackA1ltman/NonGKI_Kernel_Build_2nd](https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd)
+- [Sakion-Team/Re-Kernel](https://github.com/Sakion-Team/Re-Kernel)
+- [maxsteeel/nomount](https://github.com/maxsteeel/nomount)
+- [firelzrd/adios](https://github.com/firelzrd/adios), [bore-scheduler](https://github.com/firelzrd/bore-scheduler), and [cambyses](https://github.com/firelzrd/cambyses)
+- [google/bbr](https://github.com/google/bbr)
+- [ravindu644/Droidspaces-OSS](https://github.com/ravindu644/Droidspaces-OSS)
