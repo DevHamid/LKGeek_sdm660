@@ -92,6 +92,9 @@ static void report_smem_item(int id, const u8 *b, size_t size)
 
 	n = min_t(size_t, size, SMEM_ITEM_READ_MAX);
 
+	pr_err("smem item head: id=%d size=%zu hex=%*phN\n", id, size,
+	       (int)min_t(size_t, n, 24), b);
+
 	for (i = 0; i < n; i++) {
 		if (b[i] >= 0x20 && b[i] <= 0x7e) {
 			if (!run)
@@ -145,6 +148,27 @@ static void list_smem_items(void)
 	       id, items, min_t(int, items, SMEM_ITEM_MAX_ITEMS));
 }
 
+/*
+ * Some platforms keep the MSS crash reason in the modem's own SMEM partition
+ * rather than the global one. Report any host that actually answers for the
+ * candidate id; contents stay unread unless the global probe already found it.
+ */
+static void probe_crash_reason_hosts(void)
+{
+	unsigned int host;
+	size_t size;
+	void *p;
+
+	for (host = 0; host < 11; host++) {
+		size = 0;
+		p = qcom_smem_get(host, MPSS_CRASH_REASON_ID, &size);
+		if (IS_ERR_OR_NULL(p))
+			continue;
+		pr_err("modem crash reason: host=%u id=%d size=%zu\n",
+		       host, MPSS_CRASH_REASON_ID, size);
+	}
+}
+
 static void probe_crash_reason(void)
 {
 	size_t size = 0;
@@ -178,6 +202,7 @@ static void restart_modem(struct modem_data *drv)
 {
 	log_modem_sfr(drv);
 	probe_crash_reason();
+	probe_crash_reason_hosts();
 	list_smem_items();
 	drv->ignore_errors = true;
 	subsystem_restart_dev(drv->subsys);
