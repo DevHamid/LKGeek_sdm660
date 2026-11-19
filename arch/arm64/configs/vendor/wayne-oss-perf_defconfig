@@ -1009,3 +1009,7 @@ CONFIG_MQ_IOSCHED_DEFAULT_ADIOS=y
 
 # Modem cold-boot control (modem_boot.ko); rmtfs must answer first.
 CONFIG_QCOM_MODEM_BOOT=m
+
+# Wayne bring-up diagnostics (debug branch only)
+CONFIG_DEBUG_FS=y
+CONFIG_ICNSS_DEBUG=y
