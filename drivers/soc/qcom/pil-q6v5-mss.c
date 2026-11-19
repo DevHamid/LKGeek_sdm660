@@ -68,53 +68,117 @@ static void log_modem_sfr(struct modem_data *drv)
 }
 
 /*
- * Wayne debug: the MSS DT node has no qcom,smem-id, so log_modem_sfr()
- * returns early. Scan SMEM for any modem crash reason buffer and print it.
- * Also handles the 512-item boundary (WARN flood fix) and non-keyword misses.
+ * Wayne debug: report where the modem crash reason actually is instead of
+ * trusting one id. log_modem_sfr() needs qcom,smem-id in the MSS DT node, and
+ * this platform's node does not carry it, so a fatal leaves only the interrupt
+ * message. Enumerate the SMEM items that exist, print each one's longest
+ * printable run (bounded), and probe the MPSS crash-reason candidate id
+ * explicitly so "missing", "empty" and "binary header in front of the string"
+ * cannot be read as each other.
+ *
+ * Runs from the ERR_FATAL watchdog IRQ: no allocation, no sleeping.
  */
-static void dump_smem_reasons(struct modem_data *drv)
+#define MPSS_CRASH_REASON_ID	421
+#define SMEM_ITEM_SCAN_IDS	1024
+#define SMEM_ITEM_MAX_ITEMS	64
+#define SMEM_ITEM_READ_MAX	1024
+#define SMEM_ITEM_TEXT_MIN	8
+#define SMEM_ITEM_TEXT_MAX	96
+
+static void report_smem_item(int id, const u8 *b, size_t size)
 {
-	int id, entries = 0, printed = 0;
-	size_t size, n, i, printable;
-	void *p;
-	char buf[101];
+	size_t i, n, run = 0, start = 0, best = 0, best_off = 0, keep;
+	char text[SMEM_ITEM_TEXT_MAX + 1];
 
-	if (drv->q6->smem_id != -1)
+	n = min_t(size_t, size, SMEM_ITEM_READ_MAX);
+
+	for (i = 0; i < n; i++) {
+		if (b[i] >= 0x20 && b[i] <= 0x7e) {
+			if (!run)
+				start = i;
+			run++;
+			continue;
+		}
+		if (run > best) {
+			best = run;
+			best_off = start;
+		}
+		run = 0;
+	}
+	if (run > best) {
+		best = run;
+		best_off = start;
+	}
+
+	if (best < SMEM_ITEM_TEXT_MIN) {
+		pr_err("smem item: id=%d size=%zu text=none\n", id, size);
 		return;
+	}
 
-	for (id = 1; id <= 1024; id++) {
+	keep = min_t(size_t, best, SMEM_ITEM_TEXT_MAX);
+	memcpy(text, b + best_off, keep);
+	text[keep] = '\0';
+	pr_err("smem item: id=%d size=%zu off=%zu len=%zu: %s\n",
+	       id, size, best_off, best, text);
+}
+
+static void list_smem_items(void)
+{
+	int id, items = 0;
+	size_t size;
+	void *p;
+
+	for (id = 1; id <= SMEM_ITEM_SCAN_IDS; id++) {
 		size = 0;
 		p = qcom_smem_get(QCOM_SMEM_HOST_ANY, id, &size);
 		if (IS_ERR(p) && PTR_ERR(p) == -EINVAL)
-			break;  /* past item_count: stop, no WARN flood */
-		if (IS_ERR_OR_NULL(p) || !size || size < 8)
+			break;	/* past item_count: one boundary probe, no WARN flood */
+		if (IS_ERR_OR_NULL(p))
 			continue;
-		entries++;
-		n = min_t(size_t, size, 100);
-		memcpy(buf, p, n);
-		buf[n] = '\0';
-		printable = 0;
-		for (i = 0; i < n; i++) {
-			if (buf[i] >= 0x20 && buf[i] <= 0x7e)
-				printable++;
-			else
-				buf[i] = ' ';
-		}
-		if (printable < 12)
+
+		items++;
+		if (items > SMEM_ITEM_MAX_ITEMS)
 			continue;
-		if (printed++ >= 40)
-			continue;
-		pr_err("modem SFR scan: id=%d size=%zu printable=%d: %s\n",
-		       id, size, printable, buf);
+		report_smem_item(id, p, size);
 	}
-	pr_err("modem SFR scan end: last_id=%d entries=%d printed=%d\n",
-	       id, entries, printed);
+	pr_err("smem item list end: last_id=%d items=%d listed=%d\n",
+	       id, items, min_t(int, items, SMEM_ITEM_MAX_ITEMS));
 }
+
+static void probe_crash_reason(void)
+{
+	size_t size = 0;
+	void *p;
+
+	p = qcom_smem_get(QCOM_SMEM_HOST_ANY, MPSS_CRASH_REASON_ID, &size);
+	if (IS_ERR(p)) {
+		pr_err("modem crash reason: id=%d status=lookup-error ret=%ld\n",
+		       MPSS_CRASH_REASON_ID, PTR_ERR(p));
+		return;
+	}
+	if (!p) {
+		pr_err("modem crash reason: id=%d status=null-entry\n",
+		       MPSS_CRASH_REASON_ID);
+		return;
+	}
+	if (!size) {
+		pr_err("modem crash reason: id=%d status=found-but-empty\n",
+		       MPSS_CRASH_REASON_ID);
+		return;
+	}
+	pr_err("modem crash reason: id=%d status=found size=%zu\n",
+	       MPSS_CRASH_REASON_ID, size);
+	pr_err("modem crash reason hex: %*ph\n",
+	       (int)min_t(size_t, size, 32), (const u8 *)p);
+	report_smem_item(MPSS_CRASH_REASON_ID, p, size);
+}
+
 
 static void restart_modem(struct modem_data *drv)
 {
 	log_modem_sfr(drv);
-	dump_smem_reasons(drv);
+	probe_crash_reason();
+	list_smem_items();
 	drv->ignore_errors = true;
 	subsystem_restart_dev(drv->subsys);
 }
