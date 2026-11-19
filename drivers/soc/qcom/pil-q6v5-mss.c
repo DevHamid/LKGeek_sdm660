@@ -17,6 +17,8 @@
 #include <linux/platform_device.h>
 #include <linux/of_platform.h>
 #include <linux/io.h>
+#include <linux/kernel.h>
+#include <linux/string.h>
 #include <linux/iopoll.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
@@ -65,9 +67,46 @@ static void log_modem_sfr(struct modem_data *drv)
 	pr_err("modem subsystem failure reason: %s.\n", reason);
 }
 
+/*
+ * Wayne debug: the MSS DT node has no qcom,smem-id, so log_modem_sfr()
+ * returns before reading anything and the only console line is
+ * "Fatal error on the modem." Scan the plausible SMEM range for a printable
+ * buffer that looks like a crash reason and print what is found.
+ */
+static void dump_smem_reasons(struct modem_data *drv)
+{
+	int id;
+	size_t size;
+	char *p;
+	char buf[161];
+	size_t n;
+	size_t i;
+
+	if (drv->q6->smem_id != -1)
+		return;
+
+	for (id = 400; id <= 820; id++) {
+		p = qcom_smem_get(QCOM_SMEM_HOST_ANY, id, &size);
+		if (IS_ERR_OR_NULL(p) || size < 8)
+			continue;
+		n = min_t(size_t, size, 160);
+		memcpy(buf, p, n);
+		buf[n] = 0;
+		for (i = 0; i < n; i++)
+			if (buf[i] < 0x20 || buf[i] > 0x7e)
+				buf[i] = ' ';
+		if (!strstr(buf, "Fatal") && !strstr(buf, "fatal") &&
+		    !strstr(buf, "assert") && !strstr(buf, "Assert") &&
+		    !strstr(buf, "modem") && !strstr(buf, "MODEM"))
+			continue;
+		pr_err("modem SFR scan: smem %d (%zu bytes): %s\n", id, size, buf);
+	}
+}
+
 static void restart_modem(struct modem_data *drv)
 {
 	log_modem_sfr(drv);
+	dump_smem_reasons(drv);
 	drv->ignore_errors = true;
 	subsystem_restart_dev(drv->subsys);
 }
