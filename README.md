@@ -46,7 +46,7 @@ them behind a vague "all features" label.
 
 ### 🌐 Modern networking on an old base
 
-The tree includes **BBRv3**, an updated WireGuard port, and ARM64 BPF JIT fixes.
+The tree includes **BBRv3**, a 4.19-adapted WireGuard port, and ARM64 BPF JIT fixes.
 BBRv3 is now selected as the default for the Wayne build; CUBIC remains
 compiled as a fallback. Device-specific throughput and latency still need testing.
 
@@ -67,16 +67,16 @@ matter when the kernel is used as a daily phone rather than a benchmark image.
 | Memory | MGLRU v7 reclaim layer, re-swappiness, Le9uo, ratios, kcompressd, ZRAM-IR | Enabled in the verified build |
 | Responsiveness | BORE, REFLEX, Cambyses LB_STRICT_BUDGET, ADIOS | Enabled; POC stays disabled on asymmetric Wayne CPUs |
 | Root and control | BakaSU, SUSFS v2.4.0, NoMount, Re-Kernel | Enabled; some userspace behavior still needs device testing |
-| Networking | BBRv3, WireGuard, BPF JIT fixes | BBRv3 selected by the Wayne defconfig; runtime performance still needs testing |
+| Networking | BBRv3, WireGuard, BPF JIT fixes | BBRv3 selected and CI-verified; WireGuard portable stable fixes backported |
 | Compatibility | NTSYNC and Droidspaces-oriented kernel prerequisites | NTSYNC enabled; full Wine/container support is unverified |
 | Diagnostics | pstore and console-ramoops support | Enabled; warm-reboot persistence still needs confirmation |
 
 ## 🔍 Audit Snapshot
 
 - Branch: `adios-wayne`
-- Commit: `2980bc5f8a15e33fb5f37e60cb41cedb0775f109`
+- Build source commit: `59de36f9f045d31e698e8cd25f1ec3c851fde74e`
 - Build config: `arch/arm64/configs/vendor/wayne-oss-perf_defconfig`
-- Verified CI: [Kernel_Action run 43843387424](https://github.com/DevHamid/Kernel_Action/actions/runs/43843387424)
+- Verified CI: [Kernel_Action run 44772822339](https://github.com/DevHamid/Kernel_Action/actions/runs/44772822339)
 - CI result: kernel, boot image, and AnyKernel3 artifacts built successfully
 
 The status below separates source presence, resolved build configuration, and
@@ -94,10 +94,10 @@ device or reboot test was not available during this audit.
 | BakaSU | `KernelSU` points to Baka-SU commit `516d3e87fbc986ccefdde2c2765f1700612441a9`; CI reports `v4.2.0-rc3-516d3e87-dirty`. | Implemented, enabled, and CI-confirmed. `dirty` is the build-tree suffix, not a separate release. |
 | SUSFS | `fs/susfs.c` and `include/linux/susfs.h`; source reports `v2.4.0`. | Implemented and enabled through inline hooks. `SUS_SU` is disabled. |
 | Re-Kernel | Driver and Binder transaction/reply hooks are present. | Implemented and enabled with `CONFIG_REKERNEL=y`; userspace controller behavior remains device-dependent. |
-| NoMount | Upstream v2.3.1 kernel source under `fs/nomount/`; protocol version 23. | Implemented and enabled with `CONFIG_NOMOUNT=y`; the updated code awaits CI compilation. |
+| NoMount | Exact upstream v2.3.1 kernel sources under `fs/nomount/`; protocol version 23. | CI confirms `CONFIG_NOMOUNT=y` and `CONFIG_KEYS=y`; the driver compiled. The release recommends updating the separate metamodule alongside it. |
 | POC selector | `kernel/sched/poc_selector.c` version `3.0.0` is integrated. | Implemented in source but disabled for Wayne. SDM660 has asymmetric CPU capacity and the code deliberately gates selection there. |
 | REFLEX | `drivers/cpufreq/cpufreq_reflex.c` version `0.4.0`. | Implemented and enabled as the default CPU frequency governor. |
-| BBRv3 | `net/ipv4/tcp_bbr.c` contains `BBR_VERSION 3`, `bw_hi`, and `inflight_hi`; Wayne defconfig selects `bbr`. | Implemented and compiled in; CI must confirm the resolved default, and device performance remains unmeasured. |
+| BBRv3 | `net/ipv4/tcp_bbr.c` contains `BBR_VERSION 3`, `bw_hi`, and `inflight_hi`; Wayne defconfig selects `bbr`. | CI resolved config confirms `CONFIG_DEFAULT_TCP_CONG="bbr"`; CUBIC remains compiled. Comparative device performance is unmeasured. |
 | LZ4 | Kernel LZ4 library reports `1.10.0`. | Implemented and enabled; ZRAM defaults to LZ4. |
 | NTSYNC | `drivers/misc/ntsync.c` with 4.19 compatibility shims. | Implemented and enabled with `CONFIG_NTSYNC=y`; Wine/Proton runtime compatibility is untested. |
 | Droidspaces | Namespace, cgroup, overlay, and networking prerequisites are staged. | Partial. `CONFIG_CGROUP_PIDS` and `CONFIG_CHECKPOINT_RESTORE` are off in the resolved image, so complete Droidspaces or Docker support is not proven. |
@@ -114,7 +114,7 @@ device or reboot test was not available during this audit.
 | Ratio memory protection | `ANON_MIN_RATIO`, `CLEAN_LOW_RATIO`, and `CLEAN_MIN_RATIO` are wired into reclaim; resolved values are `15/0/15`. |
 | Re-swappiness / Le9uo | Commit `900e12fc7` reshapes MGLRU state for per-type `max_seq`, walk state, and swappiness-aware reclaim. `mm/vmscan.c` contains the Le9uo protection path and swappiness values up to 200. | Present, compiled, and enabled as part of MGLRU. There is no separate `CONFIG_RE_SWAPPINESS` or `CONFIG_LE9UO` symbol; these are integrated MGLRU behaviors. |
 | ZRAM-IR | Branch history contains the ZRAM-IR 1.3 immediate-recompression backport and idle-accounting fix; ZRAM, writeback, multi-compression, and LZ4 are enabled. |
-| WireGuard refresh | 4.19 port plus API and upstream fixes; `CONFIG_WIREGUARD=y`. |
+| WireGuard upstream backport | `CONFIG_WIREGUARD=y`. The 4.19 port now carries the portable fixes from upstream stable HEAD `6d02c757940afc798e0eb294108262c3e55b1c5d`: unaligned-safe IPv6 allowed-IP handling and keypair zeroization on free. | Built successfully. The remaining upstream differences are 6.19+ API refactors (generated netlink/split ops, `sockaddr_inet`, `DEV_STATS`, `timer_delete`, `udp_tunnel` signatures) that do not apply to 4.19. A live VPN test is still required. |
 | ARM64 BPF JIT fixes | Range-safe TBZ/TBNZ handling, JSET fallbacks, and related backported optimizations; BPF JIT is enabled. |
 | Baseband Guard | `security/baseband-guard/` and SELinux build-order fixes; `CONFIG_BBG=y`. Boot and recovery blocking remain disabled. |
 | Modem boot control | `drivers/soc/qcom/modem_boot.c` and Kconfig/Makefile integration; `CONFIG_QCOM_MODEM_BOOT=y`. Runtime behavior needs device testing. |
@@ -123,12 +123,12 @@ device or reboot test was not available during this audit.
 
 ## ⚙️ Resolved Configuration Notes
 
-The source defconfig is not sufficient to describe the final kernel. The successful CI build generated these important results:
+The source defconfig is not sufficient to describe the final kernel. Kernel_Action run 44772822339 built source commit `59de36f9f045d31e698e8cd25f1ec3c851fde74e`; its resolved config and published artifacts were verified.
 
 - MGLRU is enabled by default, including the v7 reclaim-loop layer and re-swappiness/Le9uo structural support.
 - ADIOS is the default MQ scheduler.
 - BORE and REFLEX are enabled; REFLEX is the default CPU governor.
-- BBRv3 is compiled in and selected by the Wayne defconfig; the next CI resolved config must confirm the final choice.
+- Run 44772822339 resolved config confirms BBRv3 as the TCP default; CUBIC is still available.
 - PSI is disabled.
 - MEMCG and MEMCG_SWAP are enabled.
 - MEMCG_KMEM is disabled by the branch's boot-stability fix.
@@ -139,6 +139,13 @@ The source defconfig is not sufficient to describe the final kernel. The success
 - Kconfig emits warnings for KernelSU choice values and duplicate or invalid defconfig assignments. The build completed, but these warnings should be cleaned up before treating the configuration as final.
 
 ## 📝 Changelog for adios-wayne
+
+### 2026-11-20
+
+- Updated the NoMount kernel integration to the exact v2.3.1 upstream source; the cloud build confirms `CONFIG_NOMOUNT=y` and `CONFIG_KEYS=y`.
+- Selected BBRv3 as the Wayne TCP default; the resolved config confirms `CONFIG_DEFAULT_TCP_CONG="bbr"`, with CUBIC retained as an available alternative.
+- Backported the remaining portable WireGuard fixes from stable HEAD `6d02c757940afc798e0eb294108262c3e55b1c5d` (unaligned allowed-IP load, keypair wipe); newer upstream changes depend on 6.19+ APIs.
+- Verified cloud build [44772822339](https://github.com/DevHamid/Kernel_Action/actions/runs/44772822339) on branch `wg-upstream-4.19`, then fast-forwarded `adios-wayne` to the same tree. Device testing remains outstanding.
 
 ### 2026-11-15
 
@@ -196,7 +203,7 @@ The source defconfig is not sufficient to describe the final kernel. The success
 4. Compare Wayne throughput and latency with BBRv3 against the CUBIC fallback under the same network and queue-discipline settings.
 5. Enable PSI only in an isolated test build if LMK PSI is still desired.
 6. Clean Kconfig warnings and invalid duplicate defconfig assignments.
-7. Run a final device soak test on the exact `adios-wayne` tip after the README audit changes.
+7. Test NoMount behavior and compare BBRv3/CUBIC throughput and latency on Wayne; the CI build does not replace device validation.
 
 ## 🛠️ Build
 
