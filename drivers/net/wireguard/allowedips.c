@@ -15,8 +15,15 @@ static void swap_endian(u8 *dst, const u8 *src, u8 bits)
 	if (bits == 32) {
 		*(u32 *)dst = be32_to_cpu(*(const __be32 *)src);
 	} else if (bits == 128) {
-		((u64 *)dst)[0] = be64_to_cpu(((const __be64 *)src)[0]);
-		((u64 *)dst)[1] = be64_to_cpu(((const __be64 *)src)[1]);
+		/* 4.19: no linux/unaligned.h on arm64; memcpy keeps the
+		 * load unaligned-safe on every architecture.
+		 */
+		__be64 tmp;
+
+		memcpy(&tmp, src, sizeof(tmp));
+		((u64 *)dst)[0] = be64_to_cpu(tmp);
+		memcpy(&tmp, src + 8, sizeof(tmp));
+		((u64 *)dst)[1] = be64_to_cpu(tmp);
 	}
 }
 
