@@ -47,8 +47,8 @@ them behind a vague "all features" label.
 ### 🌐 Modern networking on an old base
 
 The tree includes **BBRv3**, an updated WireGuard port, and ARM64 BPF JIT fixes.
-BBRv3 is available for testing, while **CUBIC remains the safe default** until
-Wayne-specific measurements prove a better choice.
+BBRv3 is now selected as the default for the Wayne build; CUBIC remains
+compiled as a fallback. Device-specific throughput and latency still need testing.
 
 ### 📦 A practical toolbox
 
@@ -67,7 +67,7 @@ matter when the kernel is used as a daily phone rather than a benchmark image.
 | Memory | MGLRU v7 reclaim layer, re-swappiness, Le9uo, ratios, kcompressd, ZRAM-IR | Enabled in the verified build |
 | Responsiveness | BORE, REFLEX, Cambyses LB_STRICT_BUDGET, ADIOS | Enabled; POC stays disabled on asymmetric Wayne CPUs |
 | Root and control | BakaSU, SUSFS v2.4.0, NoMount, Re-Kernel | Enabled; some userspace behavior still needs device testing |
-| Networking | BBRv3, WireGuard, BPF JIT fixes | BBRv3 available; CUBIC is the default |
+| Networking | BBRv3, WireGuard, BPF JIT fixes | BBRv3 selected by the Wayne defconfig; runtime performance still needs testing |
 | Compatibility | NTSYNC and Droidspaces-oriented kernel prerequisites | NTSYNC enabled; full Wine/container support is unverified |
 | Diagnostics | pstore and console-ramoops support | Enabled; warm-reboot persistence still needs confirmation |
 
@@ -94,10 +94,10 @@ device or reboot test was not available during this audit.
 | BakaSU | `KernelSU` points to Baka-SU commit `516d3e87fbc986ccefdde2c2765f1700612441a9`; CI reports `v4.2.0-rc3-516d3e87-dirty`. | Implemented, enabled, and CI-confirmed. `dirty` is the build-tree suffix, not a separate release. |
 | SUSFS | `fs/susfs.c` and `include/linux/susfs.h`; source reports `v2.4.0`. | Implemented and enabled through inline hooks. `SUS_SU` is disabled. |
 | Re-Kernel | Driver and Binder transaction/reply hooks are present. | Implemented and enabled with `CONFIG_REKERNEL=y`; userspace controller behavior remains device-dependent. |
-| NoMount | Flattened tracked source under `fs/nomount/`; source reports version `20`. | Implemented and enabled with `CONFIG_NOMOUNT=y`. |
+| NoMount | Upstream v2.3.1 kernel source under `fs/nomount/`; protocol version 23. | Implemented and enabled with `CONFIG_NOMOUNT=y`; the updated code awaits CI compilation. |
 | POC selector | `kernel/sched/poc_selector.c` version `3.0.0` is integrated. | Implemented in source but disabled for Wayne. SDM660 has asymmetric CPU capacity and the code deliberately gates selection there. |
 | REFLEX | `drivers/cpufreq/cpufreq_reflex.c` version `0.4.0`. | Implemented and enabled as the default CPU frequency governor. |
-| BBRv3 | `net/ipv4/tcp_bbr.c` contains `BBR_VERSION 3`, `bw_hi`, and `inflight_hi`. | Implemented and compiled in. It is not the active default: resolved config says `CONFIG_DEFAULT_TCP_CONG="cubic"`. |
+| BBRv3 | `net/ipv4/tcp_bbr.c` contains `BBR_VERSION 3`, `bw_hi`, and `inflight_hi`; Wayne defconfig selects `bbr`. | Implemented and compiled in; CI must confirm the resolved default, and device performance remains unmeasured. |
 | LZ4 | Kernel LZ4 library reports `1.10.0`. | Implemented and enabled; ZRAM defaults to LZ4. |
 | NTSYNC | `drivers/misc/ntsync.c` with 4.19 compatibility shims. | Implemented and enabled with `CONFIG_NTSYNC=y`; Wine/Proton runtime compatibility is untested. |
 | Droidspaces | Namespace, cgroup, overlay, and networking prerequisites are staged. | Partial. `CONFIG_CGROUP_PIDS` and `CONFIG_CHECKPOINT_RESTORE` are off in the resolved image, so complete Droidspaces or Docker support is not proven. |
@@ -128,7 +128,7 @@ The source defconfig is not sufficient to describe the final kernel. The success
 - MGLRU is enabled by default, including the v7 reclaim-loop layer and re-swappiness/Le9uo structural support.
 - ADIOS is the default MQ scheduler.
 - BORE and REFLEX are enabled; REFLEX is the default CPU governor.
-- BBRv3 is compiled in, but TCP defaults to CUBIC.
+- BBRv3 is compiled in and selected by the Wayne defconfig; the next CI resolved config must confirm the final choice.
 - PSI is disabled.
 - MEMCG and MEMCG_SWAP are enabled.
 - MEMCG_KMEM is disabled by the branch's boot-stability fix.
@@ -193,7 +193,7 @@ The source defconfig is not sufficient to describe the final kernel. The success
 1. Capture a warm-reboot pstore result from the current image and inspect `console-ramoops-0`.
 2. Run a real NTSYNC/Wine userspace test before claiming application compatibility.
 3. Run a container test before claiming Droidspaces or Docker support.
-4. Decide whether the intended default TCP congestion control is CUBIC or BBRv3, then remove conflicting Pixie/BBR defconfig lines.
+4. Compare Wayne throughput and latency with BBRv3 against the CUBIC fallback under the same network and queue-discipline settings.
 5. Enable PSI only in an isolated test build if LMK PSI is still desired.
 6. Clean Kconfig warnings and invalid duplicate defconfig assignments.
 7. Run a final device soak test on the exact `adios-wayne` tip after the README audit changes.
