@@ -90,6 +90,8 @@ int wlfw_msa_mem_info_send_sync_msg(struct icnss_priv *priv)
 
 	ret = qmi_txn_init(&priv->qmi, &txn,
 			   wlfw_msa_info_resp_msg_v01_ei, resp);
+	pr_err("[ICNSS-TRACE-v1] stage=MSA_INFO phase=init rc=%d\n",
+	       ret);
 	if (ret < 0) {
 		icnss_qmi_fatal_err("Fail to init txn for MSA Mem info resp %d\n",
 			     ret);
@@ -100,6 +102,8 @@ int wlfw_msa_mem_info_send_sync_msg(struct icnss_priv *priv)
 			       QMI_WLFW_MSA_INFO_REQ_V01,
 			       WLFW_MSA_INFO_REQ_MSG_V01_MAX_MSG_LEN,
 			       wlfw_msa_info_req_msg_v01_ei, req);
+	pr_err("[ICNSS-TRACE-v1] stage=MSA_INFO phase=send rc=%d\n",
+	       ret);
 	if (ret < 0) {
 		qmi_txn_cancel(&txn);
 		icnss_qmi_fatal_err("Fail to send MSA Mem info req %d\n", ret);
@@ -107,6 +111,10 @@ int wlfw_msa_mem_info_send_sync_msg(struct icnss_priv *priv)
 	}
 
 	ret = qmi_txn_wait(&txn, WLFW_TIMEOUT);
+	pr_err("[ICNSS-TRACE-v1] stage=MSA_INFO phase=wait rc=%d decoded=%u result=%d error=%d\n",
+	       ret, (unsigned int)(ret >= 0),
+	       ret >= 0 ? (int)resp->resp.result : -1,
+	       ret >= 0 ? (int)resp->resp.error : -1);
 	if (ret < 0) {
 		icnss_qmi_fatal_err("MSA Mem info resp wait failed ret %d\n",
 				    ret);
@@ -197,6 +205,8 @@ int wlfw_msa_ready_send_sync_msg(struct icnss_priv *priv)
 
 	ret = qmi_txn_init(&priv->qmi, &txn,
 			   wlfw_msa_ready_resp_msg_v01_ei, resp);
+	pr_err("[ICNSS-TRACE-v1] stage=MSA_READY phase=init rc=%d\n",
+	       ret);
 	if (ret < 0) {
 		icnss_qmi_fatal_err("Fail to init txn for MSA Mem Ready resp %d\n",
 			     ret);
@@ -207,6 +217,8 @@ int wlfw_msa_ready_send_sync_msg(struct icnss_priv *priv)
 			       QMI_WLFW_MSA_READY_REQ_V01,
 			       WLFW_MSA_READY_REQ_MSG_V01_MAX_MSG_LEN,
 			       wlfw_msa_ready_req_msg_v01_ei, req);
+	pr_err("[ICNSS-TRACE-v1] stage=MSA_READY phase=send rc=%d\n",
+	       ret);
 	if (ret < 0) {
 		qmi_txn_cancel(&txn);
 		icnss_qmi_fatal_err("Fail to send MSA Mem Ready req %d\n", ret);
@@ -214,6 +226,10 @@ int wlfw_msa_ready_send_sync_msg(struct icnss_priv *priv)
 	}
 
 	ret = qmi_txn_wait(&txn, WLFW_TIMEOUT);
+	pr_err("[ICNSS-TRACE-v1] stage=MSA_READY phase=wait rc=%d decoded=%u result=%d error=%d\n",
+	       ret, (unsigned int)(ret >= 0),
+	       ret >= 0 ? (int)resp->resp.result : -1,
+	       ret >= 0 ? (int)resp->resp.error : -1);
 	if (ret < 0) {
 		icnss_qmi_fatal_err("MSA Mem Ready resp wait failed with ret %d\n",
 			     ret);
@@ -278,6 +294,8 @@ int wlfw_ind_register_send_sync_msg(struct icnss_priv *priv)
 
 	ret = qmi_txn_init(&priv->qmi, &txn,
 			   wlfw_ind_register_resp_msg_v01_ei, resp);
+	pr_err("[ICNSS-TRACE-v1] stage=IND_REGISTER phase=init rc=%d\n",
+	       ret);
 	if (ret < 0) {
 		icnss_qmi_fatal_err("Fail to init txn for Ind Register resp %d\n",
 			     ret);
@@ -288,6 +306,8 @@ int wlfw_ind_register_send_sync_msg(struct icnss_priv *priv)
 			       QMI_WLFW_IND_REGISTER_REQ_V01,
 			       WLFW_IND_REGISTER_REQ_MSG_V01_MAX_MSG_LEN,
 			       wlfw_ind_register_req_msg_v01_ei, req);
+	pr_err("[ICNSS-TRACE-v1] stage=IND_REGISTER phase=send rc=%d\n",
+	       ret);
 	if (ret < 0) {
 		qmi_txn_cancel(&txn);
 		icnss_qmi_fatal_err("Fail to send Ind Register req %d\n", ret);
@@ -295,6 +315,10 @@ int wlfw_ind_register_send_sync_msg(struct icnss_priv *priv)
 	}
 
 	ret = qmi_txn_wait(&txn, WLFW_TIMEOUT);
+	pr_err("[ICNSS-TRACE-v1] stage=IND_REGISTER phase=wait rc=%d decoded=%u result=%d error=%d\n",
+	       ret, (unsigned int)(ret >= 0),
+	       ret >= 0 ? (int)resp->resp.result : -1,
+	       ret >= 0 ? (int)resp->resp.error : -1);
 	if (ret < 0) {
 		icnss_qmi_fatal_err("Ind Register resp wait failed with ret %d\n",
 			     ret);
@@ -307,6 +331,9 @@ int wlfw_ind_register_send_sync_msg(struct icnss_priv *priv)
 	}
 
 	priv->stats.ind_register_resp++;
+	pr_err("[ICNSS-TRACE-v1] stage=IND_REGISTER phase=status valid=%u flags=0x%llx\n",
+	       (unsigned int)resp->fw_status_valid,
+	       resp->fw_status_valid ? resp->fw_status : 0ULL);
 
 	if (resp->fw_status_valid &&
 	   (resp->fw_status & QMI_WLFW_ALREADY_REGISTERED_V01)) {
@@ -353,6 +380,8 @@ int wlfw_cap_send_sync_msg(struct icnss_priv *priv)
 	priv->stats.cap_req++;
 
 	ret = qmi_txn_init(&priv->qmi, &txn, wlfw_cap_resp_msg_v01_ei, resp);
+	pr_err("[ICNSS-TRACE-v1] stage=CAP phase=init rc=%d\n",
+	       ret);
 	if (ret < 0) {
 		icnss_qmi_fatal_err("Fail to init txn for Capability resp %d\n",
 				    ret);
@@ -363,6 +392,8 @@ int wlfw_cap_send_sync_msg(struct icnss_priv *priv)
 			       QMI_WLFW_CAP_REQ_V01,
 			       WLFW_CAP_REQ_MSG_V01_MAX_MSG_LEN,
 			       wlfw_cap_req_msg_v01_ei, req);
+	pr_err("[ICNSS-TRACE-v1] stage=CAP phase=send rc=%d\n",
+	       ret);
 	if (ret < 0) {
 		qmi_txn_cancel(&txn);
 		icnss_qmi_fatal_err("Fail to send Capability req %d\n", ret);
@@ -370,6 +401,10 @@ int wlfw_cap_send_sync_msg(struct icnss_priv *priv)
 	}
 
 	ret = qmi_txn_wait(&txn, WLFW_TIMEOUT);
+	pr_err("[ICNSS-TRACE-v1] stage=CAP phase=wait rc=%d decoded=%u result=%d error=%d\n",
+	       ret, (unsigned int)(ret >= 0),
+	       ret >= 0 ? (int)resp->resp.result : -1,
+	       ret >= 0 ? (int)resp->resp.error : -1);
 	if (ret < 0) {
 		icnss_qmi_fatal_err("Capability resp wait failed with ret %d\n",
 				    ret);
@@ -1036,6 +1071,10 @@ void icnss_handle_rejuvenate(struct icnss_priv *priv)
 static void fw_ready_ind_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 			    struct qmi_txn *txn, const void *data)
 {
+	int trace_post_ret;
+
+	pr_err("[ICNSS-TRACE-v1] stage=FW_READY phase=callback txn_present=%u\n",
+	       (unsigned int)!!txn);
 	icnss_pr_dbg("Received FW Ready Indication\n");
 
 	if (!txn) {
@@ -1043,8 +1082,10 @@ static void fw_ready_ind_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 		return;
 	}
 
-	icnss_driver_event_post(ICNSS_DRIVER_EVENT_FW_READY_IND,
-				0, NULL);
+	trace_post_ret = icnss_driver_event_post(ICNSS_DRIVER_EVENT_FW_READY_IND,
+						 0, NULL);
+	pr_err("[ICNSS-TRACE-v1] stage=FW_READY phase=post rc=%d\n",
+	       trace_post_ret);
 }
 
 static void msa_ready_ind_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
@@ -1240,6 +1281,8 @@ int icnss_connect_to_fw_server(struct icnss_priv *priv, void *data)
 	sq.sq_node = event_data->node;
 	sq.sq_port = event_data->port;
 	ret = kernel_connect(qmi->sock, (struct sockaddr *)&sq, sizeof(sq), 0);
+	pr_err("[ICNSS-TRACE-v1] stage=CONNECT phase=socket rc=%d node=%u port=%u state=0x%lx\n",
+	       ret, sq.sq_node, sq.sq_port, priv->state);
 	if (ret < 0) {
 		icnss_pr_err("Fail to connect to remote service port\n");
 		goto out;
