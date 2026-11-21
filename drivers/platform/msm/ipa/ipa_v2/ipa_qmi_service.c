@@ -295,6 +295,8 @@ static int ipa_qmi_send_req_wait(struct qmi_handle *client_handle,
 		return ret;
 	}
 	ret = qmi_txn_wait(&txn, msecs_to_jiffies(timeout_ms));
+	if (ret < 0)
+		qmi_txn_cancel(&txn);
 
 	return ret;
 }
@@ -791,6 +793,9 @@ static void ipa_q6_clnt_svc_arrive(struct work_struct *work)
 	}
 
 	IPAWANDBG("Q6 QMI service available now\n");
+	pr_err("ipa-debug: Q6 arrive node=%u port=%u init=%d ssr=%d\n",
+		ipa_qmi_ctx->server_sq.sq_node, ipa_qmi_ctx->server_sq.sq_port,
+		qmi_modem_init_fin, ipa_rmnet_ctx.ipa_rmnet_ssr);
 	/* Initialize modem IPA-driver */
 	IPAWANDBG("send qmi_init_modem_send_sync_msg to modem\n");
 	rc = qmi_init_modem_send_sync_msg();
@@ -802,12 +807,13 @@ static void ipa_q6_clnt_svc_arrive(struct work_struct *work)
 		return;
 	}
 	if (rc != 0) {
-		IPAWANERR("qmi_init_modem_send_sync_msg failed\n");
-		/*
-		 * This is a very unexpected scenario, which requires a kernel
-		 * panic in order to force dumps for QMI/Q6 side analysis.
-		 */
-		ipa_assert();
+		IPAWANERR("qmi_init_modem_send_sync_msg failed, rc=%d\n", rc);
+		pr_err("ipa-debug: INIT_DRIVER failed rc=%d node=%u port=%u init=%d ssr=%d\n",
+			rc, ipa_qmi_ctx->server_sq.sq_node,
+			ipa_qmi_ctx->server_sq.sq_port,
+			qmi_modem_init_fin, ipa_rmnet_ctx.ipa_rmnet_ssr);
+		/* A modem-side timeout must not panic the AP.  Leave the
+		 * handshake incomplete and let the next service event retry it. */
 		return;
 	}
 	qmi_modem_init_fin = true;
@@ -857,6 +863,10 @@ static int ipa_q6_clnt_svc_event_notify_svc_new(struct qmi_handle *qmi,
 	IPAWANDBG("QMI svc:%d vers:%d ins:%d node:%d port:%d\n",
 		  service->service, service->version, service->instance,
 		  service->node, service->port);
+	pr_err("ipa-debug: Q6 new svc=%u vers=%u ins=%u node=%u port=%u init=%d ssr=%d\n",
+		service->service, service->version, service->instance,
+		service->node, service->port,
+		qmi_modem_init_fin, ipa_rmnet_ctx.ipa_rmnet_ssr);
 
 	if (ipa_qmi_ctx != NULL) {
 		ipa_qmi_ctx->server_sq.sq_family = AF_QIPCRTR;
