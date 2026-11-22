@@ -46,7 +46,7 @@ static void log_modem_sfr(struct modem_data *drv)
 {
 	size_t size;
 	char *smem_reason, reason[MAX_SSR_REASON_LEN];
-	int id;
+	int host, id;
 
 	if (drv->q6->smem_id != -1) {
 		smem_reason = qcom_smem_get(QCOM_SMEM_HOST_ANY,
@@ -69,41 +69,44 @@ static void log_modem_sfr(struct modem_data *drv)
 	/*
 	 * The MSS DT node has no qcom,smem-id, so the usual lookup is
 	 * disabled and every fatal prints only "Fatal error on the
-	 * modem.".  Scan every SMEM item once at fatal time and print
-	 * id/size/longest-printable-run/text for any reason-sized
-	 * printable blob, so the real id can be wired afterwards.
+	 * modem.".  Walk every host partition and every global-toc item
+	 * once at fatal time and print id/size/longest-printable-run/
+	 * text for any reason-sized printable blob, so the real host/id
+	 * can be wired afterwards.  Debug only; runs on the fatal path.
 	 */
-	for (id = 0; id < 1024; id++) {
-		char buf[49];
-		unsigned int run = 0, best = 0;
-		size_t j, k;
+	for (host = 0; host < 11; host++) {
+		for (id = 0; id < 512; id++) {
+			char buf[97];
+			unsigned int run = 0, best = 0;
+			size_t j, k;
 
-		smem_reason = qcom_smem_get(QCOM_SMEM_HOST_ANY, id, &size);
-		if (IS_ERR(smem_reason) || !size || size > 1024)
-			continue;
+			smem_reason = qcom_smem_get(host, id, &size);
+			if (IS_ERR(smem_reason) || !size || size > 4096)
+				continue;
 
-		for (j = 0; j < size; j++) {
-			char c = smem_reason[j];
+			for (j = 0; j < size; j++) {
+				char c = smem_reason[j];
 
-			if (c >= 0x20 && c < 0x7f) {
-				run++;
-				if (run > best)
-					best = run;
-			} else {
-				run = 0;
+				if (c >= 0x20 && c < 0x7f) {
+					run++;
+					if (run > best)
+						best = run;
+				} else {
+					run = 0;
+				}
 			}
-		}
-		if (best < 8)
-			continue;
+			if (best < 8)
+				continue;
 
-		for (k = 0; k < size && k < 48; k++) {
-			char c = smem_reason[k];
+			for (k = 0; k < size && k < 96; k++) {
+				char c = smem_reason[k];
 
-			buf[k] = (c >= 0x20 && c < 0x7f) ? c : '.';
+				buf[k] = (c >= 0x20 && c < 0x7f) ? c : '.';
+			}
+			buf[k] = '\0';
+			pr_err("modem SFR scan: host=%d id=%d size=%zu run=%u txt=%s\n",
+			       host, id, size, best, buf);
 		}
-		buf[k] = '\0';
-		pr_err("modem SFR scan: id=%d size=%zu run=%u txt=%s\n",
-		       id, size, best, buf);
 	}
 }
 
