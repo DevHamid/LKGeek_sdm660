@@ -2004,7 +2004,8 @@ static int too_many_isolated(struct pglist_data *pgdat, int file,
 }
 
 static noinline_for_stack void
-putback_inactive_pages(struct lruvec *lruvec, struct list_head *page_list)
+putback_inactive_pages(struct lruvec *lruvec, struct list_head *page_list,
+		       unsigned long seq)
 {
 	struct zone_reclaim_stat *reclaim_stat = &lruvec->reclaim_stat;
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
@@ -2028,7 +2029,8 @@ putback_inactive_pages(struct lruvec *lruvec, struct list_head *page_list)
 		lruvec = mem_cgroup_page_lruvec(page, pgdat);
 
 		SetPageLRU(page);
-		add_page_to_lru_list(page, lruvec);
+		if (seq == -1UL || !lru_gen_add_rejected_page(lruvec, page, seq))
+			add_page_to_lru_list(page, lruvec);
 
 		if (PageActive(page)) {
 			int file = page_is_file_cache(page);
@@ -2182,7 +2184,7 @@ shrink_inactive_list(unsigned long nr_to_scan, struct lruvec *lruvec,
 				   nr_reclaimed);
 	}
 
-	putback_inactive_pages(lruvec, &page_list);
+	putback_inactive_pages(lruvec, &page_list, -1UL);
 
 	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, -nr_taken);
 
@@ -4556,7 +4558,8 @@ static bool isolate_page(struct lruvec *lruvec, struct page *page, struct scan_c
 
 static int scan_pages(unsigned long nr_to_scan, struct lruvec *lruvec,
 		      struct scan_control *sc, int type, int tier,
-		      struct list_head *list, int *isolatedp)
+		      struct list_head *list, int *isolatedp,
+		      unsigned long *scanned_seqp)
 {
 	int gen, max_gen, zone;
 	enum vm_event_item item;
@@ -4586,6 +4589,7 @@ static int scan_pages(unsigned long nr_to_scan, struct lruvec *lruvec,
 
 	gen = lru_gen_from_seq(min_seq);
 	max_gen = lru_gen_from_seq(lrugen->max_seq[type]);
+	*scanned_seqp = min_seq;
 
 	for (zone = sc->reclaim_idx; zone >= 0; zone--) {
 		LIST_HEAD(moved);
@@ -4846,6 +4850,7 @@ static int evict_pages(unsigned long nr_to_scan, struct lruvec *lruvec,
 	int isolated = 0;
 	int tier;
 	unsigned long nr_taken;
+	unsigned long scanned_seq = -1UL;
 	LIST_HEAD(list);
 	struct page *page;
 	struct reclaim_stat stat;
@@ -4860,7 +4865,8 @@ static int evict_pages(unsigned long nr_to_scan, struct lruvec *lruvec,
 	try_to_inc_min_seq(lruvec, swappiness);
 
 	tier = get_tier_idx(lruvec, type);
-	scanned = scan_pages(nr_to_scan, lruvec, sc, type, tier, &list, &isolated);
+	scanned = scan_pages(nr_to_scan, lruvec, sc, type, tier, &list, &isolated,
+			     &scanned_seq);
 
 	/* scanning may have emptied the oldest gen, flush it */
 	if (scanned)
@@ -4894,7 +4900,7 @@ static int evict_pages(unsigned long nr_to_scan, struct lruvec *lruvec,
 
 	spin_lock_irq(&pgdat->lru_lock);
 
-	putback_inactive_pages(lruvec, &list);
+	putback_inactive_pages(lruvec, &list, scanned_seq);
 
 	walk = current->reclaim_state ? current->reclaim_state->mm_walk : NULL;
 	if (walk && walk->batched)
