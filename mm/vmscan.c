@@ -3489,12 +3489,11 @@ static int page_update_gen(struct page *page, int gen)
 	return ((old_flags & LRU_GEN_MASK) >> LRU_GEN_PGOFF) - 1;
 }
 
-static int page_inc_gen(struct lruvec *lruvec, struct page *page, bool reclaiming)
+static int __page_inc_gen(struct page *page, int old_gen, bool reclaiming,
+			  bool *increased)
 {
 	unsigned long old_flags, new_flags;
-	int type = page_is_file_cache(page);
-	struct lru_gen_struct *lrugen = &lruvec->lrugen;
-	int new_gen, old_gen = lru_gen_from_seq(lrugen->min_seq[type]);
+	int new_gen;
 
 	do {
 		new_flags = old_flags = READ_ONCE(page->flags);
@@ -3502,8 +3501,10 @@ static int page_inc_gen(struct lruvec *lruvec, struct page *page, bool reclaimin
 
 		new_gen = ((new_flags & LRU_GEN_MASK) >> LRU_GEN_PGOFF) - 1;
 		/* page_update_gen() has promoted this page? */
-		if (new_gen >= 0 && new_gen != old_gen)
+		if (new_gen >= 0 && new_gen != old_gen) {
+			*increased = false;
 			return new_gen;
+		}
 
 		new_gen = (old_gen + 1) % MAX_NR_GENS;
 
@@ -3515,7 +3516,21 @@ static int page_inc_gen(struct lruvec *lruvec, struct page *page, bool reclaimin
 			new_flags |= BIT(PG_reclaim);
 	} while (cmpxchg(&page->flags, old_flags, new_flags) != old_flags);
 
-	lru_gen_update_size(lruvec, page, old_gen, new_gen);
+	*increased = true;
+
+	return new_gen;
+}
+
+static int page_inc_gen(struct lruvec *lruvec, struct page *page, int old_gen,
+			bool reclaiming)
+{
+	int new_gen;
+	bool gen_increased;
+
+	new_gen = __page_inc_gen(page, old_gen, reclaiming, &gen_increased);
+
+	if (gen_increased)
+		lru_gen_update_size(lruvec, page, old_gen, new_gen);
 
 	return new_gen;
 }
@@ -4018,26 +4033,15 @@ static void inc_min_seq(struct lruvec *lruvec, int type)
 
 static void try_to_inc_min_seq(struct lruvec *lruvec, bool can_swap)
 {
-	int gen, type, zone;
+	int type;
 	struct lru_gen_struct *lrugen = &lruvec->lrugen;
 	DEFINE_MIN_SEQ(lruvec);
 
 	VM_BUG_ON(!seq_is_valid(lruvec));
 
-	for (type = !can_swap; type < ANON_AND_FILE; type++) {
-		while (min_seq[type] + MIN_NR_GENS <= lrugen->max_seq[type]) {
-			gen = lru_gen_from_seq(min_seq[type]);
-
-			for (zone = 0; zone < MAX_NR_ZONES; zone++) {
-				if (!list_empty(&lrugen->lists[gen][type][zone]))
-					goto next;
-			}
-
-			min_seq[type]++;
-		}
-next:
-		;
-	}
+	for (type = !can_swap; type < ANON_AND_FILE; type++)
+		min_seq[type] = lruvec_populated_min_seq(lruvec, type, MAX_NR_ZONES,
+							 lrugen->max_seq[type] - MIN_NR_GENS + 1);
 
 	/* see the comment on lru_gen_struct */
 	if (can_swap) {
@@ -4466,7 +4470,9 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
  *                          the eviction
  ******************************************************************************/
 
-static bool sort_page(struct lruvec *lruvec, struct page *page, int tier_idx)
+static bool sort_page(struct lruvec *lruvec, struct page *page,
+		      struct scan_control *sc, int min_gen, int max_gen,
+		      int tier_idx)
 {
 	bool success;
 	int gen = page_lru_gen(page);
@@ -4495,15 +4501,23 @@ static bool sort_page(struct lruvec *lruvec, struct page *page, int tier_idx)
 		return true;
 	}
 
-	if (gen != lru_gen_from_seq(lrugen->min_seq[type])) {
+	/* promoted */
+	if (gen != min_gen) {
 		list_move(&page->lru, &lrugen->lists[gen][type][zone]);
 		return true;
 	}
 
+	/*
+	 * We are reclaiming the last gen left. Pages in this gen can no
+	 * longer be promoted or protected, so just isolate them.
+	 */
+	if (min_gen == max_gen)
+		return false;
+
 	if (tier > tier_idx) {
 		int hist = lru_hist_from_seq(lrugen->min_seq[type]);
 
-		gen = page_inc_gen(lruvec, page, false);
+		gen = page_inc_gen(lruvec, page, min_gen, false);
 		list_move_tail(&page->lru, &lrugen->lists[gen][type][zone]);
 
 		WRITE_ONCE(lrugen->protected[hist][type][tier - 1],
@@ -4514,7 +4528,7 @@ static bool sort_page(struct lruvec *lruvec, struct page *page, int tier_idx)
 
 	if (PageLocked(page) || PageWriteback(page) ||
 	    (type == LRU_GEN_FILE && PageDirty(page))) {
-		gen = page_inc_gen(lruvec, page, true);
+		gen = page_inc_gen(lruvec, page, min_gen, true);
 		list_move(&page->lru, &lrugen->lists[gen][type][zone]);
 		return true;
 	}
@@ -4543,22 +4557,29 @@ static bool isolate_page(struct lruvec *lruvec, struct page *page, struct scan_c
 static int scan_pages(struct lruvec *lruvec, struct scan_control *sc,
 		      int type, int tier, struct list_head *list, int *isolatedp)
 {
-	int gen, zone;
+	int gen, max_gen, zone;
 	enum vm_event_item item;
 	int sorted = 0;
 	int scanned = 0;
 	int isolated = 0;
 	/* small per-call batch: the caller loop re-evaluates each round */
 	int remaining = MIN_LRU_BATCH;
+	unsigned long min_seq;
 	struct lru_gen_struct *lrugen = &lruvec->lrugen;
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 
 	VM_BUG_ON(!list_empty(list));
 
-	if (get_nr_gens(lruvec, type) == MIN_NR_GENS)
-		return 0;
+	/*
+	 * Scan the oldest populated generation rather than min_seq itself:
+	 * empty generations left behind by deletion or full isolation would
+	 * make the scanner report zero work while evictable pages exist.
+	 */
+	min_seq = lruvec_populated_min_seq(lruvec, type, MAX_NR_ZONES,
+					   lrugen->max_seq[type]);
 
-	gen = lru_gen_from_seq(lrugen->min_seq[type]);
+	gen = lru_gen_from_seq(min_seq);
+	max_gen = lru_gen_from_seq(lrugen->max_seq[type]);
 
 	for (zone = sc->reclaim_idx; zone >= 0; zone--) {
 		LIST_HEAD(moved);
@@ -4579,7 +4600,7 @@ static int scan_pages(struct lruvec *lruvec, struct scan_control *sc,
 
 			scanned += delta;
 
-			if (sort_page(lruvec, page, tier))
+			if (sort_page(lruvec, page, sc, gen, max_gen, tier))
 				sorted += delta;
 			else if (isolate_page(lruvec, page, sc)) {
 				list_add(&page->lru, list);
