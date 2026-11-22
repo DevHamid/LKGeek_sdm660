@@ -2949,6 +2949,15 @@ static void lruvec_evictable_size(struct lruvec *lruvec, struct scan_control *sc
 	nr[LRU_GEN_FILE] = 0;
 
 	for_each_evictable_type(type, swappiness) {
+		/*
+		 * Do not count anon pages when the reclaimer cannot do swap
+		 * IO: a GFP_NOIO allocation must not be answered by swapping
+		 * out anon pages. This also covers the no-swap case.
+		 */
+		if (type == LRU_GEN_ANON && (!(sc->gfp_mask & __GFP_IO) ||
+					     !total_swap_pages))
+			continue;
+
 		for (seq = min_seq[type]; seq <= max_seq[type]; seq++)
 			nr[type] += lruvec_gen_size(lrugen, type, seq, max_zone);
 	}
