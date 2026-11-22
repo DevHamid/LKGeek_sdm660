@@ -1070,6 +1070,8 @@ static int icnss_driver_event_server_arrive(void *data)
 	if (!penv)
 		return -ENODEV;
 
+	pr_err("[ICNSS-TRACE-v1] stage=ARRIVE phase=enter state=0x%lx\n",
+	       penv->state);
 	set_bit(ICNSS_WLFW_EXISTS, &penv->state);
 	clear_bit(ICNSS_FW_DOWN, &penv->state);
 	clear_bit(ICNSS_FW_READY, &penv->state);
@@ -1088,8 +1090,12 @@ static int icnss_driver_event_server_arrive(void *data)
 	set_bit(ICNSS_WLFW_CONNECTED, &penv->state);
 
 	ret = wlfw_ind_register_send_sync_msg(penv);
+	pr_err("[ICNSS-TRACE-v1] stage=IND_REGISTER phase=return rc=%d state=0x%lx\n",
+	       ret, penv->state);
 	if (ret < 0) {
 		if (ret == -EALREADY) {
+			pr_err("[ICNSS-TRACE-v1] stage=ARRIVE phase=already_registered state=0x%lx\n",
+			       penv->state);
 			ret = 0;
 			goto qmi_registered;
 		}
@@ -1097,6 +1103,8 @@ static int icnss_driver_event_server_arrive(void *data)
 		goto fail;
 	}
 
+	pr_err("[ICNSS-TRACE-v1] stage=MSA_VA phase=check valid=%u\n",
+	       (unsigned int)!!penv->msa_va);
 	if (!penv->msa_va) {
 		icnss_pr_err("Invalid MSA address\n");
 		ret = -EINVAL;
@@ -1104,32 +1112,44 @@ static int icnss_driver_event_server_arrive(void *data)
 	}
 
 	ret = wlfw_msa_mem_info_send_sync_msg(penv);
+	pr_err("[ICNSS-TRACE-v1] stage=MSA_INFO phase=return rc=%d state=0x%lx\n",
+	       ret, penv->state);
 	if (ret < 0) {
 		ignore_assert = true;
 		goto fail;
 	}
 
+	pr_err("[ICNSS-TRACE-v1] stage=MSA_PERM phase=gate assigned=%u\n",
+	       (unsigned int)test_bit(ICNSS_MSA0_ASSIGNED, &penv->state));
 	if (!test_bit(ICNSS_MSA0_ASSIGNED, &penv->state)) {
 		ret = icnss_assign_msa_perm_all(penv,
 						ICNSS_MSA_PERM_WLAN_HW_RW);
+		pr_err("[ICNSS-TRACE-v1] stage=MSA_PERM phase=return rc=%d\n",
+		       ret);
 		if (ret < 0)
 			goto fail;
 		set_bit(ICNSS_MSA0_ASSIGNED, &penv->state);
 	}
 
 	ret = wlfw_msa_ready_send_sync_msg(penv);
+	pr_err("[ICNSS-TRACE-v1] stage=MSA_READY phase=return rc=%d state=0x%lx\n",
+	       ret, penv->state);
 	if (ret < 0) {
 		ignore_assert = true;
 		goto err_setup_msa;
 	}
 
 	ret = wlfw_cap_send_sync_msg(penv);
+	pr_err("[ICNSS-TRACE-v1] stage=CAP phase=return rc=%d state=0x%lx\n",
+	       ret, penv->state);
 	if (ret < 0) {
 		ignore_assert = true;
 		goto err_setup_msa;
 	}
 
 	ret = icnss_hw_power_on(penv);
+	pr_err("[ICNSS-TRACE-v1] stage=HW_POWER phase=return rc=%d state=0x%lx\n",
+	       ret, penv->state);
 	if (ret)
 		goto err_setup_msa;
 
@@ -1148,14 +1168,20 @@ static int icnss_driver_event_server_arrive(void *data)
 	if (penv->psf_supported)
 		queue_work(penv->soc_update_wq, &penv->soc_update_work);
 
+	pr_err("[ICNSS-TRACE-v1] stage=ARRIVE phase=exit rc=%d state=0x%lx\n",
+	       ret, penv->state);
 	return ret;
 
 err_setup_msa:
 	icnss_assign_msa_perm_all(penv, ICNSS_MSA_PERM_HLOS_ALL);
 	clear_bit(ICNSS_MSA0_ASSIGNED, &penv->state);
 fail:
+	pr_err("[ICNSS-TRACE-v1] stage=ARRIVE phase=fail rc=%d state=0x%lx\n",
+	       ret, penv->state);
 	ICNSS_ASSERT(ignore_assert);
 qmi_registered:
+	pr_err("[ICNSS-TRACE-v1] stage=ARRIVE phase=return rc=%d state=0x%lx\n",
+	       ret, penv->state);
 	return ret;
 }
 
@@ -1301,6 +1327,8 @@ static int icnss_driver_event_fw_ready_ind(void *data)
 	if (!penv)
 		return -ENODEV;
 
+	pr_err("[ICNSS-TRACE-v1] stage=FW_READY phase=event_enter state=0x%lx probe_present=%u\n",
+	       penv->state, (unsigned int)!!(penv->ops && penv->ops->probe));
 	set_bit(ICNSS_FW_READY, &penv->state);
 	clear_bit(ICNSS_MODE_ON, &penv->state);
 
@@ -1320,6 +1348,8 @@ static int icnss_driver_event_fw_ready_ind(void *data)
 		ret = icnss_call_driver_probe(penv);
 
 out:
+	pr_err("[ICNSS-TRACE-v1] stage=FW_READY phase=event_exit rc=%d state=0x%lx\n",
+	       ret, penv->state);
 	return ret;
 }
 
