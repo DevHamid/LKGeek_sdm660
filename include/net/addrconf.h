@@ -414,6 +414,11 @@ static inline void in6_dev_put(struct inet6_dev *idev)
 		in6_dev_finish_destroy(idev);
 }
 
+static inline bool in6_dev_hold_safe(struct inet6_dev *idev)
+{
+	return refcount_inc_not_zero(&idev->refcnt);
+}
+
 static inline void in6_dev_put_clear(struct inet6_dev **pidev)
 {
 	struct inet6_dev *idev = *pidev;
