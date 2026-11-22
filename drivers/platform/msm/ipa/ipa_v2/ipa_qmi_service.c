@@ -801,9 +801,18 @@ static void ipa_q6_clnt_svc_arrive(struct work_struct *work)
 	rc = qmi_init_modem_send_sync_msg();
 	if ((rc == -ENETRESET) || (rc == -ENODEV)) {
 		IPAWANERR("qmi_init_modem_send_sync_msg failed due to SSR!\n");
-		/* Cleanup will take place when ipa_wwan_remove is called */
-		vfree(ipa_q6_clnt);
-		ipa_q6_clnt = NULL;
+		/*
+		 * Do NOT free ipa_q6_clnt here.  It is a singleton allocated once
+		 * in ipa_qmi_service_init_worker() and is still referenced by
+		 * in-flight QMI transactions (txn->handle) and by the delayed
+		 * service work.  Freeing it on this SSR path left a dangling
+		 * vmalloc pointer that faulted the moment the modem's IPA QMI
+		 * service arrived again:
+		 *   ipa_q6_clnt_svc_arrive -> ipa_qmi_send_req_wait
+		 *     -> qmi_txn_cancel -> mutex_lock on an unmapped page
+		 * which panicked the AP and reboot-looped the device.
+		 * The handle is released by ipa_qmi_service_exit_worker().
+		 */
 		return;
 	}
 	if (rc != 0) {
