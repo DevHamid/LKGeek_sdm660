@@ -899,6 +899,261 @@ static void qrtr_skb_align_linearize(struct sk_buff *skb)
 		       __func__, rc, nhead);
 }
 
+/*
+ * Wayne: in-kernel QRTR service registry.  The CAF 4.19 qrtr has no
+ * nameserver: control packets are only forwarded to remote nodes, so
+ * NEW_LOOKUP from a freshly booted modem (or from kernel clients that
+ * registered their lookup before the userspace NS bound the control
+ * port) is never answered, and services announced before a node's
+ * HELLO are never pushed to it.  Keep a registry of announced services
+ * and outstanding lookups here, answer lookups from it, push the table
+ * to a node when it HELLOes, and notify lookups when new servers
+ * appear.  This is a subset of the upstream (5.7+) qrtr nameserver.
+ */
+struct qrtr_svc_entry {
+	u32 service;
+	u32 instance;
+	u32 node;
+	u32 port;
+	struct list_head list;
+};
+
+struct qrtr_lookup_entry {
+	u32 service;
+	u32 instance;
+	u32 node;
+	u32 port;
+	struct list_head list;
+};
+
+static LIST_HEAD(qrtr_svc_list);
+static LIST_HEAD(qrtr_lookup_list);
+static DEFINE_MUTEX(qrtr_svc_lock);
+
+static void qrtr_svc_record(u32 service, u32 instance, u32 node, u32 port)
+{
+	struct qrtr_svc_entry *e;
+	bool found = false;
+
+	if (service == 0 || node == 0)
+		return;
+
+	mutex_lock(&qrtr_svc_lock);
+	list_for_each_entry(e, &qrtr_svc_list, list) {
+		if (e->service == service && e->node == node &&
+		    e->port == port) {
+			e->instance = instance;
+			found = true;
+			break;
+		}
+	}
+	if (!found) {
+		e = kzalloc(sizeof(*e), GFP_KERNEL);
+		if (e) {
+			e->service = service;
+			e->instance = instance;
+			e->node = node;
+			e->port = port;
+			list_add_tail(&e->list, &qrtr_svc_list);
+		}
+	}
+	mutex_unlock(&qrtr_svc_lock);
+}
+
+static void qrtr_svc_remove(u32 node, u32 port)
+{
+	struct qrtr_svc_entry *e, *tmp;
+
+	mutex_lock(&qrtr_svc_lock);
+	list_for_each_entry_safe(e, tmp, &qrtr_svc_list, list) {
+		if (e->node == node && (!port || e->port == port)) {
+			list_del(&e->list);
+			kfree(e);
+		}
+	}
+	mutex_unlock(&qrtr_svc_lock);
+}
+
+static int qrtr_svc_send_new_server(u32 service, u32 instance, u32 node,
+				    u32 port, u32 dst_node, u32 dst_port)
+{
+	struct qrtr_ctrl_pkt *pkt;
+	struct sockaddr_qrtr from, to;
+	struct qrtr_node *n;
+	struct sk_buff *skb;
+
+	from.sq_family = AF_QIPCRTR;
+	from.sq_node = qrtr_local_nid;
+	from.sq_port = QRTR_PORT_CTRL;
+	to.sq_family = AF_QIPCRTR;
+	to.sq_node = dst_node;
+	to.sq_port = dst_port;
+
+	if (dst_node == qrtr_local_nid) {
+		struct qrtr_cb *cb;
+
+		skb = alloc_skb(sizeof(*pkt), GFP_KERNEL);
+		if (!skb)
+			return -ENOMEM;
+		pkt = skb_put(skb, sizeof(*pkt));
+		pkt->cmd = cpu_to_le32(QRTR_TYPE_NEW_SERVER);
+		pkt->server.service = cpu_to_le32(service);
+		pkt->server.instance = cpu_to_le32(instance);
+		pkt->server.node = cpu_to_le32(node);
+		pkt->server.port = cpu_to_le32(port);
+		cb = (struct qrtr_cb *)skb->cb;
+		cb->type = QRTR_TYPE_NEW_SERVER;
+		cb->src_node = from.sq_node;
+		cb->src_port = from.sq_port;
+		cb->dst_node = to.sq_node;
+		cb->dst_port = to.sq_port;
+		return qrtr_local_enqueue(NULL, skb, QRTR_TYPE_NEW_SERVER,
+					  &from, &to, 0);
+	}
+
+	n = qrtr_node_lookup(dst_node);
+	if (!n)
+		return -ENODEV;
+	skb = qrtr_alloc_ctrl_packet(&pkt);
+	if (!skb) {
+		qrtr_node_release(n);
+		return -ENOMEM;
+	}
+	pkt->cmd = cpu_to_le32(QRTR_TYPE_NEW_SERVER);
+	pkt->server.service = cpu_to_le32(service);
+	pkt->server.instance = cpu_to_le32(instance);
+	pkt->server.node = cpu_to_le32(node);
+	pkt->server.port = cpu_to_le32(port);
+	qrtr_node_enqueue(n, skb, QRTR_TYPE_NEW_SERVER, &from, &to, 0);
+	qrtr_node_release(n);
+	return 0;
+}
+
+static void qrtr_svc_push_node(u32 nid)
+{
+	struct qrtr_svc_entry *e;
+	u32 snap[16][4];
+	int n = 0, i;
+
+	mutex_lock(&qrtr_svc_lock);
+	list_for_each_entry(e, &qrtr_svc_list, list) {
+		if (e->node == nid)
+			continue;
+		snap[n][0] = e->service;
+		snap[n][1] = e->instance;
+		snap[n][2] = e->node;
+		snap[n][3] = e->port;
+		if (++n >= 16)
+			break;
+	}
+	mutex_unlock(&qrtr_svc_lock);
+
+	for (i = 0; i < n; i++)
+		qrtr_svc_send_new_server(snap[i][0], snap[i][1],
+					 snap[i][2], snap[i][3],
+					 nid, QRTR_PORT_CTRL);
+}
+
+static void qrtr_svc_purge_node(u32 nid)
+{
+	qrtr_svc_remove(nid, 0);
+}
+
+static void qrtr_svc_add_lookup(u32 node, u32 port, u32 service, u32 instance)
+{
+	struct qrtr_lookup_entry *e;
+	bool found = false;
+
+	mutex_lock(&qrtr_lookup_list);
+	list_for_each_entry(e, &qrtr_lookup_list, list) {
+		if (e->service == service && e->node == node &&
+		    e->port == port) {
+			e->instance = instance;
+			found = true;
+			break;
+		}
+	}
+	if (!found) {
+		e = kzalloc(sizeof(*e), GFP_KERNEL);
+		if (e) {
+			e->service = service;
+			e->instance = instance;
+			e->node = node;
+			e->port = port;
+			list_add_tail(&e->list, &qrtr_lookup_list);
+		}
+	}
+	mutex_unlock(&qrtr_lookup_list);
+}
+
+static void qrtr_svc_del_lookup(u32 node, u32 port, u32 service)
+{
+	struct qrtr_lookup_entry *e, *tmp;
+
+	mutex_lock(&qrtr_lookup_list);
+	list_for_each_entry_safe(e, tmp, &qrtr_lookup_list, list) {
+		if (e->service == service && e->node == node &&
+		    e->port == port) {
+			list_del(&e->list);
+			kfree(e);
+		}
+	}
+	mutex_unlock(&qrtr_lookup_list);
+}
+
+static void qrtr_svc_answer_lookup(u32 node, u32 port, u32 service,
+				   u32 instance)
+{
+	struct qrtr_svc_entry *e;
+	u32 match[4][4];
+	int n = 0, i;
+
+	mutex_lock(&qrtr_svc_lock);
+	list_for_each_entry(e, &qrtr_svc_list, list) {
+		if (e->service != service)
+			continue;
+		if (instance && e->instance != instance)
+			continue;
+		match[n][0] = e->service;
+		match[n][1] = e->instance;
+		match[n][2] = e->node;
+		match[n][3] = e->port;
+		if (++n >= 4)
+			break;
+	}
+	mutex_unlock(&qrtr_svc_lock);
+
+	for (i = 0; i < n; i++)
+		qrtr_svc_send_new_server(match[i][0], match[i][1],
+					 match[i][2], match[i][3],
+					 node, port);
+}
+
+static void qrtr_svc_notify_lookups(u32 service, u32 instance, u32 node,
+				    u32 port)
+{
+	struct qrtr_lookup_entry *l;
+	u32 match[4][2];
+	int n = 0, i;
+
+	mutex_lock(&qrtr_lookup_list);
+	list_for_each_entry(l, &qrtr_lookup_list, list) {
+		if (l->service != service)
+			continue;
+		if (l->instance && l->instance != instance)
+			continue;
+		match[n][0] = l->node;
+		match[n][1] = l->port;
+		if (++n >= 4)
+			break;
+	}
+	mutex_unlock(&qrtr_lookup_list);
+
+	for (i = 0; i < n; i++)
+		qrtr_svc_send_new_server(service, instance, node, port,
+					 match[i][0], match[i][1]);
+}
+
 static bool qrtr_must_forward(struct qrtr_node *src,
 			      struct qrtr_node *dst, u32 type)
 {
@@ -1018,6 +1273,48 @@ static void qrtr_node_rx_work(struct kthread_work *work)
 		    skb->len == sizeof(pkt)) {
 			skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
 			qrtr_node_assign(node, le32_to_cpu(pkt.server.node));
+		}
+
+		/* wayne: maintain the service registry, answer lookups and
+		 * push the table to nodes that just said hello.
+		 */
+		if (cb->type != QRTR_TYPE_DATA && skb->len == sizeof(pkt)) {
+			skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
+			switch (cb->type) {
+			case QRTR_TYPE_NEW_SERVER:
+				qrtr_svc_record(le32_to_cpu(pkt.server.service),
+						le32_to_cpu(pkt.server.instance),
+						le32_to_cpu(pkt.server.node),
+						le32_to_cpu(pkt.server.port));
+				qrtr_svc_notify_lookups(le32_to_cpu(pkt.server.service),
+							le32_to_cpu(pkt.server.instance),
+							le32_to_cpu(pkt.server.node),
+							le32_to_cpu(pkt.server.port));
+				break;
+			case QRTR_TYPE_DEL_SERVER:
+				qrtr_svc_remove(le32_to_cpu(pkt.server.node),
+						le32_to_cpu(pkt.server.port));
+				break;
+			case QRTR_TYPE_NEW_LOOKUP:
+				qrtr_svc_add_lookup(cb->src_node, cb->src_port,
+						    le32_to_cpu(pkt.server.service),
+						    le32_to_cpu(pkt.server.instance));
+				qrtr_svc_answer_lookup(cb->src_node, cb->src_port,
+						       le32_to_cpu(pkt.server.service),
+						       le32_to_cpu(pkt.server.instance));
+				break;
+			case QRTR_TYPE_DEL_LOOKUP:
+				qrtr_svc_del_lookup(cb->src_node, cb->src_port,
+						    le32_to_cpu(pkt.server.service));
+				break;
+			case QRTR_TYPE_HELLO:
+				qrtr_svc_purge_node(cb->src_node);
+				qrtr_svc_push_node(cb->src_node);
+				break;
+			case QRTR_TYPE_DEL_PROC:
+				qrtr_svc_remove(le32_to_cpu(pkt.proc.node), 0);
+				break;
+			}
 		}
 
 		if (cb->type == QRTR_TYPE_RESUME_TX) {
@@ -1723,19 +2020,41 @@ static int qrtr_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 		skb_copy_bits(skb, 0, &type, 4);
 		type = le32_to_cpu(type);
 	}
-	if (addr->sq_port == QRTR_PORT_CTRL && type == QRTR_TYPE_NEW_SERVER) {
-		ipc->state = QRTR_STATE_MULTI;
-
-		/* drop new server cmds that are not forwardable to dst node*/
+	if (addr->sq_port == QRTR_PORT_CTRL && skb->len == sizeof(pkt)) {
 		skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
-		srv_node = qrtr_node_lookup(le32_to_cpu(pkt.server.node));
-		if (!qrtr_must_forward(srv_node, node, type)) {
-			rc = 0;
-			kfree_skb(skb);
+
+		if (type == QRTR_TYPE_NEW_SERVER) {
+			ipc->state = QRTR_STATE_MULTI;
+
+			/* drop new server cmds that are not forwardable to dst node*/
+			srv_node = qrtr_node_lookup(le32_to_cpu(pkt.server.node));
+			if (!qrtr_must_forward(srv_node, node, type)) {
+				rc = 0;
+				kfree_skb(skb);
+				qrtr_node_release(srv_node);
+				goto out_node;
+			}
 			qrtr_node_release(srv_node);
-			goto out_node;
+			qrtr_svc_record(le32_to_cpu(pkt.server.service),
+					le32_to_cpu(pkt.server.instance),
+					le32_to_cpu(pkt.server.node),
+					le32_to_cpu(pkt.server.port));
+		} else if (type == QRTR_TYPE_DEL_SERVER) {
+			qrtr_svc_remove(le32_to_cpu(pkt.server.node),
+					le32_to_cpu(pkt.server.port));
+		} else if (type == QRTR_TYPE_NEW_LOOKUP) {
+			qrtr_svc_add_lookup(ipc->us.sq_node, ipc->us.sq_port,
+					    le32_to_cpu(pkt.server.service),
+					    le32_to_cpu(pkt.server.instance));
+			qrtr_svc_answer_lookup(ipc->us.sq_node, ipc->us.sq_port,
+					       le32_to_cpu(pkt.server.service),
+					       le32_to_cpu(pkt.server.instance));
+		} else if (type == QRTR_TYPE_DEL_LOOKUP) {
+			qrtr_svc_del_lookup(ipc->us.sq_node, ipc->us.sq_port,
+					    le32_to_cpu(pkt.server.service));
+		} else if (type == QRTR_TYPE_DEL_PROC) {
+			qrtr_svc_remove(le32_to_cpu(pkt.proc.node), 0);
 		}
-		qrtr_node_release(srv_node);
 	}
 
 	rc = enqueue_fn(node, skb, type, &ipc->us, addr, msg->msg_flags);
