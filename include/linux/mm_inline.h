@@ -222,9 +222,11 @@ static inline void lru_gen_update_size(struct lruvec *lruvec, struct page *page,
 	VM_BUG_ON(lru_gen_is_active(lruvec, old_gen, type) && !lru_gen_is_active(lruvec, new_gen, type));
 }
 
-static inline bool lru_gen_add_page(struct lruvec *lruvec, struct page *page, bool reclaiming)
+static inline bool __lru_gen_add_page(struct lruvec *lruvec, struct page *page,
+				      unsigned long scanned_seq, bool reclaiming)
 {
 	int gen;
+	unsigned long seq;
 	unsigned long old_flags, new_flags;
 	int type = page_is_file_cache(page);
 	int zone = page_zonenum(page);
@@ -242,12 +244,22 @@ static inline bool lru_gen_add_page(struct lruvec *lruvec, struct page *page, bo
 	 * 3. Everything else (clean, cold) is added to the oldest generation.
 	 */
 	if (PageActive(page))
-		gen = lru_gen_from_seq(lrugen->max_seq[type]);
+		seq = lrugen->max_seq[type];
 	else if ((type == LRU_GEN_ANON && !PageSwapCache(page)) ||
 		 (PageReclaim(page) && (PageDirty(page) || PageWriteback(page))))
-		gen = lru_gen_from_seq(lrugen->min_seq[type] + 1);
+		seq = lrugen->min_seq[type] + 1;
 	else
-		gen = lru_gen_from_seq(lrugen->min_seq[type]);
+		seq = lrugen->min_seq[type];
+
+	/*
+	 * A rejected page returns to a generation newer than the one it was
+	 * scanned from, so it is not immediately rescanned, but never newer
+	 * than the youngest generation.
+	 */
+	if (scanned_seq != -1UL)
+		seq = max(seq, min(scanned_seq + 1, lrugen->max_seq[type]));
+
+	gen = lru_gen_from_seq(seq);
 
 	do {
 		new_flags = old_flags = READ_ONCE(page->flags);
@@ -266,6 +278,17 @@ static inline bool lru_gen_add_page(struct lruvec *lruvec, struct page *page, bo
 		list_add(&page->lru, &lrugen->lists[gen][type][zone]);
 
 	return true;
+}
+
+static inline bool lru_gen_add_page(struct lruvec *lruvec, struct page *page, bool reclaiming)
+{
+	return __lru_gen_add_page(lruvec, page, -1UL, reclaiming);
+}
+
+static inline bool lru_gen_add_rejected_page(struct lruvec *lruvec, struct page *page,
+					     unsigned long scanned_seq)
+{
+	return __lru_gen_add_page(lruvec, page, scanned_seq, false);
 }
 
 static inline bool lru_gen_del_page(struct lruvec *lruvec, struct page *page, bool reclaiming)
@@ -313,6 +336,12 @@ static inline bool lru_gen_in_fault(void)
 }
 
 static inline bool lru_gen_add_page(struct lruvec *lruvec, struct page *page, bool reclaiming)
+{
+	return false;
+}
+
+static inline bool lru_gen_add_rejected_page(struct lruvec *lruvec, struct page *page,
+					     unsigned long scanned_seq)
 {
 	return false;
 }
