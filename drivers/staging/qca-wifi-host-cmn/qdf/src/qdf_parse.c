@@ -16,6 +16,8 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <linux/init.h>
+
 #include "qdf_file.h"
 #include "qdf_module.h"
 #include "qdf_parse.h"
@@ -154,6 +156,6 @@ static int __init wlan_copy_ini_buf(void)
  * module, and every module_init() in a module build emits an
  * `init_module` alias. wlan_hdd_main.c already owns that alias, so a
  * second one fails the link with "duplicate symbol: init_module".
- * __initcall keeps the same device_initcall ordering without it.
+ * device_initcall keeps the same ordering without the alias.
  */
-__initcall(wlan_copy_ini_buf);
+device_initcall(wlan_copy_ini_buf);
