@@ -46,23 +46,65 @@ static void log_modem_sfr(struct modem_data *drv)
 {
 	size_t size;
 	char *smem_reason, reason[MAX_SSR_REASON_LEN];
+	int id;
 
-	if (drv->q6->smem_id == -1)
-		return;
+	if (drv->q6->smem_id != -1) {
+		smem_reason = qcom_smem_get(QCOM_SMEM_HOST_ANY,
+						drv->q6->smem_id, &size);
+		if (IS_ERR(smem_reason) || !size) {
+			pr_err("modem SFR: (unknown, qcom_smem_get failed).\n");
+			return;
+		}
+		if (!smem_reason[0]) {
+			pr_err("modem SFR: (unknown, empty string found).\n");
+			return;
+		}
 
-	smem_reason = qcom_smem_get(QCOM_SMEM_HOST_ANY, drv->q6->smem_id,
-								&size);
-	if (IS_ERR(smem_reason) || !size) {
-		pr_err("modem SFR: (unknown, qcom_smem_get failed).\n");
+		strlcpy(reason, smem_reason,
+			min(size, (size_t)MAX_SSR_REASON_LEN));
+		pr_err("modem subsystem failure reason: %s.\n", reason);
 		return;
 	}
-	if (!smem_reason[0]) {
-		pr_err("modem SFR: (unknown, empty string found).\n");
-		return;
-	}
 
-	strlcpy(reason, smem_reason, min(size, (size_t)MAX_SSR_REASON_LEN));
-	pr_err("modem subsystem failure reason: %s.\n", reason);
+	/*
+	 * The MSS DT node has no qcom,smem-id, so the usual lookup is
+	 * disabled and every fatal prints only "Fatal error on the
+	 * modem.".  Scan every SMEM item once at fatal time and print
+	 * id/size/longest-printable-run/text for any reason-sized
+	 * printable blob, so the real id can be wired afterwards.
+	 */
+	for (id = 0; id < 1024; id++) {
+		char buf[49];
+		unsigned int run = 0, best = 0;
+		size_t j, k;
+
+		smem_reason = qcom_smem_get(QCOM_SMEM_HOST_ANY, id, &size);
+		if (IS_ERR(smem_reason) || !size || size > 1024)
+			continue;
+
+		for (j = 0; j < size; j++) {
+			char c = smem_reason[j];
+
+			if (c >= 0x20 && c < 0x7f) {
+				run++;
+				if (run > best)
+					best = run;
+			} else {
+				run = 0;
+			}
+		}
+		if (best < 8)
+			continue;
+
+		for (k = 0; k < size && k < 48; k++) {
+			char c = smem_reason[k];
+
+			buf[k] = (c >= 0x20 && c < 0x7f) ? c : '.';
+		}
+		buf[k] = '\0';
+		pr_err("modem SFR scan: id=%d size=%zu run=%u txt=%s\n",
+		       id, size, best, buf);
+	}
 }
 
 static void restart_modem(struct modem_data *drv)
