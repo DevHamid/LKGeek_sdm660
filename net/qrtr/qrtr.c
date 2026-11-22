@@ -955,6 +955,8 @@ static void qrtr_svc_record(u32 service, u32 instance, u32 node, u32 port)
 			e->node = node;
 			e->port = port;
 			list_add_tail(&e->list, &qrtr_svc_list);
+			pr_info("qrtr: registry: service %u inst %u @ %u:%u\n",
+				service, instance, node, port);
 		}
 	}
 	mutex_unlock(&qrtr_svc_lock);
@@ -967,6 +969,8 @@ static void qrtr_svc_remove(u32 node, u32 port)
 	mutex_lock(&qrtr_svc_lock);
 	list_for_each_entry_safe(e, tmp, &qrtr_svc_list, list) {
 		if (e->node == node && (!port || e->port == port)) {
+			pr_info("qrtr: registry: removed service %u @ %u:%u\n",
+				e->service, node, port);
 			list_del(&e->list);
 			kfree(e);
 		}
@@ -1094,6 +1098,20 @@ static void qrtr_svc_del_lookup(u32 node, u32 port, u32 service)
 	list_for_each_entry_safe(e, tmp, &qrtr_lookup_list, list) {
 		if (e->service == service && e->node == node &&
 		    e->port == port) {
+			list_del(&e->list);
+			kfree(e);
+		}
+	}
+	mutex_unlock(&qrtr_svc_lock);
+}
+
+static void qrtr_svc_del_lookup_port(u32 node, u32 port)
+{
+	struct qrtr_lookup_entry *e, *tmp;
+
+	mutex_lock(&qrtr_svc_lock);
+	list_for_each_entry_safe(e, tmp, &qrtr_lookup_list, list) {
+		if (e->node == node && e->port == port) {
 			list_del(&e->list);
 			kfree(e);
 		}
@@ -1313,6 +1331,11 @@ static void qrtr_node_rx_work(struct kthread_work *work)
 				break;
 			case QRTR_TYPE_DEL_PROC:
 				qrtr_svc_remove(le32_to_cpu(pkt.proc.node), 0);
+				break;
+			case QRTR_TYPE_DEL_CLIENT:
+				qrtr_svc_remove(cb->src_node, cb->src_port);
+				qrtr_svc_del_lookup_port(cb->src_node,
+							 cb->src_port);
 				break;
 			}
 		}
@@ -1695,6 +1718,11 @@ static void qrtr_port_remove(struct qrtr_sock *ipc)
 	int port = ipc->us.sq_port;
 
 	qrtr_send_del_client(ipc);
+	/* wayne: drop this port's registry entries so future lookups do
+	 * not resolve to a dead port.
+	 */
+	qrtr_svc_remove(ipc->us.sq_node, ipc->us.sq_port);
+	qrtr_svc_del_lookup_port(ipc->us.sq_node, ipc->us.sq_port);
 	if (port == QRTR_PORT_CTRL)
 		port = 0;
 
@@ -2054,6 +2082,10 @@ static int qrtr_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 					    le32_to_cpu(pkt.server.service));
 		} else if (type == QRTR_TYPE_DEL_PROC) {
 			qrtr_svc_remove(le32_to_cpu(pkt.proc.node), 0);
+		} else if (type == QRTR_TYPE_DEL_CLIENT) {
+			qrtr_svc_remove(ipc->us.sq_node, ipc->us.sq_port);
+			qrtr_svc_del_lookup_port(ipc->us.sq_node,
+						 ipc->us.sq_port);
 		}
 	}
 
