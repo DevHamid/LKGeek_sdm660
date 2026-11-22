@@ -1064,7 +1064,7 @@ static void qrtr_svc_add_lookup(u32 node, u32 port, u32 service, u32 instance)
 	struct qrtr_lookup_entry *e;
 	bool found = false;
 
-	mutex_lock(&qrtr_lookup_list);
+	mutex_lock(&qrtr_svc_lock);
 	list_for_each_entry(e, &qrtr_lookup_list, list) {
 		if (e->service == service && e->node == node &&
 		    e->port == port) {
@@ -1083,14 +1083,14 @@ static void qrtr_svc_add_lookup(u32 node, u32 port, u32 service, u32 instance)
 			list_add_tail(&e->list, &qrtr_lookup_list);
 		}
 	}
-	mutex_unlock(&qrtr_lookup_list);
+	mutex_unlock(&qrtr_svc_lock);
 }
 
 static void qrtr_svc_del_lookup(u32 node, u32 port, u32 service)
 {
 	struct qrtr_lookup_entry *e, *tmp;
 
-	mutex_lock(&qrtr_lookup_list);
+	mutex_lock(&qrtr_svc_lock);
 	list_for_each_entry_safe(e, tmp, &qrtr_lookup_list, list) {
 		if (e->service == service && e->node == node &&
 		    e->port == port) {
@@ -1098,7 +1098,7 @@ static void qrtr_svc_del_lookup(u32 node, u32 port, u32 service)
 			kfree(e);
 		}
 	}
-	mutex_unlock(&qrtr_lookup_list);
+	mutex_unlock(&qrtr_svc_lock);
 }
 
 static void qrtr_svc_answer_lookup(u32 node, u32 port, u32 service,
@@ -1136,7 +1136,7 @@ static void qrtr_svc_notify_lookups(u32 service, u32 instance, u32 node,
 	u32 match[4][2];
 	int n = 0, i;
 
-	mutex_lock(&qrtr_lookup_list);
+	mutex_lock(&qrtr_svc_lock);
 	list_for_each_entry(l, &qrtr_lookup_list, list) {
 		if (l->service != service)
 			continue;
@@ -1147,7 +1147,7 @@ static void qrtr_svc_notify_lookups(u32 service, u32 instance, u32 node,
 		if (++n >= 4)
 			break;
 	}
-	mutex_unlock(&qrtr_lookup_list);
+	mutex_unlock(&qrtr_svc_lock);
 
 	for (i = 0; i < n; i++)
 		qrtr_svc_send_new_server(service, instance, node, port,
