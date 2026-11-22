@@ -5058,7 +5058,7 @@ static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc
 		cond_resched();
 	}
 
-	if (!swapped && nr_to_scan <= 0 &&
+	if (!swapped && !nr[LRU_GEN_ANON] && !nr[LRU_GEN_FILE] &&
 	    sc->nr_reclaimed - reclaimed >= MIN_LRU_BATCH)
 		sc->memcgs_need_swapping = false;
 
