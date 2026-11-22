@@ -1066,6 +1066,8 @@ static int icnss_driver_event_server_arrive(void *data)
 {
 	int ret = 0;
 	bool ignore_assert = false;
+	pr_err("[ICNSS-TRACE-v2] stage=SERVER_ARRIVE phase=enter state=0x%lx\n",
+	       penv ? penv->state : 0UL);
 
 	if (!penv)
 		return -ENODEV;
@@ -1082,6 +1084,8 @@ static int icnss_driver_event_server_arrive(void *data)
 	}
 
 	ret = icnss_connect_to_fw_server(penv, data);
+	pr_err("[ICNSS-TRACE-v2] stage=SERVER_ARRIVE phase=connect rc=%d state=0x%lx\n",
+	       ret, penv->state);
 	if (ret)
 		goto fail;
 
@@ -1838,6 +1842,8 @@ static int icnss_service_notifier_notify(struct notifier_block *nb,
 
 	icnss_pr_dbg("PD service notification: 0x%lx state: 0x%lx\n",
 		     notification, priv->state);
+	pr_err("[ICNSS-TRACE-v2] stage=PD_NOTIFY notification=0x%lx pd_state=%d\n",
+	       notification, state ? (int)*state : -1);
 
 	if (notification != SERVREG_NOTIF_SERVICE_STATE_DOWN_V01)
 		goto done;
@@ -1909,6 +1915,8 @@ static int icnss_get_service_location_notify(struct notifier_block *nb,
 	struct icnss_priv *priv = container_of(nb, struct icnss_priv,
 					       get_service_nb);
 	struct pd_qmi_client_data *pd = data;
+	pr_err("[ICNSS-TRACE-v2] stage=LOCATOR opcode=%lu domains=%u\n",
+	       opcode, pd ? pd->total_domains : 0U);
 	int curr_state;
 	int ret;
 	int i;
@@ -1952,6 +1960,8 @@ static int icnss_get_service_location_notify(struct notifier_block *nb,
 		icnss_pr_dbg("%d: domain_name: %s, instance_id: %d\n", i,
 			     pd->domain_list[i].name,
 			     pd->domain_list[i].instance_id);
+		pr_err("[ICNSS-TRACE-v2] stage=LOCATOR domain=%s instance=%d\n",
+		       pd->domain_list[i].name, pd->domain_list[i].instance_id);
 
 		notifier[i].handle =
 			service_notif_register_notifier(pd->domain_list[i].name,

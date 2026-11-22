@@ -1226,6 +1226,8 @@ static struct qmi_msg_handler wlfw_msg_handlers[] = {
 
 int icnss_connect_to_fw_server(struct icnss_priv *priv, void *data)
 {
+	pr_err("[ICNSS-TRACE-v2] stage=CONNECT phase=enter state=0x%lx\n",
+	       priv ? priv->state : 0UL);
 	struct icnss_event_server_arrive_data *event_data = data;
 	struct qmi_handle *qmi = &priv->qmi;
 	struct sockaddr_qrtr sq = { 0 };
@@ -1246,6 +1248,8 @@ int icnss_connect_to_fw_server(struct icnss_priv *priv, void *data)
 	}
 
 	icnss_pr_info("QMI Server Connected: state: 0x%lx\n", priv->state);
+	pr_err("[ICNSS-TRACE-v2] stage=CONNECT phase=exit rc=0 state=0x%lx\n",
+	       priv->state);
 
 	kfree(data);
 	return 0;
@@ -1283,6 +1287,8 @@ static int wlfw_new_server(struct qmi_handle *qmi,
 			   struct qmi_service *service)
 {
 	struct icnss_priv *priv = container_of(qmi, struct icnss_priv, qmi);
+	pr_err("[ICNSS-TRACE-v2] stage=SERVER_NEW node=%u port=%u state=0x%lx\n",
+	       service->node, service->port, priv ? priv->state : 0UL);
 	struct icnss_event_server_arrive_data *event_data;
 
 	if (priv && test_bit(ICNSS_DEL_SERVER, &priv->state)) {
