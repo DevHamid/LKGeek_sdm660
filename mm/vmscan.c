@@ -4672,9 +4672,9 @@ static int get_tier_idx(struct lruvec *lruvec, int type)
  */
 static u64 mul_u64_u64_div_u64(u64 a, u64 b, u64 c)
 {
-#ifdef CONFIG_ARCH_SUPPORTS_INT128
-	return (u64)(((unsigned __int128)a * b) / c);
-#else
+	/* no __uint128_t division here: it emits __udivti3, which the
+	 * kernel does not link; use plain 64-bit long division instead */
+	{
 	u64 a_hi = a >> 32, a_lo = a & 0xffffffffULL;
 	u64 b_hi = b >> 32, b_lo = b & 0xffffffffULL;
 	u64 hi, mid1, mid2, lo, q = 0, r = 0;
@@ -4711,7 +4711,7 @@ static u64 mul_u64_u64_div_u64(u64 a, u64 b, u64 c)
 	}
 
 	return q;
-#endif
+	}
 }
 
 /*
