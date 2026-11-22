@@ -30,6 +30,8 @@
 
 static char *wlan_cfg_buf;
 
+static int wlan_copy_ini_buf(void);
+
 QDF_STATUS qdf_ini_parse(const char *ini_path, void *context,
 			 qdf_ini_item_cb item_cb, qdf_ini_section_cb section_cb)
 {
@@ -39,6 +41,8 @@ QDF_STATUS qdf_ini_parse(const char *ini_path, void *context,
 
 	if (strcmp(ini_path, WLAN_INI_FILE) == 0) {
 		pr_info("qcacld: loading overridden WLAN_INI_FILE\n");
+		if (!wlan_cfg_buf && wlan_copy_ini_buf())
+			return QDF_STATUS_E_NOMEM;
 		fbuf = wlan_cfg_buf;
 		status = QDF_STATUS_SUCCESS;
 	} else {
@@ -142,20 +146,21 @@ free_fbuf:
 }
 qdf_export_symbol(qdf_ini_parse);
 
-static int __init wlan_copy_ini_buf(void)
+static int wlan_copy_ini_buf(void)
 {
 	#include "wlan_cfg_ini.h"
 
 	wlan_cfg_buf = kmalloc(sizeof(wlan_cfg), GFP_KERNEL);
+	if (!wlan_cfg_buf)
+		return -ENOMEM;
+
 	memcpy(wlan_cfg_buf, wlan_cfg, sizeof(wlan_cfg));
 
 	return 0;
 }
 /*
- * Not module_init(): this file is one object inside the composite wlan
- * module, and every module_init() in a module build emits an
- * `init_module` alias. wlan_hdd_main.c already owns that alias, so a
- * second one fails the link with "duplicate symbol: init_module".
- * device_initcall keeps the same ordering without the alias.
+ * No initcall registers this: in a composite module every
+ * module_init()/device_initcall() emits an `init_module` alias,
+ * and wlan_hdd_main.c already owns the only one. The buffer is
+ * filled lazily by qdf_ini_parse() on first use instead.
  */
-device_initcall(wlan_copy_ini_buf);
