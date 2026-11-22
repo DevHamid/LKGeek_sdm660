@@ -149,4 +149,11 @@ static int __init wlan_copy_ini_buf(void)
 
 	return 0;
 }
-module_init(wlan_copy_ini_buf);
+/*
+ * Not module_init(): this file is one object inside the composite wlan
+ * module, and every module_init() in a module build emits an
+ * `init_module` alias. wlan_hdd_main.c already owns that alias, so a
+ * second one fails the link with "duplicate symbol: init_module".
+ * __initcall keeps the same device_initcall ordering without it.
+ */
+__initcall(wlan_copy_ini_buf);
