@@ -931,6 +931,15 @@ static int ipa_q6_clnt_svc_event_notify_svc_new(struct qmi_handle *qmi,
 
 static void ipa_q6_clnt_svc_event_notify_net_reset(struct qmi_handle *qmi)
 {
+	/*
+	 * The modem endpoint is gone, so our handshake state no longer means
+	 * anything: clear it here as well as in ipa_qmi_service_exit(), or the
+	 * duplicate-arrival guard in ipa_q6_clnt_svc_arrive() would keep
+	 * skipping INIT_MODEM_DRIVER for the next modem generation.
+	 */
+	qmi_modem_init_fin = false;
+	last_init_port = 0;
+
 	if (!atomic_read(&workqueues_stopped) && ipa_clnt_req_workqueue)
 		queue_delayed_work(ipa_clnt_req_workqueue,
 			&work_svc_exit, 0);
