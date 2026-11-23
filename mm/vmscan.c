@@ -2919,65 +2919,6 @@ static bool __maybe_unused seq_is_valid(struct lruvec *lruvec)
 	       get_nr_gens(lruvec, LRU_GEN_ANON) <= MAX_NR_GENS;
 }
 
-static unsigned long lruvec_gen_size(struct lru_gen_struct *lrugen, int type,
-				     unsigned long seq, int max_zone)
-{
-	int gen, zone;
-	unsigned long size = 0;
-
-	gen = lru_gen_from_seq(seq);
-
-	for (zone = 0; zone < max_zone; zone++)
-		size += READ_ONCE(lrugen->nr_pages[gen][type][zone]);
-
-	return size;
-}
-
-/* report the evictable size of each type, only counting zones below max_zone */
-static void lruvec_evictable_size(struct lruvec *lruvec, struct scan_control *sc,
-				  int swappiness, unsigned long nr[], int max_zone)
-{
-	int type;
-	unsigned long seq;
-	struct lru_gen_struct *lrugen = &lruvec->lrugen;
-	DEFINE_MAX_SEQ(lruvec);
-	DEFINE_MIN_SEQ(lruvec);
-
-	nr[LRU_GEN_ANON] = 0;
-	nr[LRU_GEN_FILE] = 0;
-
-	for_each_evictable_type(type, swappiness) {
-		for (seq = min_seq[type]; seq <= max_seq[type]; seq++)
-			nr[type] += lruvec_gen_size(lrugen, type, seq, max_zone);
-	}
-}
-
-/* similar to lruvec_evictable_size(), return the oldest populated seq of the type */
-static unsigned long lruvec_populated_min_seq(struct lruvec *lruvec, int type,
-					      int zone_limit, unsigned long max_seq)
-{
-	int gen, zone;
-	unsigned long min_seq;
-	struct lru_gen_struct *lrugen = &lruvec->lrugen;
-
-	lockdep_assert_held(&lruvec_pgdat(lruvec)->lru_lock);
-
-	min_seq = READ_ONCE(lrugen->min_seq[type]);
-
-	while (min_seq < max_seq) {
-		gen = lru_gen_from_seq(min_seq);
-
-		for (zone = 0; zone < zone_limit; zone++) {
-			if (!list_empty(&lrugen->lists[gen][type][zone]))
-				return min_seq;
-		}
-
-		min_seq++;
-	}
-
-	return max_seq;
-}
-
 /******************************************************************************
  *                          mm_struct list
  ******************************************************************************/
