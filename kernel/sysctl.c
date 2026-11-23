@@ -203,16 +203,22 @@ extern int no_unaligned_warning;
 #endif
 
 #ifdef CONFIG_SCHED_BORE
-#include <linux/sched/bore.h>
-/*
- * BORE's sysfs ranges.  zero, one and three are already declared above;
- * the rest are declared here under the same guard as the entries that
- * reference them.
+extern unsigned int sched_bore;
+extern unsigned int sched_burst_cache_lifetime;
+extern unsigned int sched_burst_penalty_offset;
+extern unsigned int sched_burst_penalty_scale;
+extern unsigned int sched_burst_smoothness_up;
+extern unsigned int sched_burst_smoothness_down;
+extern unsigned int sched_burst_fork_atavistic;
+/**
+ * BORE's sysfs ranges.  three and zero are already declared above; the
+ * rest are not, so declare them here under the same guard as the entries
+ * that reference them.
  */
-static int __maybe_unused sixty_three  = 63;
-static int __maybe_unused one_million  = 1000000;
+static int __maybe_unused seven          = 7;
+static int __maybe_unused sixty_four     = 64;
 static int __maybe_unused maxval_12_bits = 4095;
-#endif /* CONFIG_SCHED_BORE */
+#endif // CONFIG_SCHED_BORE
 
 #ifdef CONFIG_PROC_SYSCTL
 
@@ -1602,72 +1608,63 @@ static struct ctl_table kern_table[] = {
 		.data		= &sched_bore,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= sched_bore_update_handler,
-		.extra1		= &zero,
-		.extra2		= &one,
-	},
-	{
-		.procname	= "sched_burst_inherit_type",
-		.data		= &sched_burst_inherit_type,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= sched_burst_inherit_type_update_handler,
-		.extra1		= &zero,
-		.extra2		= &two,
-	},
-	{
-		.procname	= "sched_burst_smoothness",
-		.data		= &sched_burst_smoothness,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_douintvec_minmax,
+		.proc_handler	= &proc_dointvec_minmax,
 		.extra1		= &zero,
 		.extra2		= &three,
-	},
-	{
-		.procname	= "sched_burst_penalty_offset",
-		.data		= &sched_burst_penalty_offset,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_douintvec_minmax,
-		.extra1		= &zero,
-		.extra2		= &sixty_three,
-	},
-	{
-		.procname	= "sched_burst_penalty_scale",
-		.data		= &sched_burst_penalty_scale,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_douintvec_minmax,
-		.extra1		= &zero,
-		.extra2		= &maxval_12_bits,
 	},
 	{
 		.procname	= "sched_burst_cache_lifetime",
 		.data		= &sched_burst_cache_lifetime,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= proc_douintvec,
+		.proc_handler = proc_dointvec,
 	},
 	{
-		.procname	= "sched_burst_protect_slice_lv",
-		.data		= &sched_burst_protect_slice_lv,
+		.procname	= "sched_burst_fork_atavistic",
+		.data		= &sched_burst_fork_atavistic,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= sched_burst_protect_slice_lv_update_handler,
+		.proc_handler	= &proc_dointvec_minmax,
+		.extra1		= &zero,
+		.extra2		= &seven,
+	},
+	{
+		.procname	= "sched_burst_penalty_offset",
+		.data		= &sched_burst_penalty_offset,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec_minmax,
+		.extra1		= &zero,
+		.extra2		= &sixty_four,
+	},
+	{
+		.procname	= "sched_burst_penalty_scale",
+		.data		= &sched_burst_penalty_scale,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec_minmax,
+		.extra1		= &zero,
+		.extra2		= &maxval_12_bits,
+	},
+	{
+		.procname	= "sched_burst_smoothness_down",
+		.data		= &sched_burst_smoothness_down,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec_minmax,
 		.extra1		= &zero,
 		.extra2		= &three,
 	},
 	{
-		.procname	= "sched_credit_cap_us",
-		.data		= &sched_credit_cap_us,
+		.procname	= "sched_burst_smoothness_up",
+		.data		= &sched_burst_smoothness_up,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= sched_credit_cap_us_update_handler,
+		.proc_handler	= &proc_dointvec_minmax,
 		.extra1		= &zero,
-		.extra2		= &one_million,
+		.extra2		= &three,
 	},
-#endif /* CONFIG_SCHED_BORE */
+#endif // CONFIG_SCHED_BORE
 	{
 		.procname	= "panic_on_warn",
 		.data		= &panic_on_warn,
