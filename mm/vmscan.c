@@ -4554,42 +4554,36 @@ static bool isolate_page(struct lruvec *lruvec, struct page *page, struct scan_c
 	return true;
 }
 
-static int scan_pages(unsigned long nr_to_scan, struct lruvec *lruvec,
-		      struct scan_control *sc, int type, int tier,
-		      struct list_head *list, int *isolatedp)
+static int scan_pages(struct lruvec *lruvec, struct scan_control *sc,
+		      int type, int tier, struct list_head *list, int *isolatedp)
 {
 	int gen, max_gen, zone;
 	enum vm_event_item item;
 	int sorted = 0;
 	int scanned = 0;
 	int isolated = 0;
-	int skipped = 0;
-	unsigned long remaining = nr_to_scan;
+	/* small per-call batch: the caller loop re-evaluates each round */
+	int remaining = MIN_LRU_BATCH;
 	unsigned long min_seq;
 	struct lru_gen_struct *lrugen = &lruvec->lrugen;
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 
 	VM_BUG_ON(!list_empty(list));
-	VM_WARN_ON_ONCE(nr_to_scan > MAX_LRU_BATCH);
 
 	/*
-	 * Respect hotness at default priority, and only reach into the
-	 * newest generation when under severe pressure, so hot pages are
-	 * not evicted as soon as priority is raised.
+	 * Scan the oldest populated generation rather than min_seq itself:
+	 * empty generations left behind by deletion or full isolation would
+	 * make the scanner report zero work while evictable pages exist.
 	 */
-	if (sc->priority == DEF_PRIORITY)
-		min_seq = lrugen->max_seq[type] - MIN_NR_GENS;
-	else if (sc->priority > DEF_PRIORITY / 2)
-		min_seq = lrugen->max_seq[type] - 1;
-	else
-		min_seq = lrugen->max_seq[type];
+	min_seq = lruvec_populated_min_seq(lruvec, type, MAX_NR_ZONES,
+					   lrugen->max_seq[type]);
 
 	gen = lru_gen_from_seq(min_seq);
 	max_gen = lru_gen_from_seq(lrugen->max_seq[type]);
 
 	for (zone = sc->reclaim_idx; zone >= 0; zone--) {
 		LIST_HEAD(moved);
-		skipped = 0;
+		int skipped = 0;
 		struct list_head *head = &lrugen->lists[gen][type][zone];
 
 		while (!list_empty(head)) {
@@ -4662,189 +4656,107 @@ static int get_tier_idx(struct lruvec *lruvec, int type)
 	return tier - 1;
 }
 
-/*
- * Scale a * b / c without losing the 128-bit intermediate: the scan budget
- * math multiplies numbers up to ~2^57, which overflows 64 bits.
- */
-static u64 mul_u64_u64_div_u64(u64 a, u64 b, u64 c)
+static int get_type_to_scan(struct lruvec *lruvec, struct scan_control *sc, int swappiness, int *tier_idx)
 {
-#ifdef CONFIG_ARCH_SUPPORTS_INT128
-	return (u64)(((unsigned __int128)a * b) / c);
-#else
-	u64 a_hi = a >> 32, a_lo = a & 0xffffffffULL;
-	u64 b_hi = b >> 32, b_lo = b & 0xffffffffULL;
-	u64 hi, mid1, mid2, lo, q = 0, r = 0;
-	int i;
+	int type, tier;
+	struct ctrl_pos sp, pv;
+	int gain[ANON_AND_FILE] = { swappiness, 200 - swappiness };
 
-	if (!c)
-		return ~0ULL;
+	if (!swappiness)
+		return LRU_GEN_FILE;
 
-	/* 128-bit product hi:lo = a * b */
-	lo = a_lo * b_lo;
-	mid1 = a_hi * b_lo;
-	mid2 = a_lo * b_hi;
-	hi = a_hi * b_hi + (mid1 >> 32) + (mid2 >> 32);
-	mid1 <<= 32;
-	mid2 <<= 32;
-	lo += mid1;
-	if (lo < mid1)
-		hi++;
-	lo += mid2;
-	if (lo < mid2)
-		hi++;
+	if (sc->clean_below_min)
+		return LRU_GEN_ANON;
+	if (sc->anon_below_min)
+		return LRU_GEN_FILE;
+	if (sc->clean_below_low)
+		return LRU_GEN_ANON;
 
-	/* 128/64 long division, bit by bit */
-	for (i = 127; i >= 0; i--) {
-		u64 bit = (i >= 64) ? (hi >> (i - 64)) & 1 : (lo >> i) & 1;
-		u64 carry = r >> 63;
+	if (swappiness == 1)
+		return LRU_GEN_FILE;
 
-		r = (r << 1) | bit;
-		q <<= 1;
-		if (carry || r >= c) {
-			r -= c;
-			q |= 1;
-		}
+	/*
+	 * Compare the first tier of anon with that of file to determine which
+	 * type to scan. Also need to compare other tiers of the selected type
+	 * with the first tier of the other type to determine the last tier (of
+	 * the selected type) to evict.
+	 */
+	read_ctrl_pos(lruvec, LRU_GEN_ANON, 0, gain[LRU_GEN_ANON], &sp);
+	read_ctrl_pos(lruvec, LRU_GEN_FILE, 0, gain[LRU_GEN_FILE], &pv);
+	type = positive_ctrl_err(&sp, &pv);
+
+	read_ctrl_pos(lruvec, !type, 0, gain[!type], &sp);
+	for (tier = 1; tier < MAX_NR_TIERS; tier++) {
+		read_ctrl_pos(lruvec, type, tier, gain[type], &pv);
+		if (!positive_ctrl_err(&sp, &pv))
+			break;
 	}
 
-	return q;
-#endif
+	*tier_idx = tier - 1;
+
+	return type;
 }
 
-/*
- * Balance the anon vs file scan budget using MGLRU's per-type refault
- * rates, where swappiness is the relative IO cost of anon vs file (see
- * Documentation/admin-guide/sysctl/vm.rst).
- *
- * On entry, nr[] holds the evictable size of each type, on return it
- * holds each type's scan budget, bounded by its evictable size.
- *
- * LRU lock not needed: a stale snapshot merely skews the split for one
- * pass, and MGLRU aging averages the fault rate so we can simply read it.
- *
- * Calculation is basically based on the following formula with an LRU
- * size bias:
- *
- * anon : file = swappiness * r_file * w_anon :
- *               (200 - swappiness) * r_anon * w_file
- *
- * r_file / r_anon: refault rate for file / anon.
- * w_file / w_anon: LRU size weight of file / anon.
- *
- * We don't calculate the scan cost. MGLRU uses lazy promotion, which
- * cancels the scan budget naturally.
- */
-static void lru_gen_balance_scan(struct lruvec *lruvec, struct scan_control *sc,
-				 int swappiness, unsigned long total_scan,
-				 unsigned long nr[])
+static int isolate_pages(struct lruvec *lruvec, struct scan_control *sc, int swappiness,
+			 struct list_head *list, int *isolated, int *type_scanned)
 {
-	struct lru_gen_struct *lrugen = &lruvec->lrugen;
-	u64 refault_rate[ANON_AND_FILE], anon_factor, file_factor;
-	u64 anon_scan, file_scan, total;
-	u64 anon_weight, file_weight;
-	int size_bias;
+	int i;
 	int type;
+	int scanned;
+	int total_scanned = 0;
+	int tier = -1;
+	DEFINE_MIN_SEQ(lruvec);
 
-	if (swappiness <= 1)
-		nr[LRU_GEN_ANON] = 0;
+	VM_BUG_ON(!seq_is_valid(lruvec));
 
-	/* this tree's re-swappiness layer: hard type preferences win */
-	if (sc->clean_below_min || sc->clean_below_low)
-		nr[LRU_GEN_FILE] = 0;
-	else if (sc->anon_below_min)
-		nr[LRU_GEN_ANON] = 0;
+	/*
+	 * Try to make the obvious choice first. When anon and file are both
+	 * available from the same generation, interpret swappiness 1 as file
+	 * first and 200 as anon first.
+	 */
+	if (!swappiness)
+		type = LRU_GEN_FILE;
+	else if (min_seq[LRU_GEN_ANON] < min_seq[LRU_GEN_FILE])
+		type = LRU_GEN_ANON;
+	else if (swappiness == 1)
+		type = LRU_GEN_FILE;
+	else if (swappiness == 200)
+		type = LRU_GEN_ANON;
+	else
+		type = get_type_to_scan(lruvec, sc, swappiness, &tier);
 
-	total = nr[LRU_GEN_ANON] + nr[LRU_GEN_FILE];
-	if (!total)
-		return;
+	for (i = !swappiness; i < ANON_AND_FILE; i++) {
+		if (tier < 0)
+			tier = get_tier_idx(lruvec, type);
 
-	if (!nr[LRU_GEN_ANON] || !nr[LRU_GEN_FILE]) {
-		nr[LRU_GEN_ANON] = min_t(u64, total_scan, nr[LRU_GEN_ANON]);
-		nr[LRU_GEN_FILE] = min_t(u64, total_scan, nr[LRU_GEN_FILE]);
-		return;
-	}
-
-	for (type = LRU_GEN_ANON; type <= LRU_GEN_FILE; type++) {
-		int hist = lru_hist_from_seq(READ_ONCE(lrugen->min_seq[type]));
-		/* start at MIN_LRU_BATCH to smooth the rate on gen start */
-		u64 refaulted = MIN_LRU_BATCH, evicted = MIN_LRU_BATCH;
-		int tier;
-
-		for (tier = 0; tier < MAX_NR_TIERS; tier++) {
-			refaulted += READ_ONCE(lrugen->avg_refaulted[type][tier]);
-			refaulted += atomic_long_read(&lrugen->refaulted[hist][type][tier]);
-
-			evicted += READ_ONCE(lrugen->avg_total[type][tier]);
-			evicted += atomic_long_read(&lrugen->evicted[hist][type][tier]);
-		}
+		scanned = scan_pages(lruvec, sc, type, tier, list, isolated);
+		total_scanned += scanned;
+		if (*isolated)
+			break;
 
 		/*
-		 * The rate scaled by 4096 to survive integer division,
-		 * clamped to [1, 4096] (~0% - 100%), the floor of 1 keeps a
-		 * type that never refaults from zeroing out the other type's
-		 * share.
+		 * If scanned > 0 but nothing was isolated, this type still has
+		 * pages (they were sorted or protected): keep scanning it instead
+		 * of falling back, which would override the swappiness choice
+		 * from get_type_to_scan().
 		 */
-		refault_rate[type] = mul_u64_u64_div_u64(refaulted, 4096, evicted);
-		refault_rate[type] = clamp_t(u64, refault_rate[type], 1, 4096);
+		if (!scanned)
+			type = !type;
+		tier = -1;
 	}
 
-	/*
-	 * The more extreme the swappiness, the wider the IO cost gap between
-	 * anon and file, so the split should follow the IO cost ratio rather
-	 * than the sizes. With a mild swappiness, balance the scan by the
-	 * actual LRU size more.
-	 */
-	size_bias = max(1, min(swappiness, 200 - swappiness));
-	anon_weight = nr[LRU_GEN_ANON] + nr[LRU_GEN_FILE] / size_bias;
-	file_weight = nr[LRU_GEN_FILE] + nr[LRU_GEN_ANON] / size_bias;
+	*type_scanned = type;
 
-	anon_factor = (u64)swappiness * refault_rate[LRU_GEN_FILE] * anon_weight;
-	file_factor = (u64)(200 - swappiness) * refault_rate[LRU_GEN_ANON] * file_weight;
-
-	/* Cross-multiply the ratio above. */
-	anon_scan = mul_u64_u64_div_u64(total_scan, anon_factor, anon_factor + file_factor);
-	file_scan = (u64)total_scan - anon_scan;
-
-	/*
-	 * Bound each type by its evictable size. Hand the exceeding part to
-	 * the other type. Any excess left when total_scan exceeds both sizes
-	 * is dropped, since it only stresses the scanner with no gain.
-	 */
-	if (anon_scan > nr[LRU_GEN_ANON])
-		file_scan += anon_scan - nr[LRU_GEN_ANON];
-	else if (file_scan > nr[LRU_GEN_FILE])
-		anon_scan += file_scan - nr[LRU_GEN_FILE];
-
-	nr[LRU_GEN_ANON] = min_t(u64, anon_scan, nr[LRU_GEN_ANON]);
-	nr[LRU_GEN_FILE] = min_t(u64, file_scan, nr[LRU_GEN_FILE]);
+	return total_scanned;
 }
 
-static void lru_gen_prepare_scan(struct lruvec *lruvec, struct scan_control *sc,
-				 struct mem_cgroup *memcg, int swappiness,
-				 unsigned long nr_to_scan[])
-{
-	unsigned long total;
-
-	lruvec_evictable_size(lruvec, sc, swappiness, nr_to_scan, MAX_NR_ZONES);
-
-	total = nr_to_scan[LRU_GEN_ANON] + nr_to_scan[LRU_GEN_FILE];
-
-	/* try to scrape all the memory of an offline memcg */
-	if (mem_cgroup_online(memcg))
-		/* reset the priority if the target has been met */
-		total >>= sc->nr_reclaimed < sc->nr_to_reclaim ? sc->priority :
-								 DEF_PRIORITY;
-
-	lru_gen_balance_scan(lruvec, sc, swappiness, total, nr_to_scan);
-}
-
-static int evict_pages(unsigned long nr_to_scan, struct lruvec *lruvec,
-		       struct scan_control *sc, int type, int swappiness,
+static int evict_pages(struct lruvec *lruvec, struct scan_control *sc, int swappiness,
 		       bool *swapped)
 {
+	int type;
 	int scanned;
 	int reclaimed;
 	int isolated = 0;
-	int tier;
 	unsigned long nr_taken;
 	LIST_HEAD(list);
 	struct page *page;
@@ -4859,8 +4771,7 @@ static int evict_pages(unsigned long nr_to_scan, struct lruvec *lruvec,
 	/* in case page deletion left empty old gens, flush them */
 	try_to_inc_min_seq(lruvec, swappiness);
 
-	tier = get_tier_idx(lruvec, type);
-	scanned = scan_pages(nr_to_scan, lruvec, sc, type, tier, &list, &isolated);
+	scanned = isolate_pages(lruvec, sc, swappiness, &list, &isolated, &type);
 
 	/* scanning may have emptied the oldest gen, flush it */
 	if (scanned)
@@ -4918,31 +4829,6 @@ static int evict_pages(unsigned long nr_to_scan, struct lruvec *lruvec,
 	return scanned;
 }
 
-static long evict_folio_lists(unsigned long nr_to_scan[], struct lruvec *lruvec,
-			      struct scan_control *sc, int swappiness,
-			      unsigned long max_batch)
-{
-	int type;
-	unsigned long batch, scanned, total_scanned = 0;
-
-	/*
-	 * Scan both types with the given budgets; the caller checks if
-	 * reclaim is satisfied after each pass.
-	 */
-	for (type = LRU_GEN_FILE; type >= LRU_GEN_ANON; type--) {
-		if (!nr_to_scan[type])
-			continue;
-
-		batch = min(nr_to_scan[type], max_batch);
-		scanned = evict_pages(batch, lruvec, sc, type, swappiness, NULL);
-
-		nr_to_scan[type] -= min(nr_to_scan[type], scanned);
-		total_scanned += scanned;
-	}
-
-	return total_scanned;
-}
-
 static bool should_run_aging(struct lruvec *lruvec, unsigned long *max_seq,
 			     unsigned long *min_seq, bool can_swap,
 			     struct scan_control *sc)
@@ -4966,12 +4852,35 @@ static bool should_run_aging(struct lruvec *lruvec, unsigned long *max_seq,
 	return need_aging;
 }
 
+static long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc,
+			   struct mem_cgroup *memcg, bool can_swap)
+{
+	long nr_to_scan;
+	bool need_aging;
+	DEFINE_MAX_SEQ(lruvec);
+	DEFINE_MIN_SEQ(lruvec);
+
+	nr_to_scan = get_nr_evictable(lruvec, max_seq, min_seq, can_swap, &need_aging);
+
+	/* try to scrape all its memory if this memcg was deleted */
+	if (!mem_cgroup_online(memcg))
+		return nr_to_scan;
+
+	if (!nr_to_scan)
+		return 0;
+
+	/* reset the priority if the target has been met */
+	nr_to_scan >>= sc->nr_reclaimed < sc->nr_to_reclaim ? sc->priority : DEF_PRIORITY;
+
+	return nr_to_scan;
+}
+
 static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 {
 	struct blk_plug plug;
 	bool swapped = false;
 	int swappiness;
-	unsigned long nr[ANON_AND_FILE];
+	long nr_to_scan;
 	unsigned long reclaimed = sc->nr_reclaimed;
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
@@ -4996,9 +4905,11 @@ static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc
 	else
 		swappiness = 0;
 
-	lru_gen_prepare_scan(lruvec, sc, memcg, swappiness, nr);
+	/* pin the scan budget for this pass; the loop only decrements it */
+	nr_to_scan = get_nr_to_scan(lruvec, sc, memcg, !!swappiness);
 
-	while (nr[LRU_GEN_ANON] > 0 || nr[LRU_GEN_FILE] > 0) {
+	while (nr_to_scan > 0) {
+		int delta;
 		int type;
 		bool aged = false;
 		bool can_evict = false;
@@ -5043,11 +4954,14 @@ static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc
 			sc->memcgs_need_aging = false;
 		}
 
-		if (!evict_folio_lists(nr, lruvec, sc, swappiness, MIN_LRU_BATCH))
+		delta = evict_pages(lruvec, sc, swappiness, &swapped);
+		if (!delta)
 			break;
 
 		if (sc->memcgs_avoid_swapping && swappiness < 200 && swapped)
 			break;
+
+		nr_to_scan -= delta;
 
 		cond_resched();
 	}
@@ -5515,7 +5429,6 @@ static int run_eviction(struct lruvec *lruvec, unsigned long seq, struct scan_co
 {
 	struct blk_plug plug;
 	int err = -EINTR;
-	unsigned long nr_to_scan[ANON_AND_FILE];
 	DEFINE_MAX_SEQ(lruvec);
 	int type;
 
@@ -5531,17 +5444,11 @@ static int run_eviction(struct lruvec *lruvec, unsigned long seq, struct scan_co
 	while (!signal_pending(current)) {
 		DEFINE_MIN_SEQ(lruvec);
 
-		if (seq < min_seq[!swappiness] || sc->nr_reclaimed >= nr_to_reclaim) {
+		if (seq < min_seq[!swappiness] || sc->nr_reclaimed >= nr_to_reclaim ||
+		    !evict_pages(lruvec, sc, swappiness, NULL)) {
 			err = 0;
 			break;
 		}
-
-		lruvec_evictable_size(lruvec, sc, swappiness, nr_to_scan, MAX_NR_ZONES);
-		lru_gen_balance_scan(lruvec, sc, swappiness,
-				     nr_to_reclaim - sc->nr_reclaimed, nr_to_scan);
-
-		if (!evict_folio_lists(nr_to_scan, lruvec, sc, swappiness, MAX_LRU_BATCH))
-			break;
 
 		cond_resched();
 	}
@@ -5609,7 +5516,6 @@ static ssize_t lru_gen_seq_write(struct file *file, const char __user *src,
 		.may_writepage = true,
 		.may_unmap = true,
 		.may_swap = true,
-		.priority = DEF_PRIORITY,
 		.reclaim_idx = MAX_NR_ZONES - 1,
 		.gfp_mask = GFP_KERNEL,
 	};
