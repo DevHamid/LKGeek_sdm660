@@ -4830,8 +4830,7 @@ static void lru_gen_prepare_scan(struct lruvec *lruvec, struct scan_control *sc,
 {
 	unsigned long total;
 
-	lruvec_evictable_size(lruvec, sc, swappiness, nr_to_scan,
-			      sc->reclaim_idx + 1);
+	lruvec_evictable_size(lruvec, sc, swappiness, nr_to_scan, MAX_NR_ZONES);
 
 	total = nr_to_scan[LRU_GEN_ANON] + nr_to_scan[LRU_GEN_FILE];
 
@@ -4971,10 +4970,9 @@ static bool lru_gen_imbalanced(struct lruvec *lruvec, struct scan_control *sc,
 		unsigned long seq;
 
 		youngest[type] = lruvec_gen_size(lrugen, type, max_seq[type],
-						 sc->reclaim_idx + 1);
+						 MAX_NR_ZONES);
 		for (seq = min_seq[type]; seq < max_seq[type]; seq++)
-			old[type] += lruvec_gen_size(lrugen, type, seq,
-						     sc->reclaim_idx + 1);
+			old[type] += lruvec_gen_size(lrugen, type, seq, MAX_NR_ZONES);
 	}
 
 	/* the vast majority of pages sit in the youngest gen */
@@ -5601,8 +5599,7 @@ static int run_eviction(struct lruvec *lruvec, unsigned long seq, struct scan_co
 			break;
 		}
 
-		lruvec_evictable_size(lruvec, sc, swappiness, nr_to_scan,
-				      sc->reclaim_idx + 1);
+		lruvec_evictable_size(lruvec, sc, swappiness, nr_to_scan, MAX_NR_ZONES);
 		lru_gen_balance_scan(lruvec, sc, swappiness,
 				     nr_to_reclaim - sc->nr_reclaimed, nr_to_scan);
 
