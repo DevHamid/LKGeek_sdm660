@@ -1592,14 +1592,23 @@ static void ipa3_q6_clnt_svc_arrive(struct work_struct *work)
 		IPAWANERR(
 		"ipa3_qmi_init_modem_send_sync_msg failed due to SSR!\n");
 		/* Cleanup when ipa3_wwan_remove is called */
+		mutex_lock(&ipa3_qmi_lock);
 		if (ipa_q6_clnt != NULL) {
 			qmi_handle_release(ipa_q6_clnt);
-			mutex_lock(&ipa3_qmi_lock);
-			vfree(ipa_q6_clnt);
+			/*
+			 * Deliberately do not vfree() the handle. In-flight
+			 * ipa3_qmi_send_req_wait() callers keep
+			 * txn->qmi == ipa_q6_clnt, and qmi_txn_cancel()
+			 * dereferences it via mutex_lock(&qmi->txn_lock).
+			 * Freeing this vzalloc'ed handle underneath them
+			 * faults on unmapped memory (Data abort, pte=0)
+			 * and panics the device during modem SSR.
+			 */
 			ipa_q6_clnt = NULL;
 			mutex_unlock(&ipa3_qmi_lock);
 			return;
 		}
+		mutex_unlock(&ipa3_qmi_lock);
 		IPAWANERR("Exit from service arrive fun\n");
 		return;
 	}
@@ -1950,7 +1959,12 @@ void ipa3_qmi_service_exit(void)
 	mutex_lock(&ipa3_qmi_lock);
 	if (ipa_q6_clnt != NULL) {
 		qmi_handle_release(ipa_q6_clnt);
-		vfree(ipa_q6_clnt);
+		/*
+		 * Intentional leak: a concurrent ipa3_qmi_send_req_wait()
+		 * may still hold txn->qmi == ipa_q6_clnt and will reach
+		 * qmi_txn_cancel(). Freeing it here faults on unmapped
+		 * memory. See ipa3_q6_clnt_svc_arrive().
+		 */
 		ipa_q6_clnt = NULL;
 		if (ipa_clnt_req_workqueue) {
 			destroy_workqueue(ipa_clnt_req_workqueue);
