@@ -4803,22 +4803,8 @@ static void lru_gen_balance_scan(struct lruvec *lruvec, struct scan_control *sc,
 	anon_weight = nr[LRU_GEN_ANON] + nr[LRU_GEN_FILE] / size_bias;
 	file_weight = nr[LRU_GEN_FILE] + nr[LRU_GEN_ANON] / size_bias;
 
-	/*
-	 * At swappiness 2, anon is nearly as unwelcome as at 1; only give it
-	 * a toehold once the priority has reached AGING_PRIORITY.
-	 */
-	if (swappiness == 2)
-		anon_factor = sc->priority <= AGING_PRIORITY ?
-			      refault_rate[LRU_GEN_FILE] * anon_weight : 0;
-	else
-		anon_factor = (u64)swappiness * refault_rate[LRU_GEN_FILE] * anon_weight;
-
-	/* at swappiness 200, file only gets a toehold under severe pressure */
-	if (swappiness == 200)
-		file_factor = sc->priority < AGING_PRIORITY ?
-			      refault_rate[LRU_GEN_ANON] * file_weight : 0;
-	else
-		file_factor = (u64)(200 - swappiness) * refault_rate[LRU_GEN_ANON] * file_weight;
+	anon_factor = (u64)swappiness * refault_rate[LRU_GEN_FILE] * anon_weight;
+	file_factor = (u64)(200 - swappiness) * refault_rate[LRU_GEN_ANON] * file_weight;
 
 	/* Cross-multiply the ratio above. */
 	anon_scan = mul_u64_u64_div_u64(total_scan, anon_factor, anon_factor + file_factor);
