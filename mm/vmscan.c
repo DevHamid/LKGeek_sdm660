@@ -4666,8 +4666,6 @@ static int get_tier_idx(struct lruvec *lruvec, int type)
 	return tier - 1;
 }
 
-#define AGING_PRIORITY	(DEF_PRIORITY / 2)
-
 /*
  * Scale a * b / c without losing the 128-bit intermediate: the scan budget
  * math multiplies numbers up to ~2^57, which overflows 64 bits.
@@ -4928,7 +4926,7 @@ static int evict_pages(unsigned long nr_to_scan, struct lruvec *lruvec,
 
 static long evict_folio_lists(unsigned long nr_to_scan[], struct lruvec *lruvec,
 			      struct scan_control *sc, int swappiness,
-			      unsigned long max_batch, bool *drained)
+			      unsigned long max_batch)
 {
 	int type;
 	unsigned long batch, scanned, total_scanned = 0;
@@ -4944,40 +4942,11 @@ static long evict_folio_lists(unsigned long nr_to_scan[], struct lruvec *lruvec,
 		batch = min(nr_to_scan[type], max_batch);
 		scanned = evict_pages(batch, lruvec, sc, type, swappiness, NULL);
 
-		if (drained && !scanned)
-			*drained = true;
-
 		nr_to_scan[type] -= min(nr_to_scan[type], scanned);
 		total_scanned += scanned;
 	}
 
 	return total_scanned;
-}
-
-static bool lru_gen_imbalanced(struct lruvec *lruvec, struct scan_control *sc,
-			       bool can_swap)
-{
-	unsigned long youngest[ANON_AND_FILE] = { 0 }, old[ANON_AND_FILE] = { 0 };
-	struct lru_gen_struct *lrugen = &lruvec->lrugen;
-	DEFINE_MAX_SEQ(lruvec);
-	DEFINE_MIN_SEQ(lruvec);
-	int type;
-
-	if (sc->priority > AGING_PRIORITY)
-		return false;
-
-	for_each_evictable_type(type, can_swap) {
-		unsigned long seq;
-
-		youngest[type] = lruvec_gen_size(lrugen, type, max_seq[type],
-						 MAX_NR_ZONES);
-		for (seq = min_seq[type]; seq < max_seq[type]; seq++)
-			old[type] += lruvec_gen_size(lrugen, type, seq, MAX_NR_ZONES);
-	}
-
-	/* the vast majority of pages sit in the youngest gen */
-	return youngest[LRU_GEN_ANON] + youngest[LRU_GEN_FILE] >
-	       (old[LRU_GEN_ANON] + old[LRU_GEN_FILE]) * MAX_NR_GENS;
 }
 
 static bool should_run_aging(struct lruvec *lruvec, unsigned long *max_seq,
@@ -5000,21 +4969,13 @@ static bool should_run_aging(struct lruvec *lruvec, unsigned long *max_seq,
 		return false;
 
 	/* better to run aging even though eviction is still possible */
-	if (need_aging)
-		return true;
-
-	/* run aging when pages outside the youngest gen are rare */
-	return lru_gen_imbalanced(lruvec, sc, can_swap);
+	return need_aging;
 }
 
 static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 {
 	struct blk_plug plug;
 	bool swapped = false;
-	bool allow_drained_age = false;
-	bool do_drained_age = false;
-	bool drained = false;
-	bool retried = false;
 	int swappiness;
 	unsigned long nr[ANON_AND_FILE];
 	unsigned long reclaimed = sc->nr_reclaimed;
@@ -5043,13 +5004,6 @@ static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc
 
 	lru_gen_prepare_scan(lruvec, sc, memcg, swappiness, nr);
 
-	/*
-	 * Avoid aging the lagging, unpreferred type at extreme swappiness;
-	 * rely on imbalanced aging once priority reaches AGING_PRIORITY.
-	 */
-	allow_drained_age = sc->priority < DEF_PRIORITY &&
-			    swappiness > 1 && swappiness < 200;
-
 	while (nr[LRU_GEN_ANON] > 0 || nr[LRU_GEN_FILE] > 0) {
 		int type;
 		bool aged = false;
@@ -5057,8 +5011,7 @@ static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc
 		DEFINE_MAX_SEQ(lruvec);
 		DEFINE_MIN_SEQ(lruvec);
 
-		if (should_run_aging(lruvec, max_seq, min_seq, !!swappiness, sc) ||
-		    do_drained_age) {
+		if (should_run_aging(lruvec, max_seq, min_seq, !!swappiness, sc)) {
 			/* leave the work to lru_gen_age_node() */
 			if (current_is_kswapd())
 				break;
@@ -5096,21 +5049,11 @@ static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc
 			sc->memcgs_need_aging = false;
 		}
 
-		if (!evict_folio_lists(nr, lruvec, sc, swappiness, MIN_LRU_BATCH,
-				       &drained)) {
-			/* retry once: aging may have unlocked eviction */
-			if (retried)
-				break;
-			retried = true;
-		}
+		if (!evict_folio_lists(nr, lruvec, sc, swappiness, MIN_LRU_BATCH))
+			break;
 
 		if (sc->memcgs_avoid_swapping && swappiness < 200 && swapped)
 			break;
-
-		/* allow drained aging only once per invocation */
-		do_drained_age = drained && allow_drained_age;
-		allow_drained_age &= !do_drained_age;
-		drained = false;
 
 		cond_resched();
 	}
@@ -5603,8 +5546,7 @@ static int run_eviction(struct lruvec *lruvec, unsigned long seq, struct scan_co
 		lru_gen_balance_scan(lruvec, sc, swappiness,
 				     nr_to_reclaim - sc->nr_reclaimed, nr_to_scan);
 
-		if (!evict_folio_lists(nr_to_scan, lruvec, sc, swappiness,
-				       MAX_LRU_BATCH, NULL))
+		if (!evict_folio_lists(nr_to_scan, lruvec, sc, swappiness, MAX_LRU_BATCH))
 			break;
 
 		cond_resched();
