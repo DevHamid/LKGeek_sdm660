@@ -1056,6 +1056,25 @@ static int diag_rpmsg_probe(struct rpmsg_device *rpdev)
 	rpmsg_info = diag_get_rpmsg_ptr(rpdev->id.name, peripheral);
 	if (rpmsg_info) {
 		mutex_lock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
+		/*
+		 * diag_rpmsg_init() leaves every data channel with inited = 0:
+		 * rpmsg_late_init() is only reached through
+		 * diag_rpmsg_init_peripheral(), which diagfwd_close_transport()
+		 * calls when the peripheral's feature mask selects a transport.
+		 * A peripheral that never advertises the socket feature keeps the
+		 * glink transport and never takes that path, so the channel binds
+		 * with inited = 0, diag_rpmsg_open_work_fn() bails out, no buffers
+		 * are allocated and diagfwd never reads the channel. The
+		 * peripheral's diag TX ring then fills and its diag task starves
+		 * (dog_hb "Task starvation: diag"). Register the channel that just
+		 * appeared, before its open_work runs.
+		 */
+		if (!rpmsg_info->inited && rpmsg_info->wq) {
+			dev_info(&rpdev->dev,
+				"diag: %s probed with inited=0, late init\n",
+				rpmsg_info->name);
+			rpmsg_late_init(rpmsg_info);
+		}
 		rpmsg_info->hdl = rpdev;
 		atomic_set(&rpmsg_info->opened, 1);
 		mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
