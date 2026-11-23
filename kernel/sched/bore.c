@@ -14,13 +14,13 @@
 DEFINE_STATIC_KEY_TRUE(sched_bore_key);
 unsigned int __read_mostly sched_bore                   = 1;
 unsigned int __read_mostly sched_burst_inherit_type     = 2;
-unsigned int __read_mostly sched_burst_protect_slice_lv = 1;
+unsigned int __read_mostly sched_burst_protect_slice_lv = 0;
 unsigned int __read_mostly sched_burst_smoothness       = 1;
 unsigned int __read_mostly sched_burst_penalty_offset   = 24;
 unsigned int __read_mostly sched_burst_penalty_scale    = 1536;
 unsigned int __read_mostly sched_burst_cache_lifetime   = 75000000;
 
-unsigned int __read_mostly sched_credit_cap_us = 16000;
+unsigned int __read_mostly sched_credit_cap_us = 0;
 
 static int __maybe_unused maxval_prio = 39;
 
@@ -322,6 +322,19 @@ static void update_inherit_type(void) {
 	}
 }
 
+static void update_protect_slice_keys(void) {
+	if (sched_burst_protect_slice_lv == 1 ||
+	    sched_burst_protect_slice_lv == 2)
+		static_branch_enable(&sched_burst_protect_slice_cond_key);
+	else
+		static_branch_disable(&sched_burst_protect_slice_cond_key);
+
+	if (sched_burst_protect_slice_lv >= 2)
+		static_branch_enable(&sched_burst_protect_slice_prefer_key);
+	else
+		static_branch_disable(&sched_burst_protect_slice_prefer_key);
+}
+
 void __init sched_init_bore(void) {
 	printk(KERN_INFO "%s %s by %s\n",
 		SCHED_BORE_PROGNAME, SCHED_BORE_VERSION, SCHED_BORE_AUTHOR);
@@ -334,6 +347,7 @@ void __init sched_init_bore(void) {
 
 	reset_task_bore(&init_task);
 	update_inherit_type();
+	update_protect_slice_keys();
 
 	if (sched_credit_cap_us)
 		static_branch_enable(&sched_credit_key);
@@ -388,16 +402,7 @@ int sched_burst_protect_slice_lv_update_handler(struct ctl_table *table,
 	if (ret || !write)
 		return ret;
 
-	if (sched_burst_protect_slice_lv == 1 ||
-	    sched_burst_protect_slice_lv == 2)
-		static_branch_enable(&sched_burst_protect_slice_cond_key);
-	else
-		static_branch_disable(&sched_burst_protect_slice_cond_key);
-
-	if (sched_burst_protect_slice_lv >= 2)
-		static_branch_enable(&sched_burst_protect_slice_prefer_key);
-	else
-		static_branch_disable(&sched_burst_protect_slice_prefer_key);
+	update_protect_slice_keys();
 
 	return 0;
 }
