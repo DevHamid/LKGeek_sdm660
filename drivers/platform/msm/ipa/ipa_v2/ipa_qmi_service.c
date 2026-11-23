@@ -35,6 +35,12 @@
 static struct qmi_handle *ipa_svc_handle;
 static struct workqueue_struct *ipa_clnt_req_workqueue;
 static bool qmi_modem_init_fin, qmi_indication_fin;
+/* Port of the modem QMI-IPA endpoint the current handshake completed for.
+ * A duplicate NEW_SERVER announcement for the same port re-runs the arrive
+ * worker after the handshake is already done; re-sending
+ * INIT_MODEM_DRIVER then makes the modem firmware assert.
+ */
+static u32 last_init_port;
 static uint32_t ipa_wan_platform;
 struct ipa_qmi_context *ipa_qmi_ctx;
 static bool first_time_handshake;
@@ -295,7 +301,14 @@ static int ipa_qmi_send_req_wait(struct qmi_handle *client_handle,
 		return ret;
 	}
 	ret = qmi_txn_wait(&txn, msecs_to_jiffies(timeout_ms));
-	if (ret < 0)
+	/*
+	 * qmi_txn_wait() removes the transaction from the handle idr on every
+	 * return path EXCEPT txn->result == -ENETRESET, where it returns
+	 * early.  Cancelling unconditionally would idr_remove() an id that is
+	 * already free (and may have been re-used by a newer transaction),
+	 * so only the -ENETRESET case still needs the cancel.
+	 */
+	if (ret == -ENETRESET)
 		qmi_txn_cancel(&txn);
 
 	return ret;
@@ -782,6 +795,17 @@ static void ipa_q6_clnt_svc_arrive(struct work_struct *work)
 	int rc;
 	struct ipa_master_driver_init_complt_ind_msg_v01 ind;
 
+	/*
+	 * The handle and ipa_qmi_ctx are torn down by ipa_qmi_service_exit()
+	 * on every modem SSR.  destroy_workqueue() there drains this work, so
+	 * reaching here with either pointer gone means the teardown raced the
+	 * queueing; bail out instead of dereferencing freed memory.
+	 */
+	if (atomic_read(&workqueues_stopped) || !ipa_q6_clnt || !ipa_qmi_ctx) {
+		IPAWANERR("q6 client torn down, ignore arrive\n");
+		return;
+	}
+
 	rc = kernel_connect(ipa_q6_clnt->sock,
 		(struct sockaddr *) &ipa_qmi_ctx->server_sq,
 		sizeof(ipa_qmi_ctx->server_sq),
@@ -796,6 +820,21 @@ static void ipa_q6_clnt_svc_arrive(struct work_struct *work)
 	pr_err("ipa-debug: Q6 arrive node=%u port=%u init=%d ssr=%d\n",
 		ipa_qmi_ctx->server_sq.sq_node, ipa_qmi_ctx->server_sq.sq_port,
 		qmi_modem_init_fin, ipa_rmnet_ctx.ipa_rmnet_ssr);
+
+	/*
+	 * A duplicated NEW_SERVER announcement for the same modem endpoint
+	 * re-runs this work with the handshake already complete.  Sending
+	 * INIT_MODEM_DRIVER a second time into the same modem generation
+	 * makes the firmware assert in ipa_qmi_client.c:438
+	 * (ipa_qmi_server.init_state != IPA_QMI_STATE_MODEM_INIT), which
+	 * crashes the root PD and takes wlan_pd down with it.
+	 */
+	if (qmi_modem_init_fin &&
+	    ipa_qmi_ctx->server_sq.sq_port == last_init_port) {
+		pr_err("ipa-debug: duplicate arrive port=%u, handshake done\n",
+			last_init_port);
+		return;
+	}
 	/* Initialize modem IPA-driver */
 	IPAWANDBG("send qmi_init_modem_send_sync_msg to modem\n");
 	rc = qmi_init_modem_send_sync_msg();
@@ -826,6 +865,7 @@ static void ipa_q6_clnt_svc_arrive(struct work_struct *work)
 		return;
 	}
 	qmi_modem_init_fin = true;
+	last_init_port = ipa_qmi_ctx ? ipa_qmi_ctx->server_sq.sq_port : 0;
 
 	/* In cold-bootup, first_time_handshake = false */
 	ipa_q6_handshake_complete(first_time_handshake);
@@ -882,7 +922,7 @@ static int ipa_q6_clnt_svc_event_notify_svc_new(struct qmi_handle *qmi,
 		ipa_qmi_ctx->server_sq.sq_node = service->node;
 		ipa_qmi_ctx->server_sq.sq_port = service->port;
 	}
-	if (!atomic_read(&workqueues_stopped)) {
+	if (!atomic_read(&workqueues_stopped) && ipa_clnt_req_workqueue) {
 		queue_delayed_work(ipa_clnt_req_workqueue,
 			&work_svc_arrive, 0);
 	}
@@ -891,7 +931,7 @@ static int ipa_q6_clnt_svc_event_notify_svc_new(struct qmi_handle *qmi,
 
 static void ipa_q6_clnt_svc_event_notify_net_reset(struct qmi_handle *qmi)
 {
-	if (!atomic_read(&workqueues_stopped))
+	if (!atomic_read(&workqueues_stopped) && ipa_clnt_req_workqueue)
 		queue_delayed_work(ipa_clnt_req_workqueue,
 			&work_svc_exit, 0);
 }
@@ -902,7 +942,7 @@ static void ipa_q6_clnt_svc_event_notify_svc_exit(struct qmi_handle *qmi,
 	IPAWANDBG("QMI svc:%d vers:%d ins:%d node:%d port:%d\n", svc->service,
 		svc->version, svc->instance, svc->node, svc->port);
 
-	if (!atomic_read(&workqueues_stopped))
+	if (!atomic_read(&workqueues_stopped) && ipa_clnt_req_workqueue)
 		queue_delayed_work(ipa_clnt_req_workqueue,
 			&work_svc_exit, 0);
 }
@@ -1073,6 +1113,29 @@ void ipa_qmi_service_exit(void)
 
 	atomic_set(&workqueues_stopped, 1);
 
+	/*
+	 * Drain the service workers BEFORE any object they dereference is
+	 * released.  destroy_workqueue() flushes the work that is already
+	 * running, so once it returns no worker can still be inside
+	 * ipa_q6_clnt_svc_arrive() -> ipa_qmi_send_req_wait() ->
+	 * qmi_txn_cancel(), nor inside ipa_q6_clnt_svc_exit() reading
+	 * ipa_qmi_ctx.
+	 *
+	 * The previous order (release + vfree the handle first, destroy the
+	 * workqueue afterwards) was a use-after-free on every modem SSR once
+	 * a worker had already been queued: the worker locked qmi->txn_lock
+	 * inside the unmapped vmalloc page and the AP panicked instead of
+	 * surviving the modem crash:
+	 *   Unable to handle kernel paging request at ffffff80100e20e8
+	 *   (pte=0)  Workqueue: clnt_req ipa_q6_clnt_svc_arrive
+	 *   pc : mutex_lock   lr : qmi_txn_cancel
+	 *   ipa_qmi_send_req_wait -> ipa_q6_clnt_svc_arrive -> panic
+	 */
+	if (ipa_clnt_req_workqueue) {
+		destroy_workqueue(ipa_clnt_req_workqueue);
+		ipa_clnt_req_workqueue = NULL;
+	}
+
 	/* qmi-service */
 	if (ipa_svc_handle != NULL) {
 		qmi_handle_release(ipa_svc_handle);
@@ -1082,16 +1145,11 @@ void ipa_qmi_service_exit(void)
 
 	/* qmi-client */
 
-
 	/* Release client handle */
 	if (ipa_q6_clnt != NULL) {
 		qmi_handle_release(ipa_q6_clnt);
 		vfree(ipa_q6_clnt);
 		ipa_q6_clnt = NULL;
-		if (ipa_clnt_req_workqueue) {
-			destroy_workqueue(ipa_clnt_req_workqueue);
-			ipa_clnt_req_workqueue = NULL;
-		}
 	}
 
 	/* clean the QMI msg cache */
