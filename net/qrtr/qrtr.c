@@ -935,8 +935,18 @@ static void qrtr_svc_record(u32 service, u32 instance, u32 node, u32 port)
 	struct qrtr_svc_entry *e;
 	bool found = false;
 
-	if (service == 0 || node == 0)
+	/*
+	 * Wayne: kernel sockets (diag servers) announce with node 0
+	 * (QRTR_EP_NID_AUTO from kernel_getsockname on an unbound socket).
+	 * Rejecting node 0 kept locally-announced services out of the
+	 * registry, so a freshly booted modem never learned the DIAG
+	 * service (0x1001) and its diag task starved (dog_hb "Task
+	 * starvation: diag").  Normalize node 0 to the local nid instead.
+	 */
+	if (service == 0)
 		return;
+	if (node == 0)
+		node = qrtr_local_nid;
 
 	mutex_lock(&qrtr_svc_lock);
 	list_for_each_entry(e, &qrtr_svc_list, list) {
