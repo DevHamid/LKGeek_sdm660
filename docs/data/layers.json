@@ -1,0 +1,14 @@
+{
+  "title": "What is actually running",
+  "subtitle": "provenance chain for LKGeek_sdm660 — each layer can break the one above it",
+  "direction": "abstraction ↑",
+  "footnote": "edited in docs/data/layers.json · rendered by .github/scripts/render_layers.py",
+  "layers": [
+    { "tag": "L6", "name": "boot.img artifact", "note": "Image.gz-dtb · CI build" },
+    { "tag": "L5", "name": "defconfig", "note": "wayne-oss-perf_defconfig" },
+    { "tag": "L4", "name": "KernelSU + SUSFS patchset", "note": "manual hooks · ReSukiSU", "accent": true },
+    { "tag": "L3", "name": "Vendor kernel tree", "note": "LKGeek_sdm660 · CAF 4.19 deltas" },
+    { "tag": "L2", "name": "Upstream base", "note": "linux 4.19.325 stable" },
+    { "tag": "L1", "name": "SoC + device", "note": "sdm660 · Mi 6X (wayne)" }
+  ]
+}

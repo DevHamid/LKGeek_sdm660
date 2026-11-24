@@ -1,0 +1,121 @@
+# Docs pipeline: kernel activity + provenance diagrams, and generated release notes.
+# Separate from the cherrypick/merge/force workflows — a broken kernel build must
+# never block documentation, and a docs commit must not retrigger itself.
+name: docs
+
+on:
+  push:
+    branches: [Sukisu]
+    paths: ["docs/**", ".github/scripts/**", ".github/workflows/docs.yml"]
+    tags: ["*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # This tree is a backport fork: subjects carry subsystem prefixes, UPSTREAM/
+  # BACKPORT/FROMGIT chains, and Revert/Reapply pairs. See repo-docs-pipeline.
+  LEGACY_MAP: "patch=fix,config=build,arm64=build,ksu=feat,susfs=feat,defconfig=build,enable=build,disable=build,Fix=fix,Fixup=fix,Grab=fix,Refine=fix,Correct=fix,Prevent=fix,Avoid=fix,Handle=fix,Refactor=refactor,Rework=refactor,Simplify=refactor,Clean=refactor,Add=feat,Enable=build,Disable=build,Update=build,Updated=build,Remove=refactor,Linux=build,Kconfig=build,KernelSU=feat"
+
+jobs:
+  diagrams:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # heatmap + timeline read git history
+          filter: blob:none     # 876k commits of history, without the tree blobs
+
+      - name: render diagrams
+        run: |
+          mkdir -p docs/diagrams
+          python3 .github/scripts/render_heatmap.py --git . --weeks 26 --out docs/diagrams/activity.svg
+          python3 .github/scripts/render_heatmap.py --git . --weeks 26 --theme dark --out docs/diagrams/activity-dark.svg
+          python3 .github/scripts/render_timeline.py --git . --last 8 --match "." --title "Kernel tags" --out docs/diagrams/timeline.svg
+          python3 .github/scripts/render_timeline.py --git . --last 8 --match "." --title "Kernel tags" --theme dark --out docs/diagrams/timeline-dark.svg
+          python3 .github/scripts/render_layers.py --src docs/data/layers.json --out docs/diagrams/layers.svg
+          python3 .github/scripts/render_layers.py --src docs/data/layers.json --theme dark --out docs/diagrams/layers-dark.svg
+
+      # xmllint is not installed on ubuntu-24.04 runners (exit 127) - parse in Python
+      - name: verify assets are GitHub-safe and legible
+        run: |
+          python3 - <<'PY'
+          import glob, re, sys, xml.dom.minidom as minidom
+          bad = 0
+          for f in sorted(glob.glob("docs/diagrams/*.svg")):
+              minidom.parse(f)
+              src = open(f, encoding="utf-8").read()
+              if re.search(r'foreignObject|<script|@import|https?://[^"<]*\.(png|jpg|woff2?)', src):
+                  print("forbidden or remote asset in", f); bad = 1
+          sys.exit(bad)
+          PY
+          python3 .github/scripts/verify_contrast.py docs/diagrams/*.svg
+
+      - name: verify determinism
+        run: |
+          python3 .github/scripts/render_layers.py --src docs/data/layers.json --out /tmp/layers.svg
+          cmp /tmp/layers.svg docs/diagrams/layers.svg
+
+      - name: commit diagrams back
+        if: github.ref == 'refs/heads/Sukisu'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/diagrams
+          git diff --staged --quiet || git commit -m "docs: regenerate diagrams [skip ci]"
+          for attempt in 1 2 3; do
+            git push origin "HEAD:Sukisu" && break
+            echo "push rejected, rebasing attempt $attempt"
+            git pull --rebase --autostash origin Sukisu
+          done
+
+  changelog:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Sukisu
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: generate release notes
+        run: |
+          # Every tag in this tree is a release marker, so any tag is a valid base.
+          BASE=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          echo "base=${BASE:-<initial>} head=${GITHUB_REF_NAME}"
+          python3 .github/scripts/changelog_local.py --git . \
+            ${BASE:+--from "$BASE"} --to "$GITHUB_REF_NAME" \
+            --version "$GITHUB_REF_NAME" --date "$(date -u +%F)" \
+            --repo "$GITHUB_REPOSITORY" --exclude chore,ci,test \
+            --kernel-sections --drop-reverts --legacy-map "$LEGACY_MAP" \
+            --out "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: prepend to CHANGELOG.md
+        run: python3 .github/scripts/changelog_prepend.py --notes "$RUNNER_TEMP/notes.md" --file CHANGELOG.md
+
+      - name: publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            || gh release edit "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md"
+
+      - name: commit CHANGELOG back
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --staged --quiet || git commit -m "docs: changelog ${GITHUB_REF_NAME} [skip ci]"
+          for attempt in 1 2 3; do
+            git push origin "HEAD:Sukisu" && break
+            echo "push rejected, rebasing attempt $attempt"
+            git pull --rebase --autostash origin Sukisu
+          done
