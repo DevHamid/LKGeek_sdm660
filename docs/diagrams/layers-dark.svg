@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 592" width="960" height="592" role="img" aria-labelledby="layers-t layers-d">
+<title id="layers-t">What is actually running</title>
+<desc id="layers-d">Layer stack: boot.img artifact, defconfig, KernelSU + SUSFS patchset, Vendor kernel tree, Upstream base, SoC + device.</desc>
+<rect width="960" height="592" fill="#2d3142"/>
+<text x="24" y="32" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="start" font-weight="500" letter-spacing="1.8" fill="#bfc0c0">LAYERS · README-DIAGRAMS</text>
+<text x="24" y="68" font-family="Georgia, 'Times New Roman', 'Liberation Serif', serif" font-size="26" text-anchor="start" fill="#f5f5f5">What is actually running</text>
+  <text x="24" y="96" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12" text-anchor="start" fill="#bfc0c0">provenance chain for LKGeek_sdm660 — each layer can break the one above it</text>
+  <text x="936" y="96" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="9" text-anchor="end" fill="#b0b8c6">abstraction ↑</text>
+  <rect x="24" y="132" width="912" height="60" rx="4" fill="#2d3142" stroke="rgba(245,245,245,0.12)" stroke-width="1"/>
+  <text x="40" y="160" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="9" text-anchor="start" font-weight="500" letter-spacing="1.2" fill="#b0b8c6">L6</text>
+  <text x="112" y="168" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="15" text-anchor="start" font-weight="600" fill="#f5f5f5">boot.img artifact</text>
+  <text x="920" y="168" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="end" fill="#bfc0c0">Image.gz-dtb · CI build</text>
+  <rect x="24" y="196" width="912" height="60" rx="4" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="1"/>
+  <text x="40" y="224" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="9" text-anchor="start" font-weight="500" letter-spacing="1.2" fill="#b0b8c6">L5</text>
+  <text x="112" y="232" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="15" text-anchor="start" font-weight="600" fill="#f5f5f5">defconfig</text>
+  <text x="920" y="232" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="end" fill="#bfc0c0">wayne-oss-perf_defconfig</text>
+  <rect x="24" y="260" width="912" height="60" rx="4" fill="rgba(240,138,89,0.10)" stroke="#f08a59" stroke-width="1"/>
+  <text x="40" y="288" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="9" text-anchor="start" font-weight="500" letter-spacing="1.2" fill="#f5f5f5">L4</text>
+  <text x="112" y="296" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="15" text-anchor="start" font-weight="600" fill="#f5f5f5">KernelSU + SUSFS patchset</text>
+  <text x="920" y="296" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="end" fill="#bfc0c0">manual hooks · ReSukiSU</text>
+  <rect x="24" y="324" width="912" height="60" rx="4" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="1"/>
+  <text x="40" y="352" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="9" text-anchor="start" font-weight="500" letter-spacing="1.2" fill="#b0b8c6">L3</text>
+  <text x="112" y="360" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="15" text-anchor="start" font-weight="600" fill="#f5f5f5">Vendor kernel tree</text>
+  <text x="920" y="360" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="end" fill="#bfc0c0">LKGeek_sdm660 · CAF 4.19 deltas</text>
+  <rect x="24" y="388" width="912" height="60" rx="4" fill="#2d3142" stroke="rgba(245,245,245,0.12)" stroke-width="1"/>
+  <text x="40" y="416" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="9" text-anchor="start" font-weight="500" letter-spacing="1.2" fill="#b0b8c6">L2</text>
+  <text x="112" y="424" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="15" text-anchor="start" font-weight="600" fill="#f5f5f5">Upstream base</text>
+  <text x="920" y="424" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="end" fill="#bfc0c0">linux 4.19.325 stable</text>
+  <rect x="24" y="452" width="912" height="60" rx="4" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="1"/>
+  <text x="40" y="480" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="9" text-anchor="start" font-weight="500" letter-spacing="1.2" fill="#b0b8c6">L1</text>
+  <text x="112" y="488" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="15" text-anchor="start" font-weight="600" fill="#f5f5f5">SoC + device</text>
+  <text x="920" y="488" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="end" fill="#bfc0c0">sdm660 · Mi 6X (wayne)</text>
+  <text x="24" y="572" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="start" fill="#b0b8c6">edited in docs/data/layers.json · rendered by .github/scripts/render_layers.py</text>
+</svg>

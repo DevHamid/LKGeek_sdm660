@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 320" width="960" height="320" role="img" aria-labelledby="timeline-t timeline-d">
+<title id="timeline-t">Kernel tags</title>
+<desc id="timeline-d">Milestone timeline: 8 tags from working-susfs-2.2.0-su-fixed (2026-09-05) to fix/diag-socket-svc-id (2026-11-24).</desc>
+<rect width="960" height="320" fill="#f5f5f5"/>
+<text x="24" y="32" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="start" font-weight="500" letter-spacing="1.8" fill="#4f5d75">TIMELINE · REPO-DOCS-PIPELINE</text>
+<text x="24" y="68" font-family="Georgia, 'Times New Roman', 'Liberation Serif', serif" font-size="26" text-anchor="start" fill="#2d3142">Kernel tags</text>
+  <line x1="56" y1="192" x2="904" y2="192" stroke="#bfc0c0" stroke-width="1"/>
+  <text x="56" y="212" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="start" fill="#5a6580">2026-09-05</text>
+  <text x="904" y="212" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="end" fill="#5a6580">2026-11-24 · 80 days</text>
+  <line x1="56" y1="180" x2="56" y2="204" stroke="rgba(45,49,66,0.12)" stroke-width="1"/>
+  <circle cx="56" cy="192" r="4" fill="#f5f5f5" stroke="#4f5d75" stroke-width="1"/>
+  <text x="56" y="164" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" text-anchor="start" font-weight="500" fill="#2d3142">working-susfs-2.2.0-su-fixed</text>
+  <text x="56" y="148" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="start" fill="#5a6580">2026-09-05</text>
+  <text x="56" y="136" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="11" text-anchor="start" fill="#4f5d75">Disable CONFIG_KS…</text>
+  <line x1="176" y1="180" x2="176" y2="204" stroke="rgba(45,49,66,0.12)" stroke-width="1"/>
+  <circle cx="176" cy="192" r="4" fill="#f5f5f5" stroke="#4f5d75" stroke-width="1"/>
+  <text x="176" y="236" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" text-anchor="middle" font-weight="500" fill="#2d3142">NoMount</text>
+  <text x="176" y="252" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="middle" fill="#5a6580">2026-09-06</text>
+  <text x="176" y="264" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="11" text-anchor="middle" fill="#4f5d75">Update README.md</text>
+  <line x1="300" y1="180" x2="300" y2="204" stroke="rgba(45,49,66,0.12)" stroke-width="1"/>
+  <circle cx="300" cy="192" r="4" fill="#f5f5f5" stroke="#4f5d75" stroke-width="1"/>
+  <text x="300" y="164" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" text-anchor="middle" font-weight="500" fill="#2d3142">working-bbg-nomount-susfs</text>
+  <text x="300" y="148" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="middle" fill="#5a6580">2026-09-09</text>
+  <text x="300" y="136" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="11" text-anchor="middle" fill="#4f5d75">bbg: map security…</text>
+  <line x1="420" y1="180" x2="420" y2="204" stroke="rgba(45,49,66,0.12)" stroke-width="1"/>
+  <circle cx="420" cy="192" r="4" fill="#f5f5f5" stroke="#4f5d75" stroke-width="1"/>
+  <text x="420" y="236" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" text-anchor="middle" font-weight="500" fill="#2d3142">mglru-v4-working</text>
+  <text x="420" y="252" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="middle" fill="#5a6580">2026-10-18</text>
+  <text x="420" y="264" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="11" text-anchor="middle" fill="#4f5d75">MGLRU v4-era, ver…</text>
+  <line x1="540" y1="180" x2="540" y2="204" stroke="rgba(45,49,66,0.12)" stroke-width="1"/>
+  <circle cx="540" cy="192" r="4" fill="#f5f5f5" stroke="#4f5d75" stroke-width="1"/>
+  <text x="540" y="164" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" text-anchor="middle" font-weight="500" fill="#2d3142">remastered-pt1</text>
+  <text x="540" y="148" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="middle" fill="#5a6580">2026-10-29</text>
+  <text x="540" y="136" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="11" text-anchor="middle" fill="#4f5d75">fix: disable POC…</text>
+  <line x1="660" y1="180" x2="660" y2="204" stroke="rgba(45,49,66,0.12)" stroke-width="1"/>
+  <circle cx="660" cy="192" r="4" fill="#f5f5f5" stroke="#4f5d75" stroke-width="1"/>
+  <text x="660" y="236" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" text-anchor="middle" font-weight="500" fill="#2d3142">remastered-pt2</text>
+  <text x="660" y="252" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="middle" fill="#5a6580">2026-10-29</text>
+  <text x="660" y="264" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="11" text-anchor="middle" fill="#4f5d75">POC: move idle pu…</text>
+  <line x1="784" y1="180" x2="784" y2="204" stroke="rgba(45,49,66,0.12)" stroke-width="1"/>
+  <circle cx="784" cy="192" r="4" fill="#f5f5f5" stroke="#4f5d75" stroke-width="1"/>
+  <text x="784" y="164" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" text-anchor="middle" font-weight="500" fill="#2d3142">pre-bore-pt1</text>
+  <text x="784" y="148" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="middle" fill="#5a6580">2026-11-08</text>
+  <text x="784" y="136" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="11" text-anchor="middle" fill="#4f5d75">rollback: fix-ksu…</text>
+  <line x1="904" y1="180" x2="904" y2="204" stroke="rgba(45,49,66,0.12)" stroke-width="1"/>
+  <circle cx="904" cy="192" r="6" fill="#bf4520" stroke="#bf4520" stroke-width="1"/>
+  <text x="904" y="236" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" text-anchor="end" font-weight="500" fill="#bf4520">fix/diag-socket-svc-id</text>
+  <text x="904" y="252" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="10" text-anchor="end" fill="#5a6580">2026-11-24</text>
+  <text x="904" y="264" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="11" text-anchor="end" fill="#4f5d75">Fix DIAG QRTR ser…</text>
+</svg>
