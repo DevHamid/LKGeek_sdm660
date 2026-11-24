@@ -121,7 +121,15 @@ static inline struct qrtr_sock *qrtr_sk(struct sock *sk)
 	return container_of(sk, struct qrtr_sock, sk);
 }
 
-static unsigned int qrtr_local_nid = 1;
+/*
+ * Wayne: the modem self-identifies as node 1 (its QMI/servreg
+ * announcements all carry server.node = 1).  The local node must
+ * not use the same id: with both at 1, qrtr_svc_push_node()
+ * skipped every registry entry when pushing the table to the
+ * modem, so the modem never learned the AP DIAG service (0x1001)
+ * and its diag task starved (dog_hb "Task starvation: diag").
+ */
+static unsigned int qrtr_local_nid = 2;
 
 /* for node ids */
 static RADIX_TREE(qrtr_nodes, GFP_KERNEL);
