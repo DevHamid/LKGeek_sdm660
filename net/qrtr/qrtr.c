@@ -1888,8 +1888,13 @@ static int qrtr_bind(struct socket *sock, struct sockaddr *saddr, int len)
 	if (len < sizeof(*addr) || addr->sq_family != AF_QIPCRTR)
 		return -EINVAL;
 
-	if (addr->sq_node != ipc->us.sq_node)
-		return -EINVAL;
+	/*
+	 * A QRTR server can only bind on the local node.  Userspace may
+	 * pass a stale or hardcoded node id (rmtfs hardcodes the Android
+	 * convention of the AP being node 1); remap it to the local node
+	 * instead of failing the bind with EINVAL.
+	 */
+	addr->sq_node = ipc->us.sq_node;
 
 	lock_sock(sk);
 	rc = __qrtr_bind(sock, addr, sock_flag(sk, SOCK_ZAPPED));
