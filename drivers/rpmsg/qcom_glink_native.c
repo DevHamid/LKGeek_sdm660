@@ -1736,8 +1736,8 @@ static void qcom_glink_rpdev_release(struct device *dev)
  * them so the existing diag rpmsg driver binds and drains them.
  */
 static const char *const qcom_glink_modem_diag_channels[] = {
-	"DIAG_DATA",
-	"DIAG_CTRL",
+	"DIAG",
+	"DIAG_CNTL",
 };
 
 static bool qcom_glink_is_modem_dev(struct qcom_glink *glink)
