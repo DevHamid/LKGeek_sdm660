@@ -166,6 +166,7 @@ struct qcom_glink {
 
 	bool intentless;
 	struct work_struct diag_open_work;
+	bool diag_open_stop;
 
 	wait_queue_head_t tx_avail_notify;
 	bool sent_read_notify;
@@ -1875,7 +1876,8 @@ static void qcom_glink_diag_open_work(struct work_struct *work)
 		bool all_ready = true;
 		int i;
 
-		if (atomic_read(&glink->in_reset))
+		if (atomic_read(&glink->in_reset) ||
+		    READ_ONCE(glink->diag_open_stop))
 			return;
 
 		for (i = 0; i < ARRAY_SIZE(qcom_glink_modem_diag_channels); i++) {
@@ -2356,6 +2358,16 @@ void qcom_glink_native_remove(struct qcom_glink *glink)
 	qcom_glink_notif_reset(glink);
 	disable_irq(glink->irq);
 	qcom_glink_cancel_rx_work(glink);
+
+	/*
+	 * Stop and drain the client-open work before tearing down any
+	 * channel or the glink itself: it walks lcids/rcids and can be
+	 * inside create_local (which sleeps waiting for the modem's
+	 * open-ack).  Leaving it running across the teardown is a
+	 * use-after-free; the modem SSRs every cycle, so this fires.
+	 */
+	WRITE_ONCE(glink->diag_open_stop, true);
+	cancel_work_sync(&glink->diag_open_work);
 
 	ret = device_for_each_child(glink->dev, NULL, qcom_glink_remove_device);
 	if (ret)
