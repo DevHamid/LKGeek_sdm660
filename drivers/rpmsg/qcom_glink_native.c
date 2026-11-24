@@ -165,6 +165,7 @@ struct qcom_glink {
 	unsigned long features;
 
 	bool intentless;
+	struct work_struct diag_open_work;
 
 	wait_queue_head_t tx_avail_notify;
 	bool sent_read_notify;
@@ -1722,6 +1723,197 @@ static void qcom_glink_rpdev_release(struct device *dev)
 	kfree(rpdev);
 }
 
+
+/*
+ * Legacy modem firmware (e.g. Mi sdm660 mpss) does not announce its DIAG
+ * channels over glink. The downstream 4.4 diag driver actively opened them
+ * client-side (glink_open("DIAG_DATA"/"DIAG_CTRL") on the modem edge); the
+ * 4.19 rpmsg stack only binds remote-announced channels, so the modem's diag
+ * task ends up with no receiver: its TX ring fills and the firmware watchdog
+ * kills the modem ("dog_hb.c:266 Task starvation: diag, ping: 4") ~15 s after
+ * ONLINE. Open the channels from the AP side and register rpmsg devices for
+ * them so the existing diag rpmsg driver binds and drains them.
+ */
+static const char *const qcom_glink_modem_diag_channels[] = {
+	"DIAG_DATA",
+	"DIAG_CTRL",
+};
+
+static bool qcom_glink_is_modem_dev(struct qcom_glink *glink)
+{
+	if (glink->dev->of_node &&
+	    !strcmp(glink->dev->of_node->name, "modem"))
+		return true;
+	if (glink->name && !strcmp(glink->name, "modem"))
+		return true;
+
+	return false;
+}
+
+static bool qcom_glink_channel_exists(struct qcom_glink *glink,
+				      const char *name)
+{
+	struct glink_channel *channel;
+	unsigned long flags;
+	int cid;
+	bool found = false;
+
+	spin_lock_irqsave(&glink->idr_lock, flags);
+	idr_for_each_entry(&glink->lcids, channel, cid) {
+		if (!strcmp(channel->name, name)) {
+			found = true;
+			break;
+		}
+	}
+	if (!found) {
+		idr_for_each_entry(&glink->rcids, channel, cid) {
+			if (!strcmp(channel->name, name)) {
+				found = true;
+				break;
+			}
+		}
+	}
+	spin_unlock_irqrestore(&glink->idr_lock, flags);
+
+	return found;
+}
+
+static bool qcom_glink_diag_channel_ready(struct qcom_glink *glink,
+					  const char *name)
+{
+	struct glink_channel *channel;
+	unsigned long flags;
+	int cid;
+	bool ready = false;
+
+	spin_lock_irqsave(&glink->idr_lock, flags);
+	idr_for_each_entry(&glink->lcids, channel, cid) {
+		if (!strcmp(channel->name, name)) {
+			ready = (channel->rcid && channel->rpdev);
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&glink->idr_lock, flags);
+
+	return ready;
+}
+
+static int qcom_glink_local_open_rpdev(struct qcom_glink *glink,
+				       const char *name)
+{
+	struct glink_core_rx_intent *intent;
+	struct glink_channel *channel;
+	struct rpmsg_device *rpdev;
+	unsigned long flags;
+	int i;
+	int ret;
+
+	channel = qcom_glink_create_local(glink, name);
+	if (IS_ERR(channel))
+		return PTR_ERR(channel);
+
+	rpdev = kzalloc(sizeof(*rpdev), GFP_KERNEL);
+	if (!rpdev) {
+		ret = -ENOMEM;
+		goto err_put_channel;
+	}
+
+	rpdev->ept = &channel->ept;
+	strlcpy(rpdev->id.name, name, RPMSG_NAME_SIZE);
+	rpdev->src = RPMSG_ADDR_ANY;
+	rpdev->dst = RPMSG_ADDR_ANY;
+	rpdev->ops = &glink_device_ops;
+	rpdev->dev.of_node = qcom_glink_match_channel(glink->dev->of_node,
+						      name);
+	rpdev->dev.parent = glink->dev;
+	rpdev->dev.release = qcom_glink_rpdev_release;
+
+	ret = rpmsg_register_device(rpdev);
+	if (ret) {
+		kfree(rpdev);
+		goto err_put_channel;
+	}
+
+	channel->rpdev = rpdev;
+
+	/*
+	 * Advertise a base set of large rx intents: diag packets can be
+	 * several KB and a too-small intent pool starves the modem again.
+	 * announce_create() already queued the 1 KB defaults.
+	 */
+	for (i = 0; i < 8; i++) {
+		intent = qcom_glink_alloc_intent(glink, channel, 8192, true);
+		if (!intent)
+			break;
+		qcom_glink_advertise_intent(glink, channel, intent);
+	}
+
+	return 0;
+
+err_put_channel:
+	/* create_local() left the channel in lcids/rcids - undo that before
+	 * dropping the two references it handed back. */
+	spin_lock_irqsave(&glink->idr_lock, flags);
+	if (channel->lcid)
+		idr_remove(&glink->lcids, channel->lcid);
+	if (channel->rcid)
+		idr_remove(&glink->rcids, channel->rcid);
+	spin_unlock_irqrestore(&glink->idr_lock, flags);
+
+	kref_put(&channel->refcount, qcom_glink_channel_release);
+	kref_put(&channel->refcount, qcom_glink_channel_release);
+	return ret;
+}
+
+static void qcom_glink_diag_open_work(struct work_struct *work)
+{
+	struct qcom_glink *glink =
+		container_of(work, struct qcom_glink, diag_open_work);
+	int attempt;
+
+	for (attempt = 0; attempt < 6; attempt++) {
+		bool all_ready = true;
+		int i;
+
+		if (atomic_read(&glink->in_reset))
+			return;
+
+		for (i = 0; i < ARRAY_SIZE(qcom_glink_modem_diag_channels); i++) {
+			const char *name =
+				qcom_glink_modem_diag_channels[i];
+
+			if (qcom_glink_diag_channel_ready(glink, name))
+				continue;
+
+			all_ready = false;
+
+			if (qcom_glink_channel_exists(glink, name)) {
+				dev_info(glink->dev,
+					 "glink: modem channel %s exists but not ready\n",
+					 name);
+				continue;
+			}
+
+			dev_info(glink->dev,
+				 "glink: client-opening modem channel %s (attempt %d)\n",
+				 name, attempt);
+			if (qcom_glink_local_open_rpdev(glink, name))
+				dev_err(glink->dev,
+					"glink: client-open %s failed\n", name);
+		}
+
+		if (all_ready) {
+			dev_info(glink->dev,
+				 "glink: modem diag channels ready\n");
+			return;
+		}
+
+		msleep(2000);
+	}
+
+	dev_err(glink->dev, "glink: modem diag channels never became ready\n");
+}
+
 static int qcom_glink_rx_open(struct qcom_glink *glink, unsigned int rcid,
 			      char *name)
 {
@@ -1785,6 +1977,16 @@ static int qcom_glink_rx_open(struct qcom_glink *glink, unsigned int rcid,
 
 		channel->rpdev = rpdev;
 	}
+
+	/*
+	 * Legacy modem firmware never announces its DIAG channels; the AP
+	 * must client-open them. Any remotely announced channel proves the
+	 * modem's glink edge is alive and negotiated - kick the client-open
+	 * work (repeats on every SSR re-announcement, and the work is
+	 * idempotent).
+	 */
+	if (create_device && qcom_glink_is_modem_dev(glink))
+		schedule_work(&glink->diag_open_work);
 	CH_INFO(channel, "\n");
 
 	return 0;
@@ -2054,6 +2256,7 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 	spin_lock_init(&glink->rx_lock);
 	INIT_LIST_HEAD(&glink->rx_queue);
 	INIT_WORK(&glink->rx_work, qcom_glink_work);
+	INIT_WORK(&glink->diag_open_work, qcom_glink_diag_open_work);
 	init_waitqueue_head(&glink->tx_avail_notify);
 
 	spin_lock_init(&glink->idr_lock);
