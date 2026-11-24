@@ -946,8 +946,16 @@ int diagfwd_peripheral_init(void)
 			&peripheral_info[TYPE_DCI_CMD][peripheral];
 	}
 
-	if (driver->supports_sockets)
-		diag_socket_init();
+	/*
+	 * Wayne: this target's modem exposes DIAG over QRTR sockets.
+	 * supports_sockets was never set anywhere in this tree, so the
+	 * socket transport never initialized, the modem could not find
+	 * the AP DIAG service (0x1001) and its diag task starved
+	 * (dog_hb "Task starvation: diag" ERR_FATAL ~15 s after every
+	 * ONLINE).
+	 */
+	driver->supports_sockets = 1;
+	diag_socket_init();
 	diag_rpmsg_init();
 
 	return 0;

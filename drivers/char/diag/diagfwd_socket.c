@@ -506,6 +506,21 @@ static void socket_open_server(struct diag_socket_info *info)
 		return;
 	}
 
+	/*
+	 * Wayne: bind the server socket before announcing so the
+	 * NEW_SERVER carries a real port.  An unbound socket would
+	 * announce port 0, which no client can reach.
+	 */
+	sq.sq_port = 0;
+	ret = kernel_bind(info->hdl, (struct sockaddr *)&sq, sizeof(sq));
+	if (ret < 0) {
+		pr_err("diag: In %s, bind failed %d\n", __func__, ret);
+		sock_release(info->hdl);
+		info->hdl = NULL;
+		return;
+	}
+	kernel_getsockname(info->hdl, (struct sockaddr *)&sq);
+
 	kernel_setsockopt(info->hdl, SOL_SOCKET, SO_RCVBUF,
 			  (char *)&size, sizeof(size));
 
