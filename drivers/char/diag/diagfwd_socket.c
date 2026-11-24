@@ -31,9 +31,9 @@
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/subsystem_restart.h>
 
-#define DIAG_SVC_ID		0x1001
+#define DIAG_SVC_ID		49
 
-#define MODEM_INST_BASE		0
+#define MODEM_INST_BASE		256
 #define LPASS_INST_BASE		64
 #define WCNSS_INST_BASE		128
 #define SENSORS_INST_BASE	192
