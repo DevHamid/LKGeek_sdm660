@@ -782,6 +782,21 @@ static void ipa_q6_clnt_svc_arrive(struct work_struct *work)
 	int rc;
 	struct ipa_master_driver_init_complt_ind_msg_v01 ind;
 
+	/*
+	 * SSR teardown (ipa_qmi_stop_workqueues + ipa_uc_reset_pipe) can
+	 * race with this work item: cancel_delayed_work() returns false if
+	 * the work is already running, and ipa_q6_clnt may have been freed
+	 * by ipa_wwan_remove.  Guard against both.
+	 */
+	if (atomic_read(&workqueues_stopped)) {
+		IPAWANERR("svc_arrive: workqueues stopped (SSR), skipping\n");
+		return;
+	}
+	if (!ipa_q6_clnt) {
+		IPAWANERR("svc_arrive: ipa_q6_clnt is NULL (SSR teardown)\n");
+		return;
+	}
+
 	rc = kernel_connect(ipa_q6_clnt->sock,
 		(struct sockaddr *) &ipa_qmi_ctx->server_sq,
 		sizeof(ipa_qmi_ctx->server_sq),
